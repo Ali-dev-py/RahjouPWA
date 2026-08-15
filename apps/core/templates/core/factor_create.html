@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}فاکتور جدید | رهجو{% endblock %}
+{% block body_class %}app-body page-factor-create has-action-bar{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="New Factor" back_url_name="core:factor_list" %}
+
+<main class="app-main container-fluid px-3">
+    <form class="app-content app-content--narrow mx-auto" action="{% url 'core:factor_create' %}" method="get">
+        <div class="doc-switch nav nav-pills nav-fill p-1 mb-4" role="group" aria-label="نوع سند">
+            <button class="nav-link active" type="button" data-document-type="factor">فاکتور</button>
+            <button class="nav-link" type="button" data-document-type="prefactor">پیش‌فاکتور</button>
+            <input type="hidden" name="document_type" value="factor" data-document-type-input>
+        </div>
+
+        <section class="card editor-card border-0 position-relative overflow-hidden mb-4" aria-labelledby="customer-info-title">
+            <span class="editor-card__decoration" aria-hidden="true"></span>
+            <div class="card-body p-3 position-relative">
+                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                    <h1 class="h4 fw-bold d-flex align-items-center gap-2 mb-0" id="customer-info-title">
+                        <span class="material-symbols-outlined text-primary" aria-hidden="true">person</span>
+                        اطلاعات مشتری
+                    </h1>
+                    <span class="badge rounded-pill app-badge-neutral fw-normal">شماره ۲۴۸۱</span>
+                </div>
+                <div class="input-group app-search app-search--flat">
+                    <span class="input-group-text border-0 bg-transparent">
+                        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                    </span>
+                    <input class="form-control border-0 bg-transparent"
+                           type="search"
+                           name="customer"
+                           placeholder="جستجوی مشتری یا افزودن جدید..."
+                           aria-label="جستجوی مشتری">
+                </div>
+            </div>
+        </section>
+
+        <section class="card editor-card border-0 mb-4" aria-labelledby="line-items-title">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                    <h2 class="h4 fw-bold d-flex align-items-center gap-2 mb-0" id="line-items-title">
+                        <span class="material-symbols-outlined text-success" aria-hidden="true">shopping_cart</span>
+                        اقلام فاکتور
+                    </h2>
+                    <button class="btn btn-sm add-line-button rounded-pill"
+                            type="button"
+                            title="افزودن سطر در فاز منطق فرم فعال می‌شود">+ افزودن سطر</button>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <fieldset class="line-item rounded-3 p-3">
+                        <legend class="visually-hidden">قلم اول</legend>
+                        <div class="d-flex align-items-start gap-2">
+                            <div class="flex-grow-1 min-width-0">
+                                <label class="visually-hidden" for="item-name-1">نام کالا یا خدمات</label>
+                                <input class="form-control line-item__name border-0 bg-transparent fw-bold px-0"
+                                       id="item-name-1"
+                                       name="item_name_1"
+                                       type="text"
+                                       value="مشاوره مالیاتی زمستان"
+                                       placeholder="نام کالا / خدمات">
+                                <div class="row align-items-end g-2 mt-1">
+                                    <div class="col-4">
+                                        <label class="form-label line-item__label" for="item-quantity-1">تعداد</label>
+                                        <input class="form-control line-item__input text-center"
+                                               id="item-quantity-1"
+                                               name="item_quantity_1"
+                                               type="number"
+                                               value="1"
+                                               min="1">
+                                    </div>
+                                    <div class="col-auto pb-2 text-secondary" aria-hidden="true">×</div>
+                                    <div class="col">
+                                        <label class="form-label line-item__label" for="item-price-1">فی (تومان)</label>
+                                        <input class="form-control line-item__input text-start"
+                                               id="item-price-1"
+                                               name="item_price_1"
+                                               type="number"
+                                               value="15000000"
+                                               min="0"
+                                               dir="ltr">
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn line-item__delete"
+                                    type="button"
+                                    aria-label="حذف سطر اول"
+                                    title="حذف سطر در فاز منطق فرم فعال می‌شود">
+                                <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                            </button>
+                        </div>
+                        <div class="line-item__total d-flex justify-content-end gap-2 mt-3 pt-2">
+                            <span class="text-secondary">جمع سطر:</span>
+                            <strong class="text-primary">۱۵,۰۰۰,۰۰۰</strong>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="line-item rounded-3 p-3">
+                        <legend class="visually-hidden">قلم دوم</legend>
+                        <div class="d-flex align-items-start gap-2">
+                            <div class="flex-grow-1 min-width-0">
+                                <label class="visually-hidden" for="item-name-2">نام کالا یا خدمات</label>
+                                <input class="form-control line-item__name border-0 bg-transparent fw-bold px-0"
+                                       id="item-name-2"
+                                       name="item_name_2"
+                                       type="text"
+                                       value="تنظیم اظهارنامه ارزش افزوده"
+                                       placeholder="نام کالا / خدمات">
+                                <div class="row align-items-end g-2 mt-1">
+                                    <div class="col-4">
+                                        <label class="form-label line-item__label" for="item-quantity-2">تعداد</label>
+                                        <input class="form-control line-item__input text-center"
+                                               id="item-quantity-2"
+                                               name="item_quantity_2"
+                                               type="number"
+                                               value="2"
+                                               min="1">
+                                    </div>
+                                    <div class="col-auto pb-2 text-secondary" aria-hidden="true">×</div>
+                                    <div class="col">
+                                        <label class="form-label line-item__label" for="item-price-2">فی (تومان)</label>
+                                        <input class="form-control line-item__input text-start"
+                                               id="item-price-2"
+                                               name="item_price_2"
+                                               type="number"
+                                               value="4500000"
+                                               min="0"
+                                               dir="ltr">
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn line-item__delete"
+                                    type="button"
+                                    aria-label="حذف سطر دوم"
+                                    title="حذف سطر در فاز منطق فرم فعال می‌شود">
+                                <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                            </button>
+                        </div>
+                        <div class="line-item__total d-flex justify-content-end gap-2 mt-3 pt-2">
+                            <span class="text-secondary">جمع سطر:</span>
+                            <strong class="text-primary">۹,۰۰۰,۰۰۰</strong>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+        </section>
+
+        <section class="card editor-card border-0 mb-4" aria-labelledby="financial-summary-title">
+            <div class="card-body p-3">
+                <h2 class="h4 fw-bold d-flex align-items-center gap-2 mb-4" id="financial-summary-title">
+                    <span class="material-symbols-outlined text-warning" aria-hidden="true">receipt_long</span>
+                    خلاصه مالی
+                </h2>
+                <dl class="financial-summary d-grid gap-3 mb-0">
+                    <div class="d-flex justify-content-between gap-3">
+                        <dt class="fw-normal">جمع مبالغ:</dt>
+                        <dd class="fw-bold mb-0">۲۴,۰۰۰,۰۰۰ تومان</dd>
+                    </div>
+                    <div class="d-flex justify-content-between gap-3">
+                        <dt class="fw-normal d-flex align-items-center gap-1">
+                            تخفیف
+                            <span class="material-symbols-outlined app-symbol-sm text-primary" aria-hidden="true">edit</span>
+                        </dt>
+                        <dd class="fw-bold text-danger mb-0">- ۱,۰۰۰,۰۰۰ تومان</dd>
+                    </div>
+                    <div class="d-flex justify-content-between gap-3">
+                        <dt class="fw-normal">مالیات بر ارزش افزوده (۱۰٪)</dt>
+                        <dd class="fw-bold text-success mb-0">+ ۲,۳۰۰,۰۰۰ تومان</dd>
+                    </div>
+                    <div class="financial-summary__total d-flex justify-content-between align-items-baseline gap-3 pt-3 mt-1">
+                        <dt class="h4 fw-bold text-primary mb-0">مبلغ قابل پرداخت:</dt>
+                        <dd class="h4 fw-bold text-primary text-start mb-0">
+                            ۲۵,۳۰۰,۰۰۰ <small class="text-secondary fw-normal">تومان</small>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </section>
+    </form>
+</main>
+
+<div class="app-action-bar fixed-bottom">
+    <div class="container-fluid app-content app-content--narrow mx-auto d-flex gap-2">
+        <button class="btn app-draft-button d-flex align-items-center justify-content-center gap-2"
+                type="button"
+                title="ذخیره‌سازی در فاز بعدی پیاده‌سازی می‌شود">
+            <span class="material-symbols-outlined" aria-hidden="true">save</span>
+            <span>ذخیره پیش‌نویس</span>
+        </button>
+        <button class="btn btn-primary app-issue-button d-flex align-items-center justify-content-center gap-2"
+                type="button"
+                title="تولید PDF در فاز بعدی پیاده‌سازی می‌شود">
+            <span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>
+            <span>صدور و دریافت PDF</span>
+        </button>
+    </div>
+</div>
+{% endblock %}

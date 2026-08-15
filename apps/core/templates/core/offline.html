@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}آفلاین | رهجو{% endblock %}
+{% block body_class %}page-offline{% endblock %}
+
+{% block content %}
+<main class="offline-screen container d-flex align-items-center justify-content-center min-vh-100 py-5">
+    <section class="card app-card border-0 text-center w-100">
+        <div class="card-body p-5">
+            <img class="offline-screen__logo mb-4" src="{% static 'images/logo.png' %}" alt="رهجو">
+            <span class="material-symbols-outlined offline-screen__icon d-block mb-3" aria-hidden="true">cloud_off</span>
+            <h1 class="h3 fw-bold">اتصال اینترنت در دسترس نیست</h1>
+            <p class="text-secondary my-3">صفحه درخواستی ذخیره نشده است. اتصال خود را بررسی و دوباره تلاش کنید.</p>
+            <a class="btn btn-primary app-primary-button mt-2" href="{% url 'core:dashboard' %}">تلاش دوباره</a>
+        </div>
+    </section>
+</main>
+{% endblock %}

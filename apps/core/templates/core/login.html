@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}ورود | رهجو{% endblock %}
+{% block body_class %}page-login{% endblock %}
+
+{% block content %}
+<main class="login-screen d-flex align-items-center justify-content-center position-relative overflow-hidden p-4">
+    <div class="login-screen__pattern" aria-hidden="true"></div>
+    <div class="login-screen__glow login-screen__glow--primary" aria-hidden="true"></div>
+    <div class="login-screen__glow login-screen__glow--accent" aria-hidden="true"></div>
+
+    <section class="card login-card border-0 position-relative w-100">
+        <div class="card-body d-flex flex-column align-items-center p-4 p-sm-5">
+            <img class="login-card__logo rounded-4 mb-4"
+                 src="{% static 'images/logo.png' %}"
+                 alt="نشان رهجو">
+            <h1 class="h3 fw-bold text-center mb-2">ورود به سیستم</h1>
+            <p class="text-secondary text-center mb-4 pb-2">جهت ورود اطلاعات خود را وارد نمایید</p>
+
+            <form class="w-100 d-grid gap-4"
+                  action="{% url 'core:dashboard' %}"
+                  method="get">
+                <div>
+                    <label class="form-label fw-semibold" for="username">نام کاربری / ایمیل</label>
+                    <div class="input-group app-input-group">
+                        <span class="input-group-text border-0 bg-transparent">
+                            <span class="material-symbols-outlined" aria-hidden="true">person</span>
+                        </span>
+                        <input class="form-control border-0 bg-transparent"
+                               id="username"
+                               name="username"
+                               type="text"
+                               placeholder="مثال: ali.rezaii"
+                               autocomplete="username"
+                               required>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="d-flex justify-content-between align-items-center gap-3">
+                        <label class="form-label fw-semibold mb-2" for="password">رمز عبور</label>
+                        <a class="small app-link mb-2"
+                           href="{% url 'core:login' %}#forgot-password">رمز عبور را فراموش کرده‌اید؟</a>
+                    </div>
+                    <div class="input-group app-input-group">
+                        <span class="input-group-text border-0 bg-transparent">
+                            <span class="material-symbols-outlined" aria-hidden="true">lock</span>
+                        </span>
+                        <input class="form-control border-0 bg-transparent password-input"
+                               id="password"
+                               name="password"
+                               type="password"
+                               placeholder="••••••••"
+                               autocomplete="current-password"
+                               required>
+                        <button class="btn app-password-toggle"
+                                type="button"
+                                data-password-toggle
+                                aria-label="نمایش رمز عبور"
+                                aria-pressed="false">
+                            <span class="material-symbols-outlined" aria-hidden="true">visibility_off</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary app-primary-button d-flex align-items-center justify-content-center gap-2 mt-2"
+                        type="submit">
+                    <span>ورود</span>
+                    <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                </button>
+            </form>
+
+            <p class="mb-0 mt-5 text-center">
+                حساب کاربری ندارید؟
+                <a class="app-link fw-bold" href="{% url 'core:login' %}#register">ثبت نام کنید</a>
+            </p>
+        </div>
+    </section>
+</main>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% load static %}
+<header class="app-header fixed-top">
+    <div class="container-fluid app-header__inner">
+        <div class="d-flex align-items-center gap-2 min-width-0">
+            {% if back_url_name %}
+                <a class="btn app-icon-button flex-shrink-0"
+                   href="{% url back_url_name %}"
+                   aria-label="بازگشت">
+                    <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+                </a>
+            {% endif %}
+            <a class="app-brand text-decoration-none min-width-0"
+               href="{% url 'core:dashboard' %}">
+                <img class="app-brand__logo" src="{% static 'images/logo.png' %}" alt="نشان رهجو">
+                <span class="app-brand__title text-truncate">{{ heading }}</span>
+            </a>
+        </div>
+        {% if not back_url_name %}
+            <a class="app-avatar text-decoration-none"
+               href="{% url 'core:login' %}"
+               aria-label="ورود به حساب کاربری">
+                <span class="material-symbols-outlined" aria-hidden="true">person</span>
+            </a>
+        {% endif %}
+    </div>
+</header>

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}خانه | رهجو{% endblock %}
+{% block body_class %}app-body page-dashboard has-bottom-nav{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="رهجو | Home" %}
+
+<main class="app-main container-fluid px-3">
+    <div class="app-content mx-auto">
+        <section class="mb-5" aria-labelledby="summary-title">
+            <div class="d-flex justify-content-between align-items-end mb-3">
+                <h1 class="h4 fw-bold mb-0" id="summary-title">خلاصه وضعیت</h1>
+                <a class="app-link fw-semibold text-decoration-none"
+                   href="{% url 'core:factor_list' %}">گزارش کامل</a>
+            </div>
+
+            <div class="summary-scroller d-flex gap-2 overflow-x-auto pb-3">
+                <article class="card summary-card summary-card--primary border-0 flex-shrink-0">
+                    <div class="card-body d-flex flex-column justify-content-between p-3 position-relative">
+                        <div class="summary-card__orb" aria-hidden="true"></div>
+                        <div class="d-flex align-items-center justify-content-between position-relative">
+                            <span class="fw-semibold">فروش امروز</span>
+                            <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">trending_up</span>
+                        </div>
+                        <div class="position-relative mt-4 text-start" dir="ltr">
+                            <strong class="summary-card__value d-block">۴۵,۰۰۰,۰۰۰</strong>
+                            <small>تومان</small>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card summary-card summary-card--accent border-0 flex-shrink-0">
+                    <div class="card-body d-flex flex-column justify-content-between p-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="fw-semibold">فاکتورهای در انتظار</span>
+                            <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">pending_actions</span>
+                        </div>
+                        <div class="mt-4 text-start" dir="ltr">
+                            <strong class="summary-card__value d-block">۱۲</strong>
+                            <small>مورد</small>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card summary-card summary-card--neutral border-0 flex-shrink-0">
+                    <div class="card-body d-flex flex-column justify-content-between p-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="fw-semibold">پیش‌فاکتورها</span>
+                            <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">draft</span>
+                        </div>
+                        <div class="mt-4 text-start" dir="ltr">
+                            <strong class="summary-card__value d-block">۸</strong>
+                            <small>مورد</small>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section aria-labelledby="recent-title">
+            <div class="d-flex justify-content-between align-items-end mb-3">
+                <h2 class="h5 fw-bold mb-0" id="recent-title">فعالیت‌های اخیر</h2>
+                <a class="small text-secondary text-decoration-none"
+                   href="{% url 'core:factor_list' %}">همه موارد</a>
+            </div>
+
+            <div class="d-grid gap-2">
+                <a class="card activity-card border-0 text-decoration-none"
+                   href="{% url 'core:factor_detail' %}">
+                    <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
+                        <div class="d-flex align-items-center gap-3 min-width-0">
+                            <span class="activity-card__icon activity-card__icon--primary material-symbols-outlined flex-shrink-0" aria-hidden="true">add_shopping_cart</span>
+                            <span class="min-width-0">
+                                <strong class="d-block text-truncate">فاکتور فروش #۱۰۲۴</strong>
+                                <small class="text-secondary d-block text-truncate">شرکت آرمان توسعه</small>
+                            </span>
+                        </div>
+                        <span class="text-start flex-shrink-0">
+                            <strong class="d-block" dir="ltr">+ ۱۲,۵۰۰,۰۰۰</strong>
+                            <small class="status-chip status-chip--primary">موفق</small>
+                        </span>
+                    </div>
+                </a>
+
+                <a class="card activity-card border-0 text-decoration-none"
+                   href="{% url 'core:factor_detail' %}">
+                    <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
+                        <div class="d-flex align-items-center gap-3 min-width-0">
+                            <span class="activity-card__icon activity-card__icon--accent material-symbols-outlined flex-shrink-0" aria-hidden="true">schedule</span>
+                            <span class="min-width-0">
+                                <strong class="d-block text-truncate">فاکتور فروش #۱۰۲۳</strong>
+                                <small class="text-secondary d-block text-truncate">فروشگاه مرکزی</small>
+                            </span>
+                        </div>
+                        <span class="text-start flex-shrink-0">
+                            <strong class="d-block" dir="ltr">+ ۴,۲۰۰,۰۰۰</strong>
+                            <small class="status-chip status-chip--accent">در انتظار</small>
+                        </span>
+                    </div>
+                </a>
+
+                <a class="card activity-card border-0 text-decoration-none"
+                   href="{% url 'core:factor_detail' %}">
+                    <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
+                        <div class="d-flex align-items-center gap-3 min-width-0">
+                            <span class="activity-card__icon activity-card__icon--neutral material-symbols-outlined flex-shrink-0" aria-hidden="true">description</span>
+                            <span class="min-width-0">
+                                <strong class="d-block text-truncate">پیش‌فاکتور #۸۹۰</strong>
+                                <small class="text-secondary d-block text-truncate">مشتری گذری</small>
+                            </span>
+                        </div>
+                        <span class="text-start flex-shrink-0">
+                            <strong class="d-block" dir="ltr">۸۵۰,۰۰۰</strong>
+                            <small class="status-chip status-chip--neutral">پیش‌نویس</small>
+                        </span>
+                    </div>
+                </a>
+            </div>
+        </section>
+
+        <section class="visually-hidden" id="customers-placeholder" aria-label="مشتریان">
+            <h2>مشتریان</h2>
+            <p>این بخش در فاز بعدی پیاده‌سازی می‌شود.</p>
+        </section>
+        <section class="visually-hidden" id="profile-placeholder" aria-label="پروفایل">
+            <h2>پروفایل</h2>
+            <p>این بخش در فاز بعدی پیاده‌سازی می‌شود.</p>
+        </section>
+
+        <footer class="app-watermark d-flex flex-column align-items-center py-5">
+            <img src="{% static 'images/logo.png' %}" alt="" aria-hidden="true">
+            <small>رهجو - نرم‌افزار حسابداری</small>
+        </footer>
+    </div>
+</main>
+
+<a class="btn app-fab d-flex align-items-center justify-content-center"
+   href="{% url 'core:factor_create' %}"
+   aria-label="ایجاد فاکتور جدید">
+    <span class="material-symbols-outlined" aria-hidden="true">add</span>
+</a>
+
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

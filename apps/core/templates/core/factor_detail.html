@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}جزئیات فاکتور | رهجو{% endblock %}
+{% block body_class %}app-body page-factor-detail has-action-bar{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="Factor Details" back_url_name="core:factor_list" %}
+
+<main class="app-main container-fluid px-3">
+    <div class="app-content app-content--narrow mx-auto">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="badge factor-status d-inline-flex align-items-center gap-1 rounded-pill fw-normal">
+                <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">check_circle</span>
+                تایید شده (نهایی)
+            </span>
+            <button class="btn app-icon-button app-icon-button--surface"
+                    type="button"
+                    aria-label="اشتراک‌گذاری فاکتور"
+                    title="اشتراک‌گذاری در فاز بعدی فعال می‌شود">
+                <span class="material-symbols-outlined" aria-hidden="true">share</span>
+            </button>
+        </div>
+
+        <article class="card invoice-card border-0 position-relative overflow-hidden">
+            <div class="invoice-card__top-edge" aria-hidden="true"></div>
+            <div class="card-body p-4">
+                <header class="d-flex justify-content-between align-items-start gap-3 mb-4">
+                    <div>
+                        <img class="invoice-card__logo rounded-3"
+                             src="{% static 'images/logo.png' %}"
+                             alt="نشان شرکت رهجو">
+                        <h1 class="h5 fw-semibold mt-2 mb-1">شرکت رهجو</h1>
+                        <p class="text-secondary mb-0">فاکتور فروش کالا و خدمات</p>
+                    </div>
+                    <dl class="invoice-meta text-start mb-0">
+                        <div class="mb-2">
+                            <dt class="small text-secondary fw-normal">شماره فاکتور</dt>
+                            <dd class="fw-semibold mb-0" dir="ltr">#INV-1402-089</dd>
+                        </div>
+                        <div>
+                            <dt class="small text-secondary fw-normal">تاریخ صدور</dt>
+                            <dd class="fw-semibold mb-0">۱۴۰۲/۰۸/۱۵</dd>
+                        </div>
+                    </dl>
+                </header>
+
+                <section class="invoice-panel mb-4" aria-labelledby="customer-title">
+                    <h2 class="small text-secondary fw-normal mb-2" id="customer-title">خریدار:</h2>
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                        <strong>فروشگاه زنجیره‌ای افق</strong>
+                        <span class="text-secondary">شناسه ملی: ۱۰۱۰۱۲۳۴۵۶۷</span>
+                    </div>
+                    <p class="text-secondary mb-0">تهران، خیابان ولیعصر، نرسیده به پارک وی، پلاک ۱۲</p>
+                </section>
+
+                <section class="mb-4" aria-labelledby="items-title">
+                    <h2 class="h6 fw-semibold mb-3" id="items-title">شرح اقلام</h2>
+                    <div class="d-grid gap-3">
+                        <article class="invoice-line rounded-3 p-3">
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <strong>نرم افزار حسابداری نسخه شرکتی</strong>
+                                <strong class="text-start flex-shrink-0">۱۵,۰۰۰,۰۰۰ ریال</strong>
+                            </div>
+                            <div class="d-flex justify-content-between gap-3 text-secondary mt-2">
+                                <span>تعداد: ۱ عدد</span>
+                                <span>فی: ۱۵,۰۰۰,۰۰۰ ریال</span>
+                            </div>
+                        </article>
+                        <article class="invoice-line rounded-3 p-3">
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <strong>پشتیبانی سالیانه ویژه</strong>
+                                <strong class="text-start flex-shrink-0">۵,۵۰۰,۰۰۰ ریال</strong>
+                            </div>
+                            <div class="d-flex justify-content-between gap-3 text-secondary mt-2">
+                                <span>تعداد: ۱ مورد</span>
+                                <span>فی: ۵,۵۰۰,۰۰۰ ریال</span>
+                            </div>
+                        </article>
+                        <article class="invoice-line rounded-3 p-3">
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <strong>آموزش حضوری پرسنل (ساعت)</strong>
+                                <strong class="text-start flex-shrink-0">۲,۰۰۰,۰۰۰ ریال</strong>
+                            </div>
+                            <div class="d-flex justify-content-between gap-3 text-secondary mt-2">
+                                <span>تعداد: ۴ ساعت</span>
+                                <span>فی: ۵۰۰,۰۰۰ ریال</span>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="invoice-totals d-grid gap-3 pt-4" aria-label="جمع فاکتور">
+                    <div class="d-flex justify-content-between gap-3">
+                        <span class="text-secondary">جمع کل (بدون تخفیف)</span>
+                        <strong>۲۲,۵۰۰,۰۰۰ ریال</strong>
+                    </div>
+                    <div class="d-flex justify-content-between gap-3 text-danger">
+                        <span>تخفیف</span>
+                        <strong>- ۱,۵۰۰,۰۰۰ ریال</strong>
+                    </div>
+                    <div class="d-flex justify-content-between gap-3">
+                        <span class="text-secondary">مالیات و عوارض (۹٪)</span>
+                        <strong>۱,۸۹۰,۰۰۰ ریال</strong>
+                    </div>
+                    <div class="invoice-total d-flex justify-content-between gap-3 rounded-3 p-3 mt-1">
+                        <strong>مبلغ قابل پرداخت</strong>
+                        <strong>۲۲,۸۹۰,۰۰۰ ریال</strong>
+                    </div>
+                </section>
+
+                <section class="row mt-5 pt-3 text-center" aria-label="امضاها">
+                    <div class="col-6">
+                        <span class="small text-secondary d-block mb-2">مهر و امضای فروشنده</span>
+                        <span class="signature-placeholder d-inline-flex align-items-center justify-content-center rounded-circle">
+                            <span class="material-symbols-outlined" aria-hidden="true">draw</span>
+                        </span>
+                    </div>
+                    <div class="col-6">
+                        <span class="small text-secondary d-block">امضای خریدار</span>
+                    </div>
+                </section>
+            </div>
+        </article>
+    </div>
+</main>
+
+<div class="app-action-bar fixed-bottom" id="download-pdf">
+    <div class="container-fluid app-content app-content--narrow mx-auto">
+        <button class="btn btn-primary app-download-button w-100 d-flex align-items-center justify-content-center gap-2"
+                type="button"
+                title="تولید PDF در فاز بعدی پیاده‌سازی می‌شود">
+            <span class="material-symbols-outlined" aria-hidden="true">download</span>
+            <span>دانلود فایل PDF</span>
+        </button>
+    </div>
+</div>
+{% endblock %}
