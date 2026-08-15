@@ -13,5 +13,5 @@ urlpatterns = [
         name="web_app_manifest",
     ),
     path("serviceworker.js", service_worker, name="service_worker"),
-    path("", include("apps.core.urls")),
+    path("", include("core.urls")),
 ]
