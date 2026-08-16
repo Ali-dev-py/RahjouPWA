@@ -69,6 +69,48 @@ body {
     display: none !important;
 }
 
+.page-loading-overlay {
+    position: fixed;
+    z-index: 2000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgb(248 249 250 / 76%);
+    cursor: progress;
+    backdrop-filter: blur(0.125rem);
+    animation: page-loading-fade-in 120ms ease-out both;
+}
+
+.page-loading-spinner {
+    width: 3.5rem;
+    height: 3.5rem;
+    border: 0.4rem solid rgb(253 192 3 / 24%);
+    border-top-color: var(--rahjou-accent);
+    border-right-color: var(--rahjou-accent);
+    border-radius: 50%;
+    box-shadow: 0 0.5rem 1.5rem rgb(253 192 3 / 18%);
+    animation: page-loading-spin 700ms linear infinite;
+}
+
+body.is-page-loading {
+    cursor: progress;
+}
+
+@keyframes page-loading-spin {
+    to {
+        transform: rotate(1turn);
+    }
+}
+
+@keyframes page-loading-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 button,
 input,
 select,

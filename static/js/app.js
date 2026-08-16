@@ -1,5 +1,99 @@
 "use strict";
 
+/** Return the shared full-page loading overlay. */
+function getPageLoader() {
+    return document.querySelector("[data-page-loader]");
+}
+
+/** Show navigation feedback immediately while the next response is pending. */
+function showPageLoader() {
+    const loader = getPageLoader();
+    if (!loader) {
+        return;
+    }
+
+    loader.hidden = false;
+    loader.setAttribute("aria-hidden", "false");
+    document.body.classList.add("is-page-loading");
+}
+
+/** Reset the loader, including when a page is restored from browser history. */
+function hidePageLoader() {
+    const loader = getPageLoader();
+    if (!loader) {
+        return;
+    }
+
+    loader.hidden = true;
+    loader.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("is-page-loading");
+}
+
+/** Add global loading feedback to internal links and form submissions. */
+function setupPageLoadingIndicator() {
+    if (!getPageLoader()) {
+        return;
+    }
+
+    hidePageLoader();
+
+    document.addEventListener("click", (event) => {
+        if (
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+        ) {
+            return;
+        }
+
+        const link = event.target.closest("a[href]");
+        if (
+            !link ||
+            link.hasAttribute("download") ||
+            (link.target && link.target !== "_self")
+        ) {
+            return;
+        }
+
+        const target = new URL(link.href, window.location.href);
+        if (
+            target.origin !== window.location.origin ||
+            !["http:", "https:"].includes(target.protocol)
+        ) {
+            return;
+        }
+
+        const isSameDocumentHash =
+            target.pathname === window.location.pathname &&
+            target.search === window.location.search &&
+            Boolean(target.hash);
+        if (isSameDocumentHash) {
+            return;
+        }
+
+        showPageLoader();
+    });
+
+    document.addEventListener("submit", (event) => {
+        if (event.defaultPrevented) {
+            return;
+        }
+
+        const form = event.target;
+        if (form.target && form.target !== "_self") {
+            return;
+        }
+
+        showPageLoader();
+    });
+
+    window.addEventListener("beforeunload", showPageLoader);
+    window.addEventListener("pageshow", hidePageLoader);
+}
+
 /** Register and update the root-scoped PWA worker as early as possible. */
 async function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) {
@@ -37,7 +131,10 @@ function setupSplashRedirect() {
     const delay = Number.isFinite(configuredDelay) ? configuredDelay : 2500;
 
     if (targetUrl) {
-        window.setTimeout(() => window.location.assign(targetUrl), delay);
+        window.setTimeout(() => {
+            showPageLoader();
+            window.setTimeout(() => window.location.assign(targetUrl), 50);
+        }, delay);
     }
 }
 
@@ -84,6 +181,7 @@ function setupDocumentTypeSwitch() {
     });
 }
 
+setupPageLoadingIndicator();
 registerServiceWorker();
 setupSplashRedirect();
 document.addEventListener("DOMContentLoaded", () => {
