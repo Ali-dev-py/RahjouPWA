@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% load i18n_extras %}
+
+{% block title %}مشتریان | رهجو{% endblock %}
+{% block body_class %}app-body page-customers has-bottom-nav{% endblock %}
+
+{% block extra_css %}
+    <style>
+        /* Remove browser default clear button on search inputs */
+        input[type="search"]::-webkit-search-cancel-button,
+        input[type="search"]::-webkit-search-decoration,
+        input[type="search"]::-ms-clear {
+            display: none !important;
+            -webkit-appearance: none;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="مشتریان" %}
+
+<main class="app-main container-fluid px-3">
+    <div class="app-content mx-auto">        
+        
+        <!-- Search Bar -->
+        <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+            <div class="w-100">
+                <div class="input-group app-search">
+                    <span class="input-group-text border-0 bg-transparent">
+                        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                    </span>
+                    <!-- Changed to type="text" with inputmode="search" to prevent duplicate browser 'x' -->
+                    <input class="form-control border-0 bg-transparent"
+                           id="customerSearchInput"
+                           type="text"
+                           inputmode="search"
+                           autocomplete="off"
+                           aria-label="جستوجوی مشتری"
+                           placeholder="جستوجوی نام مشتری...">
+                    <!-- Single Custom Clear Button -->
+                    <button id="clearSearchBtn" type="button" class="btn border-0 text-secondary p-0 px-2 d-none">
+                        <span class="material-symbols-outlined align-middle fs-5">close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h1 class="h4 fw-bold mb-1">مشتریان</h1>
+                <p class="text-secondary mb-0">فهرست مشتریان ثبت‌شده</p>
+            </div>
+            <!-- Dynamic Count Badge -->
+            <span class="customer-count rounded-pill" id="customerCountBadge">
+                <span id="visibleCount">{{ customers|length|persian_digits }}</span> مشتری
+            </span>            
+        </div>
+
+        <!-- Customer Cards List -->
+        <section class="d-grid gap-2" id="customerList" aria-label="فهرست مشتریان">
+            {% for customer in customers %}
+                <article class="card factor-card factor-card--approved border-0 position-relative overflow-hidden customer-card"
+                         data-name="{{ customer.custname|default:'' }}">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div class="min-width-0">                                
+                                <h2 class="h5 fw-bold mb-0 mt-1 text-truncate customer-name">
+                                    <a class="stretched-link text-reset text-decoration-none"
+                                    href="{% url 'core:dashboard' %}">{{ customer.custname }}</a>
+                                </h2>
+                            </div>
+                            <span class="status-chip status-chip--approved flex-shrink-0">
+                                <span class="status-dot" aria-hidden="true"></span>
+                                ویزیتور
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-end gap-3">                            
+                            <span class="d-flex align-items-center gap-3">
+                                <span class="text-start">
+                                    <small class="text-secondary d-block">مانده حساب</small>
+                                    <strong class="factor-card__amount d-inline-block">۱۲,۵۰۰,۰۰۰</strong>
+                                    <small class="text-secondary">تومان</small>
+                                </span>                                
+                            </span>
+                        </div>
+                    </div>
+                </article>
+            {% empty %}
+                <div class="card customer-empty-state border-0 text-center">
+                    <div class="card-body px-4 py-5">
+                        <span class="customer-empty-state__icon material-symbols-outlined d-block mb-3" aria-hidden="true">group</span>
+                        <h2 class="h5 fw-bold">مشتری‌ای ثبت نشده است</h2>
+                        <p class="text-secondary mb-0">پس از ثبت مشتری، نام او در این فهرست نمایش داده می‌شود.</p>
+                    </div>
+                </div>
+            {% endfor %}
+
+            <!-- Dynamic JS No-Results State -->
+            <div id="jsNoResults" class="card customer-empty-state border-0 text-center d-none">
+                <div class="card-body px-4 py-5">
+                    <span class="customer-empty-state__icon material-symbols-outlined d-block mb-3" aria-hidden="true">search_off</span>
+                    <h2 class="h5 fw-bold">موردی یافت نشد</h2>
+                    <p class="text-secondary mb-0">
+                        هیچ مشتری‌ای مطابق با عبارت جست‌وجو پیدا نشد.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </div>
+</main>
+
+{% include "partials/_bottom_nav.html" %}
+
+<!-- JavaScript Filter Logic -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('customerSearchInput');
+        const clearBtn = document.getElementById('clearSearchBtn');
+        const customerCards = document.querySelectorAll('.customer-card');
+        const noResultsState = document.getElementById('jsNoResults');
+        const visibleCountElement = document.getElementById('visibleCount');
+
+        // Helper: Normalize Persian and Arabic letters (ي/ی, ك/ک, etc.)
+        function normalizePersian(text) {
+            if (!text) return '';
+            return text
+                .toString()
+                .trim()
+                .toLowerCase()
+                .replace(/ي/g, 'ی')
+                .replace(/ك/g, 'ک')
+                .replace(/آ/g, 'ا')
+                .replace(/ة/g, 'ه')
+                .replace(/[\u200B-\u200D\uFEFF]/g, '');
+        }
+
+        // Helper: Convert English numbers to Persian
+        function toPersianDigits(num) {
+            const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+            return num.toString().replace(/\d/g, digit => persianDigits[digit]);
+        }
+
+        function filterCustomers() {
+            const query = normalizePersian(searchInput.value);
+            let visibleCount = 0;
+
+            // Show/hide single clear button
+            if (searchInput.value.trim().length > 0) {
+                clearBtn.classList.remove('d-none');
+            } else {
+                clearBtn.classList.add('d-none');
+            }
+
+            // Filter cards
+            customerCards.forEach(card => {
+                const customerName = normalizePersian(card.getAttribute('data-name') || '');
+                if (customerName.includes(query)) {
+                    card.classList.remove('d-none');
+                    visibleCount++;
+                } else {
+                    card.classList.add('d-none');
+                }
+            });
+
+            // Toggle "No Results" state
+            if (visibleCount === 0 && customerCards.length > 0) {
+                noResultsState.classList.remove('d-none');
+            } else {
+                noResultsState.classList.add('d-none');
+            }
+
+            // Update counter
+            if (visibleCountElement) {
+                visibleCountElement.textContent = toPersianDigits(visibleCount);
+            }
+        }
+
+        // Listen to typing
+        searchInput.addEventListener('input', filterCustomers);
+
+        // Clear search on click
+        clearBtn.addEventListener('click', function () {
+            searchInput.value = '';
+            filterCustomers();
+            searchInput.focus();
+        });
+    });
+</script>
+{% endblock %}

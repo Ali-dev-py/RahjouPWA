@@ -5,7 +5,7 @@
 {% block body_class %}app-body page-dashboard has-bottom-nav{% endblock %}
 
 {% block content %}
-{% include "partials/_app_header.html" with heading="رهجو | Home" %}
+{% include "partials/_app_header.html" %}
 
 <main class="app-main container-fluid px-3">
     <div class="app-content mx-auto">
@@ -128,11 +128,6 @@
             <h2>پروفایل</h2>
             <p>این بخش در فاز بعدی پیاده‌سازی می‌شود.</p>
         </section>
-
-        <footer class="app-watermark d-flex flex-column align-items-center py-5">
-            <img src="{% static 'images/logo.png' %}" alt="" aria-hidden="true">
-            <small>رهجو - نرم‌افزار حسابداری</small>
-        </footer>
     </div>
 </main>
 

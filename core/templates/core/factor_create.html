@@ -4,7 +4,7 @@
 {% block body_class %}app-body page-factor-create has-action-bar{% endblock %}
 
 {% block content %}
-{% include "partials/_app_header.html" with heading="New Factor" back_url_name="core:factor_list" %}
+{% include "partials/_app_header.html" with heading="فاکتور جدید" back_url_name="core:factor_list" %}
 
 <main class="app-main container-fluid px-3">
     <form class="app-content app-content--narrow mx-auto" action="{% url 'core:factor_create' %}" method="get">
