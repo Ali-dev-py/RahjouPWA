@@ -11,18 +11,18 @@
            href="{% url 'core:factor_list' %}"
            {% if current == 'factor_list' %}aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">description</span>
-            <span>فاکتورها</span>
+            <span>درخواست فروش</span>
         </a>
         <a class="app-bottom-nav__link"
            href="{% url 'core:customers' %}">
             <span class="material-symbols-outlined" aria-hidden="true">group</span>
             <span>مشتریان</span>
         </a>
-        <a class="app-bottom-nav__link"
+        {% comment %} <a class="app-bottom-nav__link"
            href="{% url 'core:dashboard' %}#profile-placeholder">
             <span class="material-symbols-outlined" aria-hidden="true">person_outline</span>
             <span>پروفایل</span>
-        </a>
+        </a> {% endcomment %}
     </div>
 </nav>
 {% endwith %}

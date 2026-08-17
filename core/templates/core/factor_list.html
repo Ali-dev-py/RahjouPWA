@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load i18n_extras %}
 
 {% block title %}فاکتورها | رهجو{% endblock %}
 {% block body_class %}app-body page-factor-list has-bottom-nav{% endblock %}
@@ -8,8 +9,10 @@
 
 <main class="app-main container-fluid px-3">
     <div class="app-content mx-auto">
+        <!-- Toolbar: Search & Dynamic Status Tabs -->
         <section class="factor-toolbar sticky-top" aria-label="جستجو و فیلتر فاکتورها">
             <form action="{% url 'core:factor_list' %}" method="get" role="search">
+                <input type="hidden" name="status" value="{{ current_status }}">
                 <div class="input-group app-search">
                     <span class="input-group-text border-0 bg-transparent">
                         <span class="material-symbols-outlined" aria-hidden="true">search</span>
@@ -17,123 +20,101 @@
                     <input class="form-control border-0 bg-transparent"
                            type="search"
                            name="q"
+                           value="{{ query|default:'' }}"
                            aria-label="جستجوی فاکتور"
                            placeholder="جستجوی فاکتور (شماره، نام مشتری...)">
+                    {% if query %}
+                        <a href="?status={{ current_status }}" class="btn border-0 text-secondary d-flex align-items-center">
+                            <span class="material-symbols-outlined fs-5">close</span>
+                        </a>
+                    {% endif %}
                 </div>
             </form>
-            <div class="factor-filters nav nav-pills flex-nowrap gap-2 overflow-x-auto mt-3 pb-1" role="group" aria-label="نوع فاکتور">
-                <button class="nav-link active flex-shrink-0" type="button">همه</button>
-                <button class="nav-link flex-shrink-0" type="button">فاکتورها</button>
-                <button class="nav-link flex-shrink-0" type="button">پیش‌فاکتورها</button>
-                <button class="nav-link flex-shrink-0" type="button">پرداخت شده</button>
+
+            <!-- Dynamic Status Filter Tabs from DB -->
+            <div class="factor-filters nav nav-pills flex-nowrap gap-2 overflow-x-auto mt-3 pb-1" role="group" aria-label="وضعیت فاکتور">
+                <a href="?status=all{% if query %}&q={{ query }}{% endif %}"
+                   class="nav-link flex-shrink-0 text-decoration-none {% if current_status == 'all' or not current_status %}active{% endif %}">
+                    همه
+                </a>
+                {% for status in statuses %}
+                    <a href="?status={{ status.salerequeststatuscode }}{% if query %}&q={{ query }}{% endif %}"
+                       class="nav-link flex-shrink-0 text-decoration-none {% if current_status == status.salerequeststatuscode|stringformat:'s' %}active{% endif %}">
+                        {{ status.salerequeststatusname }}
+                    </a>
+                {% endfor %}
             </div>
         </section>
 
+        <!-- Factors List Header & Counter -->
         <div class="d-flex align-items-center justify-content-between mt-4 mb-3">
-            <h1 class="h5 fw-bold mb-0">آبان ۱۴۰۲</h1>
-            <span class="small text-secondary">۵ مورد</span>
+            <div>
+                <h1 class="h5 fw-bold mb-1">فهرست درخواست‌ها</h1>
+                <p class="text-secondary small mb-0">
+                    {% if query %}
+                        نتایج جست‌وجو برای «{{ query }}»
+                    {% else %}
+                        فهرست درخواست‌های فروش ثبت‌شده
+                    {% endif %}
+                </p>
+            </div>
+            <span class="customer-count rounded-pill">
+                {{ factors|length|persian_digits }} مورد
+            </span>
         </div>
 
-        <section class="d-grid gap-3" aria-label="فاکتورهای آبان ۱۴۰۲">
-            <article class="card factor-card factor-card--approved border-0 position-relative overflow-hidden">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-                        <div class="min-width-0">
-                            <small class="text-secondary d-block">فاکتور #۱۲۴۵</small>
-                            <h2 class="h5 fw-bold mb-0 mt-1 text-truncate">
-                                <a class="stretched-link text-reset text-decoration-none"
-                                   href="{% url 'core:factor_detail' %}">شرکت آرمان اندیش</a>
-                            </h2>
-                        </div>
-                        <span class="status-chip status-chip--approved flex-shrink-0">
-                            <span class="status-dot" aria-hidden="true"></span>
-                            تایید شده
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-end gap-3">
-                        <span class="small text-secondary d-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
-                            ۱۲ آبان ۱۴۰۲
-                        </span>
-                        <span class="d-flex align-items-center gap-3">
-                            <span class="text-start">
-                                <small class="text-secondary d-block">مبلغ کل</small>
-                                <strong class="factor-card__amount d-inline-block">۱۲,۵۰۰,۰۰۰</strong>
-                                <small class="text-secondary">تومان</small>
+        <!-- Factor Cards List -->
+        <section class="d-grid gap-3" aria-label="فهرست فاکتورها">
+            {% for factor in factors %}
+                <article class="card factor-card border-0 position-relative overflow-hidden">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div class="min-width-0">
+                                <small class="text-secondary d-block">درخواست #{{ factor.number|persian_digits }}</small>
+                                <h2 class="h5 fw-bold mb-0 mt-1 text-truncate">
+                                    <a class="stretched-link text-reset text-decoration-none"
+                                       href="{% url 'core:factor_detail' %}">{{ factor.customer_name }}</a>
+                                </h2>
+                            </div>
+                            <span class="status-chip {{ factor.chip_class }} flex-shrink-0">
+                                {% if factor.dot_class %}
+                                    <span class="{{ factor.dot_class }}" aria-hidden="true"></span>
+                                {% endif %}
+                                {{ factor.status_name }}
                             </span>
-                            <span class="factor-card__download material-symbols-outlined" aria-hidden="true">download</span>
-                        </span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-end gap-3">
+                            <span class="small text-secondary d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
+                                {{ factor.date|persian_digits }}
+                            </span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span class="factor-card__download material-symbols-outlined text-secondary" aria-hidden="true">visibility</span>
+                            </span>
+                        </div>
+                    </div>
+                </article>
+            {% empty %}
+                <!-- Empty State -->
+                <div class="card customer-empty-state border-0 text-center mt-4">
+                    <div class="card-body px-4 py-5">
+                        <span class="customer-empty-state__icon material-symbols-outlined d-block mb-3" aria-hidden="true">receipt_long</span>
+                        <h2 class="h5 fw-bold">درخواستی یافت نشد</h2>
+                        <p class="text-secondary mb-0">
+                            {% if query %}
+                                هیچ درخواستی با مشخصات «{{ query }}» پیدا نشد.
+                            {% else %}
+                                در حال حاضر هیچ درخواستی در این وضعیت ثبت نشده است.
+                            {% endif %}
+                        </p>
                     </div>
                 </div>
-            </article>
-
-            <article class="card factor-card factor-card--pending border-0 position-relative overflow-hidden">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-                        <div class="min-width-0">
-                            <small class="text-secondary d-block">پیش‌فاکتور #۱۸۹</small>
-                            <h2 class="h5 fw-bold mb-0 mt-1 text-truncate">
-                                <a class="stretched-link text-reset text-decoration-none"
-                                   href="{% url 'core:factor_detail' %}">فروشگاه البرز</a>
-                            </h2>
-                        </div>
-                        <span class="status-chip status-chip--pending flex-shrink-0">
-                            <span class="status-dot" aria-hidden="true"></span>
-                            در انتظار تایید
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-end gap-3">
-                        <span class="small text-secondary d-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
-                            ۱۰ آبان ۱۴۰۲
-                        </span>
-                        <span class="d-flex align-items-center gap-3">
-                            <span class="text-start">
-                                <small class="text-secondary d-block">مبلغ کل</small>
-                                <strong class="factor-card__amount d-inline-block">۴,۲۰۰,۰۰۰</strong>
-                                <small class="text-secondary">تومان</small>
-                            </span>
-                            <span class="factor-card__download material-symbols-outlined" aria-hidden="true">download</span>
-                        </span>
-                    </div>
-                </div>
-            </article>
-
-            <article class="card factor-card factor-card--paid border-0 position-relative overflow-hidden">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-                        <div class="min-width-0">
-                            <small class="text-secondary d-block">فاکتور #۱۲۴۴</small>
-                            <h2 class="h5 fw-bold mb-0 mt-1 text-truncate">
-                                <a class="stretched-link text-reset text-decoration-none"
-                                   href="{% url 'core:factor_detail' %}">صنایع چوب نوین</a>
-                            </h2>
-                        </div>
-                        <span class="status-chip status-chip--paid flex-shrink-0">
-                            <span class="material-symbols-outlined app-symbol-xs" aria-hidden="true">check_circle</span>
-                            پرداخت شده
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-end gap-3">
-                        <span class="small text-secondary d-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
-                            ۰۵ آبان ۱۴۰۲
-                        </span>
-                        <span class="d-flex align-items-center gap-3">
-                            <span class="text-start">
-                                <small class="text-secondary d-block">مبلغ کل</small>
-                                <strong class="factor-card__amount d-inline-block">۸,۹۵۰,۰۰۰</strong>
-                                <small class="text-secondary">تومان</small>
-                            </span>
-                            <span class="factor-card__download material-symbols-outlined" aria-hidden="true">download</span>
-                        </span>
-                    </div>
-                </div>
-            </article>
+            {% endfor %}
         </section>
     </div>
 </main>
 
+<!-- Floating Action Button: Add New Factor -->
 <a class="btn app-fab d-flex align-items-center justify-content-center"
    href="{% url 'core:factor_create' %}"
    aria-label="ایجاد فاکتور جدید">

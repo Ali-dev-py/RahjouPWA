@@ -289,3 +289,73 @@ class Salerequesttovisitor(models.Model):
         managed = False
         db_table = 'SaleRequestToVisitor'
 
+
+class Tblkala(models.Model):
+    kalaid = models.IntegerField(db_column='KalaID')
+    kalano = models.CharField(db_column='KalaNo', max_length=100, db_collation='Arabic_CI_AS', blank=True, null=True)
+    kalaname = models.CharField(db_column='KalaName', max_length=200, db_collation='Arabic_CI_AS')
+    vahed1 = models.CharField(max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)
+    mojodictrl = models.CharField(db_column='MojodiCtrl', max_length=1, db_collation='Arabic_CI_AS')
+    fanino = models.CharField(db_column='FaniNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    peygirino = models.CharField(db_column='PeygiriNo', max_length=200, db_collation='Arabic_CI_AS', blank=True, null=True)
+    length = models.CharField(db_column='Length', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    high = models.CharField(db_column='High', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    width = models.CharField(db_column='Width', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    weight = models.CharField(db_column='Weight', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    kalastatus = models.CharField(db_column='KalaStatus', max_length=1, db_collation='Arabic_CI_AS', blank=True, null=True)
+    kimage = models.BinaryField(db_column='kImage', blank=True, null=True)
+    height = models.IntegerField(db_column='HEIGHT', blank=True, null=True)
+    scale = models.IntegerField(db_column='SCALE')
+    barcode = models.CharField(db_column='barCode', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    kaladesc = models.CharField(db_column='KalaDesc', max_length=1000, db_collation='Arabic_CI_AS', blank=True, null=True)
+    kaladesc2 = models.CharField(db_column='KalaDesc2', max_length=1000, db_collation='Arabic_CI_AS', blank=True, null=True)
+    kaladesc3 = models.CharField(db_column='KalaDesc3', max_length=1000, db_collation='Arabic_CI_AS', blank=True, null=True)
+    kaladesc4 = models.CharField(db_column='KalaDesc4', max_length=1000, db_collation='Arabic_CI_AS', blank=True, null=True)
+    irancode = models.CharField(db_column='IranCode', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    gkalaid = models.CharField(db_column='GKalaID', primary_key=True, max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    gparentid = models.CharField(db_column='GParentID', max_length=36, blank=True, null=True)
+    gkalaunitid = models.CharField(db_column='GKalaUnitID', max_length=36, blank=True, null=True)
+    ggroupid = models.CharField(db_column='GGroupID', max_length=36, blank=True, null=True)
+    invkalatypeid = models.IntegerField(db_column='InvKalaTypeID')
+    kalagroup = models.BooleanField(db_column='KalaGroup')
+    havewarranty = models.BooleanField(db_column='HaveWarranty')
+    havedaghi = models.BooleanField(db_column='HaveDaghi')
+    warrantymonth = models.IntegerField(db_column='WarrantyMonth')
+    serialforce = models.BooleanField(db_column='SerialForce')
+    serialpazir = models.BooleanField(db_column='SerialPazir')
+    saleinternet = models.BooleanField(db_column='SaleInternet')
+    kalabatch = models.DecimalField(db_column='KalaBatch', max_digits=20, decimal_places=8, blank=True, null=True)
+    saleintablet = models.BooleanField(db_column='SaleInTablet')
+    tabletorder = models.IntegerField(db_column='TabletOrder')
+    active = models.BooleanField(db_column='Active')
+    zaribtablet = models.IntegerField(db_column='ZaribTablet', blank=True, null=True)
+    effective = models.BooleanField(db_column='Effective')
+    maliat = models.BooleanField(db_column='Maliat')
+    gvarietyid = models.CharField(db_column='GVarietyId', max_length=36, blank=True, null=True)
+    gbrandid = models.CharField(db_column='GBrandId', max_length=36, blank=True, null=True)
+    gmodelkalaid = models.CharField(db_column='GModelKalaId', max_length=36, blank=True, null=True)
+    gcountryid = models.CharField(db_column='GCountryId', max_length=36, blank=True, null=True)
+    kalalabel = models.CharField(db_column='KalaLabel', max_length=1000, db_collation='Arabic_CI_AS', blank=True, null=True)
+    selprice = models.DecimalField(db_column='SelPrice', max_digits=18, decimal_places=0, blank=True, null=True)
+    buyprice = models.DecimalField(db_column='BuyPrice', max_digits=18, decimal_places=0, blank=True, null=True)
+    amount = models.DecimalField(db_column='Amount', max_digits=18, decimal_places=0, blank=True, null=True)
+    yektaidentity = models.CharField(db_column='YektaIdentity', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    yektavahed = models.CharField(db_column='YektaVahed', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    yektaname = models.CharField(db_column='YektaName', max_length=400, db_collation='Arabic_CI_AS', blank=True, null=True)
+    yektadedicate = models.CharField(db_column='YektaDedicate', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    yektadedicatename = models.CharField(db_column='YektaDedicateName', max_length=400, db_collation='Arabic_CI_AS', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tblKala'
+
+
+class Salerequeststatus(models.Model):
+    salerequeststatuscode = models.SmallIntegerField(db_column='SaleRequestStatusCode', primary_key=True)  # Field name made lowercase.
+    salerequeststatusname = models.CharField(db_column='SaleRequestStatusName', max_length=50, db_collation='Arabic_CI_AS')  # Field name made lowercase.
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+
+    class Meta:
+        managed = False
+        db_table = 'SaleRequestStatus'

@@ -6,7 +6,6 @@
 
 {% block extra_css %}
     <style>
-        /* Remove browser default clear button on search inputs */
         input[type="search"]::-webkit-search-cancel-button,
         input[type="search"]::-webkit-search-decoration,
         input[type="search"]::-ms-clear {
@@ -29,7 +28,6 @@
                     <span class="input-group-text border-0 bg-transparent">
                         <span class="material-symbols-outlined" aria-hidden="true">search</span>
                     </span>
-                    <!-- Changed to type="text" with inputmode="search" to prevent duplicate browser 'x' -->
                     <input class="form-control border-0 bg-transparent"
                            id="customerSearchInput"
                            type="text"
@@ -37,7 +35,6 @@
                            autocomplete="off"
                            aria-label="جستوجوی مشتری"
                            placeholder="جستوجوی نام مشتری...">
-                    <!-- Single Custom Clear Button -->
                     <button id="clearSearchBtn" type="button" class="btn border-0 text-secondary p-0 px-2 d-none">
                         <span class="material-symbols-outlined align-middle fs-5">close</span>
                     </button>
@@ -66,22 +63,42 @@
                             <div class="min-width-0">                                
                                 <h2 class="h5 fw-bold mb-0 mt-1 text-truncate customer-name">
                                     <a class="stretched-link text-reset text-decoration-none"
-                                    href="{% url 'core:dashboard' %}">{{ customer.custname }}</a>
+                                       href="{% url 'core:dashboard' %}">{{ customer.custname }}</a>
                                 </h2>
+                                {% if customer.mobile or customer.phone %}
+                                    <small class="text-muted d-block mt-1">
+                                        {{ customer.mobile|default:customer.phone|persian_digits }}
+                                    </small>
+                                {% endif %}
                             </div>
                             <span class="status-chip status-chip--approved flex-shrink-0">
                                 <span class="status-dot" aria-hidden="true"></span>
                                 ویزیتور
                             </span>
                         </div>
-                        <div class="d-flex justify-content-between align-items-end gap-3">                            
-                            <span class="d-flex align-items-center gap-3">
-                                <span class="text-start">
-                                    <small class="text-secondary d-block">مانده حساب</small>
-                                    <strong class="factor-card__amount d-inline-block">۱۲,۵۰۰,۰۰۰</strong>
+
+                        <!-- Customer Balance / مانده حساب -->
+                        <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top">                            
+                            <span class="d-flex align-items-center gap-2">
+                                <div>
+                                    <small class="text-secondary d-block mb-1">مانده حساب</small>
+                                    <strong class="factor-card__amount d-inline-block fs-6 {% if customer.hesab > 0 %}text-danger{% elif customer.hesab < 0 %}text-success{% else %}text-muted{% endif %}">
+                                        {{ customer.hesab|persian_digits }}
+                                    </strong>
                                     <small class="text-secondary">تومان</small>
-                                </span>                                
+                                </div>
                             </span>
+
+                            <!-- Accounting Status Badge -->
+                            <div>
+                                {% if customer.hesab > 0 %}
+                                    <span class="badge bg-danger-subtle text-danger fw-normal px-2 py-1">بدهکار</span>
+                                {% elif customer.hesab < 0 %}
+                                    <span class="badge bg-success-subtle text-success fw-normal px-2 py-1">بستانکار</span>
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-secondary fw-normal px-2 py-1">تسویه</span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                 </article>
@@ -100,9 +117,7 @@
                 <div class="card-body px-4 py-5">
                     <span class="customer-empty-state__icon material-symbols-outlined d-block mb-3" aria-hidden="true">search_off</span>
                     <h2 class="h5 fw-bold">موردی یافت نشد</h2>
-                    <p class="text-secondary mb-0">
-                        هیچ مشتری‌ای مطابق با عبارت جست‌وجو پیدا نشد.
-                    </p>
+                    <p class="text-secondary mb-0">هیچ مشتری‌ای مطابق با عبارت جست‌وجو پیدا نشد.</p>
                 </div>
             </div>
         </section>
@@ -111,7 +126,6 @@
 
 {% include "partials/_bottom_nav.html" %}
 
-<!-- JavaScript Filter Logic -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const searchInput = document.getElementById('customerSearchInput');
@@ -120,7 +134,6 @@
         const noResultsState = document.getElementById('jsNoResults');
         const visibleCountElement = document.getElementById('visibleCount');
 
-        // Helper: Normalize Persian and Arabic letters (ي/ی, ك/ک, etc.)
         function normalizePersian(text) {
             if (!text) return '';
             return text
@@ -134,7 +147,6 @@
                 .replace(/[\u200B-\u200D\uFEFF]/g, '');
         }
 
-        // Helper: Convert English numbers to Persian
         function toPersianDigits(num) {
             const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
             return num.toString().replace(/\d/g, digit => persianDigits[digit]);
@@ -144,14 +156,12 @@
             const query = normalizePersian(searchInput.value);
             let visibleCount = 0;
 
-            // Show/hide single clear button
             if (searchInput.value.trim().length > 0) {
                 clearBtn.classList.remove('d-none');
             } else {
                 clearBtn.classList.add('d-none');
             }
 
-            // Filter cards
             customerCards.forEach(card => {
                 const customerName = normalizePersian(card.getAttribute('data-name') || '');
                 if (customerName.includes(query)) {
@@ -162,23 +172,18 @@
                 }
             });
 
-            // Toggle "No Results" state
             if (visibleCount === 0 && customerCards.length > 0) {
                 noResultsState.classList.remove('d-none');
             } else {
                 noResultsState.classList.add('d-none');
             }
 
-            // Update counter
             if (visibleCountElement) {
                 visibleCountElement.textContent = toPersianDigits(visibleCount);
             }
         }
 
-        // Listen to typing
         searchInput.addEventListener('input', filterCustomers);
-
-        // Clear search on click
         clearBtn.addEventListener('click', function () {
             searchInput.value = '';
             filterCustomers();
