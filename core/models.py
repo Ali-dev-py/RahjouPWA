@@ -359,3 +359,63 @@ class Salerequeststatus(models.Model):
     class Meta:
         managed = False
         db_table = 'SaleRequestStatus'
+
+
+class Statementprice(models.Model):
+    statementpriceid = models.IntegerField(db_column='StatementPriceID')  # Field name made lowercase.
+    statementpricemainid = models.IntegerField(db_column='StatementPriceMainID', blank=True, null=True)  # Field name made lowercase.
+    kalaid = models.IntegerField(db_column='KalaID', blank=True, null=True)  # Field name made lowercase.
+    customergroupid = models.IntegerField(db_column='CustomerGroupID', blank=True, null=True)  # Field name made lowercase.
+    fromquantity = models.DecimalField(db_column='FromQuantity', max_digits=18, decimal_places=0)  # Field name made lowercase.
+    toquantity = models.DecimalField(db_column='ToQuantity', max_digits=18, decimal_places=0)  # Field name made lowercase.
+    price = models.DecimalField(db_column='Price', max_digits=18, decimal_places=0)  # Field name made lowercase.
+    pricetypecode = models.SmallIntegerField(db_column='PriceTypeCode')  # Field name made lowercase.
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+    gstatementpriceid = models.CharField(db_column='GStatementPriceID', max_length=36)  # Field name made lowercase.
+    gstatementpricemainid = models.CharField(db_column='GStatementPriceMainID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+    gcustomergroupid = models.CharField(db_column='GCustomerGroupID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+    gkalaid = models.CharField(db_column='GKalaID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+    pricearz = models.DecimalField(db_column='PriceArz', max_digits=18, decimal_places=4, blank=True, null=True)  # Field name made lowercase.
+    spno = models.CharField(db_column='SpNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    gkalasecunitid = models.CharField(db_column='GKalaSecUnitID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+    secunitprice = models.DecimalField(db_column='SecUnitPrice', max_digits=18, decimal_places=0, blank=True, null=True)  # Field name made lowercase.
+
+    class Meta:
+        managed = False
+        db_table = 'StatementPrice'
+
+
+class TuaUser(models.Model):
+    uid = models.CharField(db_column='uID', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    upw = models.CharField(db_column='uPW', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    uname = models.CharField(db_column='uName', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    utitle = models.CharField(db_column='uTitle', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    uactive = models.BooleanField(db_column='uActive')  # Field name made lowercase.
+    udate = models.CharField(db_column='uDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    ucode = models.IntegerField(db_column='uCode')  # Field name made lowercase.
+    isadmin = models.BooleanField(db_column='isAdmin', blank=True, null=True)  # Field name made lowercase.
+    persheet = models.CharField(db_column='PerSheet', max_length=100, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    hasmessage = models.BooleanField(db_column='HasMessage', blank=True, null=True)  # Field name made lowercase.
+    messagekind = models.CharField(db_column='MessageKind', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    alarmtypecode = models.CharField(db_column='AlarmTypeCode', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    gucode = models.CharField(db_column='GuCode', primary_key=True, max_length=36)  # Field name made lowercase.
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+    emailaddress = models.CharField(db_column='EmailAddress', max_length=150, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    emailpass = models.CharField(db_column='EmailPass', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    hasletter = models.BooleanField(db_column='HasLetter', blank=True, null=True)  # Field name made lowercase.
+    havenewversion = models.BooleanField(db_column='HaveNewVersion')  # Field name made lowercase.
+    dailyalarm = models.BooleanField(db_column='DailyAlarm')  # Field name made lowercase.
+    lastalarmseendate = models.CharField(db_column='LastAlarmSeenDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    csmobile = models.CharField(db_column='CSMobile', max_length=11, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    cspassword = models.CharField(db_column='CSPassword', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    uaddress = models.CharField(db_column='uAddress', max_length=200, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    ubirthdate = models.CharField(db_column='uBirthDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    pwdtypecode = models.IntegerField(db_column='PwdTypeCode')  # Field name made lowercase.
+    canbackedup = models.BooleanField(db_column='CanBackedUp', blank=True, null=True)  # Field name made lowercase.
+    wpu = models.CharField(db_column='WPU', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    pluspass = models.CharField(max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'TUA_User'
+

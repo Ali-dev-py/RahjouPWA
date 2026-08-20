@@ -103,7 +103,7 @@
 
                 <!-- Container where line items are dynamically inserted -->
                 <div class="d-grid gap-2" id="lineItemsContainer">
-                    <!-- Populated dynamically via JS -->
+                    <!-- Cloned from template below -->
                 </div>
             </div>
         </section>
@@ -118,12 +118,12 @@
                 <dl class="financial-summary d-grid gap-3 mb-0">
                     <div class="d-flex justify-content-between gap-3">
                         <dt class="fw-normal">جمع مبالغ:</dt>
-                        <dd class="fw-bold mb-0"><span id="summarySubtotal">۰</span> تومان</dd>
+                        <dd class="fw-bold mb-0"><span id="summarySubtotal">{{ 0|persian_digits }}</span> تومان</dd>
                     </div>
                     <div class="financial-summary__total d-flex justify-content-between align-items-baseline gap-3 pt-3 mt-1">
                         <dt class="h5 fw-bold text-primary mb-0">مبلغ قابل پرداخت:</dt>
                         <dd class="h5 fw-bold text-primary text-start mb-0">
-                            <span id="summaryTotal">۰</span> <small class="text-secondary fw-normal">تومان</small>
+                            <span id="summaryTotal">{{ 0|persian_digits }}</span> <small class="text-secondary fw-normal">تومان</small>
                         </dd>
                     </div>
                 </dl>
@@ -131,6 +131,66 @@
         </section>
     </form>
 </main>
+
+<!-- ============================================================ -->
+<!-- HTML5 TEMPLATE FOR PRODUCT ROW (Clean HTML outside of script) -->
+<!-- ============================================================ -->
+<template id="lineItemTemplate">
+    <fieldset class="line-item rounded-3 p-3">
+        <input type="hidden" name="product_id[]" class="item-product-id" value="">
+        <div class="d-flex align-items-start gap-2">
+            <div class="flex-grow-1 min-width-0">
+                <!-- Search / Autocomplete Box -->
+                <div class="position-relative item-search-wrapper mb-2">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text border-0 bg-transparent ps-0">
+                            <span class="material-symbols-outlined fs-5 text-secondary">search</span>
+                        </span>
+                        <input class="form-control item-search-input border-0 bg-transparent fw-bold px-0 shadow-none"
+                               type="text"
+                               autocomplete="off"
+                               placeholder="جستجوی نام کالا یا کد..."
+                               aria-label="نام کالا">
+                    </div>
+                    <div class="autocomplete-dropdown list-group position-absolute shadow rounded-3 mt-1 bg-white w-100 d-none item-search-results"></div>
+                </div>
+
+                <!-- Quantity and Readonly Price -->
+                <div class="row align-items-end g-2">
+                    <div class="col-4">
+                        <label class="form-label line-item__label">تعداد (<span class="item-unit-label">عدد</span>)</label>
+                        <input class="form-control line-item__input text-center item-quantity-input"
+                               name="quantity[]"
+                               type="number"
+                               value="1"
+                               min="1">
+                    </div>
+                    <div class="col-auto pb-2 text-secondary" aria-hidden="true">×</div>
+                    <div class="col">
+                        <label class="form-label line-item__label">فی واحد (تومان)</label>
+                        <input class="form-control line-item__input text-start readonly-input item-price-input"
+                               name="price[]"
+                               type="number"
+                               value="0"
+                               readonly
+                               dir="ltr">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Row Button -->
+            <button class="btn line-item__delete btn-delete-row" type="button" aria-label="حذف سطر">
+                <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            </button>
+        </div>
+
+        <!-- Row Total Display -->
+        <div class="line-item__total d-flex justify-content-end gap-2 mt-3 pt-2">
+            <span class="text-secondary">جمع سطر:</span>
+            <strong class="text-primary"><span class="line-item-total-display">{{ 0|persian_digits }}</span> تومان</strong>
+        </div>
+    </fieldset>
+</template>
 
 <div class="app-action-bar fixed-bottom">
     <div class="container-fluid app-content app-content--narrow mx-auto d-flex gap-2">
@@ -162,6 +222,13 @@
         const allCustomers = customersDataEl ? JSON.parse(JSON.parse(customersDataEl.textContent)) : [];
         const allProducts = productsDataEl ? JSON.parse(JSON.parse(productsDataEl.textContent)) : [];
 
+        // Helper: Convert English Digits (0-9) to Persian Digits (۰-۹)
+        function toPersianDigits(value) {
+            if (value === null || value === undefined || value === '') return '';
+            const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+            return value.toString().replace(/\d/g, digit => persianDigits[digit]);
+        }
+
         // Helper: Normalize Persian & Arabic characters
         function normalizePersian(text) {
             if (!text) return '';
@@ -176,9 +243,8 @@
         // Helper: Format Number with commas and Persian Digits
         function formatCurrency(num) {
             if (!num || isNaN(num)) return '۰';
-            const formatted = Number(num).toLocaleString('en-US');
-            const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-            return formatted.replace(/\d/g, digit => persianDigits[digit]);
+            const formatted = Math.round(Number(num)).toLocaleString('en-US');
+            return toPersianDigits(formatted);
         }
 
         // ==========================================
@@ -220,7 +286,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <strong class="d-block text-dark">${item.name}</strong>
-                                <small class="text-secondary">کد: ${item.code || '-'} | تلفن: ${item.phone || '-'}</small>
+                                <small class="text-secondary">کد: ${toPersianDigits(item.code || '-')} | تلفن: ${toPersianDigits(item.phone || '-')}</small>
                             </div>
                             <span class="material-symbols-outlined text-muted fs-5">arrow_forward_ios</span>
                         </div>
@@ -229,7 +295,7 @@
                         e.preventDefault();
                         selectCustomer(item);
                     });
-                    resultsContainer.appendChild(itemElEl = itemEl);
+                    resultsContainer.appendChild(itemEl);
                 });
             }
             resultsContainer.classList.remove('d-none');
@@ -238,8 +304,8 @@
         function selectCustomer(customer) {
             hiddenCustomerId.value = customer.id;
             displayName.textContent = customer.name;
-            displayCode.textContent = `کد: ${customer.code || '-'}`;
-            displayPhone.textContent = `تلفن: ${customer.phone || '-'}`;
+            displayCode.textContent = `کد: ${toPersianDigits(customer.code || '-')}`;
+            displayPhone.textContent = `تلفن: ${toPersianDigits(customer.phone || '-')}`;
 
             searchWrapper.classList.add('d-none');
             selectedContainer.classList.remove('d-none');
@@ -260,14 +326,13 @@
         });
 
         // ==========================================
-        // 3. Products / Line Items Logic
+        // 3. Products / Line Items Logic (Using HTML Template)
         // ==========================================
         const lineItemsContainer = document.getElementById('lineItemsContainer');
+        const lineItemTemplate = document.getElementById('lineItemTemplate');
         const btnAddLineItem = document.getElementById('btnAddLineItem');
         const summarySubtotal = document.getElementById('summarySubtotal');
         const summaryTotal = document.getElementById('summaryTotal');
-
-        let rowCounter = 0;
 
         function recalculateTotal() {
             let total = 0;
@@ -285,69 +350,11 @@
         }
 
         function createLineItemRow() {
-            rowCounter++;
-            const rowId = rowCounter;
+            // 1. Clone the clean HTML from <template>
+            const clone = lineItemTemplate.content.cloneNode(true);
+            const fieldset = clone.querySelector('fieldset');
 
-            const fieldset = document.createElement('fieldset');
-            fieldset.className = 'line-item rounded-3 p-3';
-            fieldset.id = `line-item-${rowId}`;
-
-            fieldset.innerHTML = `
-                <input type="hidden" name="product_id[]" class="item-product-id" value="">
-                <div class="d-flex align-items-start gap-2">
-                    <div class="flex-grow-1 min-width-0">
-                        <!-- Search / Autocomplete Box -->
-                        <div class="position-relative item-search-wrapper mb-2">
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text border-0 bg-transparent ps-0">
-                                    <span class="material-symbols-outlined fs-5 text-secondary">search</span>
-                                </span>
-                                <input class="form-control item-search-input border-0 bg-transparent fw-bold px-0 shadow-none"
-                                    type="text"
-                                    autocomplete="off"
-                                    placeholder="جستجوی نام کالا یا کد..."
-                                    aria-label="نام کالا">
-                            </div>
-                            <div class="autocomplete-dropdown list-group position-absolute shadow rounded-3 mt-1 bg-white w-100 d-none item-search-results"></div>
-                        </div>
-
-                        <!-- Quantity and Readonly Price -->
-                        <div class="row align-items-end g-2">
-                            <div class="col-4">
-                                <label class="form-label line-item__label">تعداد (<span class="item-unit-label">عدد</span>)</label>
-                                <input class="form-control line-item__input text-center item-quantity-input"
-                                    name="quantity[]"
-                                    type="number"
-                                    value="1"
-                                    min="1">
-                            </div>
-                            <div class="col-auto pb-2 text-secondary" aria-hidden="true">×</div>
-                            <div class="col">
-                                <label class="form-label line-item__label">فی واحد (تومان)</label>
-                                <input class="form-control line-item__input text-start readonly-input item-price-input"
-                                    name="price[]"
-                                    type="number"
-                                    value="0"
-                                    readonly
-                                    dir="ltr">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Delete Row Button -->
-                    <button class="btn line-item__delete btn-delete-row" type="button" aria-label="حذف سطر">
-                        <span class="material-symbols-outlined" aria-hidden="true">delete</span>
-                    </button>
-                </div>
-
-                <!-- Row Total Display -->
-                <div class="line-item__total d-flex justify-content-end gap-2 mt-3 pt-2">
-                    <span class="text-secondary">جمع سطر:</span>
-                    <strong class="text-primary"><span class="line-item-total-display">۰</span> تومان</strong>
-                </div>
-            `;
-
-            // Attach Event Listeners to this new row
+            // 2. Select Elements inside the clone
             const itemSearchInput = fieldset.querySelector('.item-search-input');
             const itemResultsContainer = fieldset.querySelector('.item-search-results');
             const itemProductIdInput = fieldset.querySelector('.item-product-id');
@@ -356,7 +363,7 @@
             const itemQuantityInput = fieldset.querySelector('.item-quantity-input');
             const btnDeleteRow = fieldset.querySelector('.btn-delete-row');
 
-            // Product Instant Filter
+            // 3. Product Instant Filter Listener
             itemSearchInput.addEventListener('input', function () {
                 const query = normalizePersian(this.value);
                 if (!query) {
@@ -382,7 +389,7 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <strong class="d-block text-dark small">${p.name}</strong>
-                                    <small class="text-secondary">کد: ${p.code || '-'} | واحد: ${p.unit}</small>
+                                    <small class="text-secondary">کد: ${toPersianDigits(p.code || '-')} | واحد: ${p.unit}</small>
                                 </div>
                                 <span class="text-primary fw-bold small">${formatCurrency(p.price)} تومان</span>
                             </div>
@@ -408,12 +415,13 @@
             // Quantity change listener
             itemQuantityInput.addEventListener('input', recalculateTotal);
 
-            // Delete Row
+            // Delete Row listener
             btnDeleteRow.addEventListener('click', function () {
                 fieldset.remove();
                 recalculateTotal();
             });
 
+            // 4. Append to DOM and focus
             lineItemsContainer.appendChild(fieldset);
             itemSearchInput.focus();
         }
@@ -421,7 +429,7 @@
         // Add row button click
         btnAddLineItem.addEventListener('click', createLineItemRow);
 
-        // Create 1 initial empty row on load
+        // Create 1 initial empty row on page load
         createLineItemRow();
 
         // Close all open dropdowns if clicked outside
@@ -437,5 +445,4 @@
         });
     });
 </script>
-
 {% endblock %}

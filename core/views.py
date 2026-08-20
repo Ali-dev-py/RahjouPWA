@@ -1,24 +1,113 @@
 import json
 from .models import *
 from datetime import datetime
+from django.contrib import messages
 from django.db.models import Sum
+from django.shortcuts import render, redirect
 from django.core.serializers.json import DjangoJSONEncoder
+from django.views import View
+from django.urls import reverse
 from django.views.generic import TemplateView
 
+# MIXINS
+class PlusLoginRequiredMixin:
+    """Ensures user is authenticated and attaches the full TuaUser model instance to request.plus_user"""
 
+    def dispatch(self, request, *args, **kwargs):
+        user_gucode = request.session.get("user_id")
+
+        if not user_gucode:
+            login_url = reverse("core:login")
+            # Avoid loop if current path is already login
+            if request.path == login_url:
+                return super().dispatch(request, *args, **kwargs)
+            return redirect(f"{login_url}?next={request.path}")
+
+        # Fetch the complete user object from 'plus' database
+        user = (
+            TuaUser.objects.using("plus")
+            .filter(gucode=user_gucode, uactive=True)
+            .first()
+        )
+
+        if not user:
+            request.session.flush()
+            return redirect("core:login")
+
+        # Attach the full TuaUser object to the request
+        request.plus_user = user
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        """Automatically pass current_user to all template contexts"""
+        context = super().get_context_data(**kwargs)
+        context["current_user"] = getattr(self.request, "plus_user", None)
+        return context
+
+
+# CBV VIEWS
 class SplashView(TemplateView):
     template_name = "core/splash.html"
 
 
-class LoginView(TemplateView):
+class LoginView(View):
     template_name = "core/login.html"
 
+    def get(self, request, *args, **kwargs):
+        # If user is already logged in, redirect to dashboard
+        if request.session.get("user_id"):
+            return redirect("core:dashboard")
+        return render(request, self.template_name)
 
-class DashboardView(TemplateView):
+    def post(self, request, *args, **kwargs):
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "").strip()
+
+        if not username or not password:
+            messages.error(request, "لطفاً نام کاربری و رمز عبور را وارد کنید.")
+            return render(
+                request, self.template_name, {"entered_username": username}
+            )
+
+        # Query TuaUser on 'plus' database
+        user = (
+            TuaUser.objects.using("plus")
+            .filter(uid=username, uactive=True)
+            .first()
+        )
+
+        # Check credentials (uid and pluspass)
+        if user and user.pluspass == password:
+            # Store essential user data in the session
+            request.session["user_id"] = str(user.gucode)
+            request.session["user_uid"] = user.uid
+            request.session["user_name"] = (
+                user.uname or user.utitle or user.uid
+            )
+            request.session["is_admin"] = bool(user.isadmin)
+
+            # Redirect to 'next' url or dashboard
+            next_url = request.GET.get("next") or "core:dashboard"
+            return redirect(next_url)
+        else:
+            messages.error(request, "نام کاربری یا رمز عبور اشتباه است.")
+            return render(
+                request, self.template_name, {"entered_username": username}
+            )
+
+
+class LogoutView(PlusLoginRequiredMixin, View):
+
+    def get(self, request, *args, **kwargs):
+        request.session.flush()  # Clear all session data
+        return redirect("core:login")
+
+
+class DashboardView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/dashboard.html"
     
     
-class CustomersView(TemplateView):
+class CustomersView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/customers.html"
 
     def get_context_data(self, **kwargs):
@@ -81,7 +170,7 @@ def get_status_style(status_name):
         return {"chip_class": "status-chip--pending", "dot_class": "status-dot"}
     
     
-class FactorListView(TemplateView):
+class FactorListView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/factor_list.html"
 
     def get_context_data(self, **kwargs):
@@ -165,7 +254,7 @@ class FactorListView(TemplateView):
         return context
 
 
-class FactorDetailView(TemplateView):
+class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/factor_detail.html"
 
     def get_context_data(self, **kwargs):
@@ -267,7 +356,7 @@ class FactorDetailView(TemplateView):
         return context
     
 
-class FactorCreateView(TemplateView):
+class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/factor_create.html"
 
     def get_context_data(self, **kwargs):
@@ -289,24 +378,55 @@ class FactorCreateView(TemplateView):
             for c in customers_queryset
         ]
 
-        # 2. Fetch Products (Tblkala)
+        # 2. Fetch Prices from Statementprice mapped by gkalaid
+        statement_prices_qs = (
+            Statementprice.objects.using("plus")
+            .filter(gkalaid__isnull=False)
+            .values("gkalaid", "price")
+            .order_by("-statementpriceid")  # Latest declared price first
+        )
+
+        # Build a fast lookup dictionary: {gkalaid: price}
+        statement_price_map = {}
+        for sp in statement_prices_qs:
+            gid = str(sp["gkalaid"])
+            if (
+                gid
+                and (gid not in statement_price_map)
+                and sp["price"] is not None
+            ):
+                statement_price_map[gid] = int(sp["price"])
+
+        # 3. Fetch Products (Tblkala) & apply StatementPrice
         products_queryset = (
             Tblkala.objects.using("plus")
             .values("gkalaid", "kalaname", "kalano", "vahed1", "selprice")
             .order_by("kalaname")
         )
-        products_list = [
-            {
-                "id": str(p["gkalaid"]),
-                "name": p["kalaname"] or "",
-                "code": p["kalano"] or "",
-                "unit": p["vahed1"] or "عدد",
-                "price": int(p["selprice"]) if p["selprice"] else 0,
-            }
-            for p in products_queryset
-        ]
 
-        # Pass as JSON strings to the template
+        products_list = []
+        for p in products_queryset:
+            gid = str(p["gkalaid"])
+
+            # Priority: StatementPrice -> Fallback to Tblkala.selprice -> 0
+            if gid in statement_price_map:
+                final_price = statement_price_map[gid]
+            elif p["selprice"] is not None:
+                final_price = int(p["selprice"])
+            else:
+                final_price = 0
+
+            products_list.append(
+                {
+                    "id": gid,
+                    "name": p["kalaname"] or "",
+                    "code": p["kalano"] or "",
+                    "unit": p["vahed1"] or "عدد",
+                    "price": final_price,
+                }
+            )
+
+        # Pass JSON data to template
         context["customers_json"] = json.dumps(
             customers_list, cls=DjangoJSONEncoder
         )
@@ -321,9 +441,9 @@ class FactorCreateView(TemplateView):
         quantities = request.POST.getlist("quantity[]")
         prices = request.POST.getlist("price[]")
 
-        # Save logic for factor & factor items
+        # Factor submission logic will go here
         return super().get(request, *args, **kwargs)
 
 
-class OfflineView(TemplateView):
+class OfflineView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/offline.html"
