@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% load static %}
+{% load i18n_extras %}
 
 {% block title %}خانه | رهجو{% endblock %}
 {% block body_class %}app-body page-dashboard has-bottom-nav{% endblock %}
 
 {% block content %}
-{% include "partials/_app_header.html" with heading="خانه"%}
+{% include "partials/_app_header.html" with heading="خانه" %}
 
 <main class="app-main container-fluid px-3">
     <div class="app-content mx-auto">
+        
+        <!-- Summary Cards Section -->
         <section class="mb-5" aria-labelledby="summary-title">
             <div class="d-flex justify-content-between align-items-end mb-3">
                 <h1 class="h4 fw-bold mb-0" id="summary-title">خلاصه وضعیت</h1>
@@ -21,11 +24,11 @@
                     <div class="card-body d-flex flex-column justify-content-between p-3 position-relative">
                         <div class="summary-card__orb" aria-hidden="true"></div>
                         <div class="d-flex align-items-center justify-content-between position-relative">
-                            <span class="fw-semibold">فروش امروز</span>
+                            <span class="fw-semibold">فروش امروز من</span>
                             <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">trending_up</span>
                         </div>
                         <div class="position-relative mt-4 text-start" dir="ltr">
-                            <strong class="summary-card__value d-block">۴۵,۰۰۰,۰۰۰</strong>
+                            <strong class="summary-card__value d-block">{{ today_sales_total|persian_digits }}</strong>
                             <small>تومان</small>
                         </div>
                     </div>
@@ -34,11 +37,11 @@
                 <article class="card summary-card summary-card--accent border-0 flex-shrink-0">
                     <div class="card-body d-flex flex-column justify-content-between p-3">
                         <div class="d-flex align-items-center justify-content-between">
-                            <span class="fw-semibold">فاکتورهای در انتظار</span>
+                            <span class="fw-semibold">درخواست‌های در انتظار</span>
                             <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">pending_actions</span>
                         </div>
                         <div class="mt-4 text-start" dir="ltr">
-                            <strong class="summary-card__value d-block">۱۲</strong>
+                            <strong class="summary-card__value d-block">{{ pending_count|persian_digits }}</strong>
                             <small>مورد</small>
                         </div>
                     </div>
@@ -47,11 +50,11 @@
                 <article class="card summary-card summary-card--neutral border-0 flex-shrink-0">
                     <div class="card-body d-flex flex-column justify-content-between p-3">
                         <div class="d-flex align-items-center justify-content-between">
-                            <span class="fw-semibold">پیش‌فاکتورها</span>
+                            <span class="fw-semibold">کل درخواست‌های من</span>
                             <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">draft</span>
                         </div>
                         <div class="mt-4 text-start" dir="ltr">
-                            <strong class="summary-card__value d-block">۸</strong>
+                            <strong class="summary-card__value d-block">{{ total_requests_count|persian_digits }}</strong>
                             <small>مورد</small>
                         </div>
                     </div>
@@ -59,6 +62,7 @@
             </div>
         </section>
 
+        <!-- Recent Activities Section -->
         <section aria-labelledby="recent-title">
             <div class="d-flex justify-content-between align-items-end mb-3">
                 <h2 class="h5 fw-bold mb-0" id="recent-title">فعالیت‌های اخیر</h2>
@@ -67,56 +71,31 @@
             </div>
 
             <div class="d-grid gap-2">
-                <a class="card activity-card border-0 text-decoration-none"
-                   href="{% url 'core:factor_detail' %}">
-                    <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
-                        <div class="d-flex align-items-center gap-3 min-width-0">
-                            <span class="activity-card__icon activity-card__icon--primary material-symbols-outlined flex-shrink-0" aria-hidden="true">add_shopping_cart</span>
-                            <span class="min-width-0">
-                                <strong class="d-block text-truncate">فاکتور فروش #۱۰۲۴</strong>
-                                <small class="text-secondary d-block text-truncate">شرکت آرمان توسعه</small>
-                            </span>
+                {% for item in recent_activities %}
+                    <a class="card activity-card border-0 text-decoration-none"
+                       href="{% url 'core:factor_detail' %}?id={{ item.id }}">
+                        <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
+                            <div class="d-flex align-items-center gap-3 min-width-0">
+                                <span class="activity-card__icon material-symbols-outlined flex-shrink-0 text-primary" aria-hidden="true">
+                                    description
+                                </span>
+                                <div class="min-width-0">
+                                    <strong class="d-block text-dark text-truncate">درخواست فروش #{{ item.factor_no|persian_digits }}</strong>
+                                    <small class="text-secondary d-block text-truncate">{{ item.customer_name }} • {{ item.date|persian_digits }}</small>
+                                </div>
+                            </div>
+                            <div class="text-start flex-shrink-0">
+                                <strong class="d-block text-dark" dir="ltr">{{ item.total_amount|persian_digits }} تومان</strong>
+                                <span class="status-chip {{ item.chip_class }}">{{ item.status_name }}</span>
+                            </div>
                         </div>
-                        <span class="text-start flex-shrink-0">
-                            <strong class="d-block" dir="ltr">+ ۱۲,۵۰۰,۰۰۰</strong>
-                            <small class="status-chip status-chip--primary">موفق</small>
-                        </span>
+                    </a>
+                {% empty %}
+                    <div class="card border-0 bg-light p-4 text-center">
+                        <span class="material-symbols-outlined text-secondary fs-1 mb-2">inbox</span>
+                        <p class="text-secondary mb-0 small">هنوز هیچ درخواست فروشی توسط شما ثبت نشده است.</p>
                     </div>
-                </a>
-
-                <a class="card activity-card border-0 text-decoration-none"
-                   href="{% url 'core:factor_detail' %}">
-                    <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
-                        <div class="d-flex align-items-center gap-3 min-width-0">
-                            <span class="activity-card__icon activity-card__icon--accent material-symbols-outlined flex-shrink-0" aria-hidden="true">schedule</span>
-                            <span class="min-width-0">
-                                <strong class="d-block text-truncate">فاکتور فروش #۱۰۲۳</strong>
-                                <small class="text-secondary d-block text-truncate">فروشگاه مرکزی</small>
-                            </span>
-                        </div>
-                        <span class="text-start flex-shrink-0">
-                            <strong class="d-block" dir="ltr">+ ۴,۲۰۰,۰۰۰</strong>
-                            <small class="status-chip status-chip--accent">در انتظار</small>
-                        </span>
-                    </div>
-                </a>
-
-                <a class="card activity-card border-0 text-decoration-none"
-                   href="{% url 'core:factor_detail' %}">
-                    <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
-                        <div class="d-flex align-items-center gap-3 min-width-0">
-                            <span class="activity-card__icon activity-card__icon--neutral material-symbols-outlined flex-shrink-0" aria-hidden="true">description</span>
-                            <span class="min-width-0">
-                                <strong class="d-block text-truncate">پیش‌فاکتور #۸۹۰</strong>
-                                <small class="text-secondary d-block text-truncate">مشتری گذری</small>
-                            </span>
-                        </div>
-                        <span class="text-start flex-shrink-0">
-                            <strong class="d-block" dir="ltr">۸۵۰,۰۰۰</strong>
-                            <small class="status-chip status-chip--neutral">پیش‌نویس</small>
-                        </span>
-                    </div>
-                </a>
+                {% endfor %}
             </div>
         </section>
 
@@ -131,6 +110,7 @@
     </div>
 </main>
 
+<!-- Floating Action Button for New Factor -->
 <a class="btn app-fab d-flex align-items-center justify-content-center"
    href="{% url 'core:factor_create' %}"
    aria-label="ایجاد فاکتور جدید">

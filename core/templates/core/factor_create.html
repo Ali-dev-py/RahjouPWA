@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% load i18n_extras %}
 
-{% block title %}فاکتور جدید | رهجو{% endblock %}
+{% block title %}درخواست فروش جدید | رهجو{% endblock %}
 {% block body_class %}app-body page-factor-create has-action-bar{% endblock %}
 
 {% block extra_css %}
 <style>
-    /* Dropdown Styling */
+    /* Autocomplete Dropdowns */
     .autocomplete-dropdown {
         top: 100%;
         left: 0;
@@ -34,6 +34,18 @@
 {% include "partials/_app_header.html" with heading="درخواست فروش جدید" back_url_name="core:factor_list" %}
 
 <main class="app-main container-fluid px-3">
+    <!-- Messages Display -->
+    {% if messages %}
+        <div class="app-content app-content--narrow mx-auto mb-3">
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show rounded-3" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="بستن"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     <form id="factorForm" class="app-content app-content--narrow mx-auto" action="{% url 'core:factor_create' %}" method="post">
         {% csrf_token %}
 
@@ -85,7 +97,7 @@
                             تغییر مشتری
                         </button>
                     </div>
-                    <input type="hidden" name="customer_id" id="selectedCustomerId" value="" required>
+                    <input type="hidden" name="customer_id" id="selectedCustomerId" value="">
                 </div>
             </div>
         </section>
@@ -103,7 +115,7 @@
 
                 <!-- Container where line items are dynamically inserted -->
                 <div class="d-grid gap-2" id="lineItemsContainer">
-                    <!-- Cloned from template below -->
+                    <!-- Cloned from HTML5 template below -->
                 </div>
             </div>
         </section>
@@ -133,10 +145,10 @@
 </main>
 
 <!-- ============================================================ -->
-<!-- HTML5 TEMPLATE FOR PRODUCT ROW (Clean HTML outside of script) -->
+<!-- HTML5 TEMPLATE FOR PRODUCT ROW                               -->
 <!-- ============================================================ -->
 <template id="lineItemTemplate">
-    <fieldset class="line-item rounded-3 p-3">
+    <fieldset class="line-item rounded-3 p-3 border mb-2 bg-white">
         <input type="hidden" name="product_id[]" class="item-product-id" value="">
         <div class="d-flex align-items-start gap-2">
             <div class="flex-grow-1 min-width-0">
@@ -158,16 +170,17 @@
                 <!-- Quantity and Readonly Price -->
                 <div class="row align-items-end g-2">
                     <div class="col-4">
-                        <label class="form-label line-item__label">تعداد (<span class="item-unit-label">عدد</span>)</label>
+                        <label class="form-label line-item__label small text-secondary mb-1">تعداد (<span class="item-unit-label">عدد</span>)</label>
                         <input class="form-control line-item__input text-center item-quantity-input"
                                name="quantity[]"
                                type="number"
                                value="1"
-                               min="1">
+                               min="1"
+                               step="any">
                     </div>
                     <div class="col-auto pb-2 text-secondary" aria-hidden="true">×</div>
                     <div class="col">
-                        <label class="form-label line-item__label">فی واحد (تومان)</label>
+                        <label class="form-label line-item__label small text-secondary mb-1">فی واحد (تومان)</label>
                         <input class="form-control line-item__input text-start readonly-input item-price-input"
                                name="price[]"
                                type="number"
@@ -179,31 +192,33 @@
             </div>
 
             <!-- Delete Row Button -->
-            <button class="btn line-item__delete btn-delete-row" type="button" aria-label="حذف سطر">
+            <button class="btn line-item__delete btn-delete-row text-danger p-1" type="button" aria-label="حذف سطر">
                 <span class="material-symbols-outlined" aria-hidden="true">delete</span>
             </button>
         </div>
 
         <!-- Row Total Display -->
-        <div class="line-item__total d-flex justify-content-end gap-2 mt-3 pt-2">
-            <span class="text-secondary">جمع سطر:</span>
-            <strong class="text-primary"><span class="line-item-total-display">{{ 0|persian_digits }}</span> تومان</strong>
+        <div class="line-item__total d-flex justify-content-end gap-2 mt-2 pt-2 border-top">
+            <span class="text-secondary small">جمع سطر:</span>
+            <strong class="text-primary small"><span class="line-item-total-display">{{ 0|persian_digits }}</span> تومان</strong>
         </div>
     </fieldset>
 </template>
 
-<div class="app-action-bar fixed-bottom">
+<!-- Fixed Bottom Action Bar -->
+<div class="app-action-bar fixed-bottom bg-white border-top py-2 shadow-lg">
     <div class="container-fluid app-content app-content--narrow mx-auto d-flex gap-2">
-        <button class="btn app-draft-button d-flex align-items-center justify-content-center gap-2"
-                type="button"
-                onclick="document.getElementById('factorForm').submit();">
+        <button class="btn btn-outline-secondary w-50 d-flex align-items-center justify-content-center gap-2"
+                type="submit"
+                form="factorForm">
             <span class="material-symbols-outlined" aria-hidden="true">save</span>
             <span>ذخیره پیش‌نویس</span>
         </button>
-        <button class="btn btn-primary app-issue-button d-flex align-items-center justify-content-center gap-2"
-                type="button">
-            <span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>
-            <span>صدور و دریافت PDF</span>
+        <button class="btn btn-primary w-50 d-flex align-items-center justify-content-center gap-2"
+                type="submit"
+                form="factorForm">
+            <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+            <span>ثبت نهایی درخواست</span>
         </button>
     </div>
 </div>
@@ -222,14 +237,13 @@
         const allCustomers = customersDataEl ? JSON.parse(JSON.parse(customersDataEl.textContent)) : [];
         const allProducts = productsDataEl ? JSON.parse(JSON.parse(productsDataEl.textContent)) : [];
 
-        // Helper: Convert English Digits (0-9) to Persian Digits (۰-۹)
+        // Helpers
         function toPersianDigits(value) {
             if (value === null || value === undefined || value === '') return '';
             const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
             return value.toString().replace(/\d/g, digit => persianDigits[digit]);
         }
 
-        // Helper: Normalize Persian & Arabic characters
         function normalizePersian(text) {
             if (!text) return '';
             return text.toString().trim().toLowerCase()
@@ -240,7 +254,6 @@
                 .replace(/[\u200B-\u200D\uFEFF]/g, '');
         }
 
-        // Helper: Format Number with commas and Persian Digits
         function formatCurrency(num) {
             if (!num || isNaN(num)) return '۰';
             const formatted = Math.round(Number(num)).toLocaleString('en-US');
@@ -248,7 +261,7 @@
         }
 
         // ==========================================
-        // 2. Customer Selection Logic
+        // 2. Customer Autocomplete Logic
         // ==========================================
         const searchInput = document.getElementById('customerSearchInput');
         const searchWrapper = document.getElementById('customerSearchWrapper');
@@ -276,7 +289,7 @@
 
             resultsContainer.innerHTML = '';
             if (matches.length === 0) {
-                resultsContainer.innerHTML = `<div class="p-3 text-center text-secondary small">مشتری‌ای مطابق با عبارت پیدا نشد.</div>`;
+                resultsContainer.innerHTML = `<div class="p-3 text-center text-secondary small">مشتری‌ای پیدا نشد.</div>`;
             } else {
                 matches.forEach(item => {
                     const itemEl = document.createElement('a');
@@ -326,7 +339,7 @@
         });
 
         // ==========================================
-        // 3. Products / Line Items Logic (Using HTML Template)
+        // 3. Product Row Items Logic
         // ==========================================
         const lineItemsContainer = document.getElementById('lineItemsContainer');
         const lineItemTemplate = document.getElementById('lineItemTemplate');
@@ -350,11 +363,9 @@
         }
 
         function createLineItemRow() {
-            // 1. Clone the clean HTML from <template>
             const clone = lineItemTemplate.content.cloneNode(true);
             const fieldset = clone.querySelector('fieldset');
 
-            // 2. Select Elements inside the clone
             const itemSearchInput = fieldset.querySelector('.item-search-input');
             const itemResultsContainer = fieldset.querySelector('.item-search-results');
             const itemProductIdInput = fieldset.querySelector('.item-product-id');
@@ -363,7 +374,6 @@
             const itemQuantityInput = fieldset.querySelector('.item-quantity-input');
             const btnDeleteRow = fieldset.querySelector('.btn-delete-row');
 
-            // 3. Product Instant Filter Listener
             itemSearchInput.addEventListener('input', function () {
                 const query = normalizePersian(this.value);
                 if (!query) {
@@ -396,7 +406,6 @@
                         `;
                         itemEl.addEventListener('click', function (e) {
                             e.preventDefault();
-                            // Select Product
                             itemProductIdInput.value = p.id;
                             itemSearchInput.value = p.name;
                             itemPriceInput.value = p.price;
@@ -412,27 +421,32 @@
                 itemResultsContainer.classList.remove('d-none');
             });
 
-            // Quantity change listener
             itemQuantityInput.addEventListener('input', recalculateTotal);
 
-            // Delete Row listener
             btnDeleteRow.addEventListener('click', function () {
-                fieldset.remove();
-                recalculateTotal();
+                if (lineItemsContainer.querySelectorAll('.line-item').length > 1) {
+                    fieldset.remove();
+                    recalculateTotal();
+                } else {
+                    // Clear the single existing row instead of deleting
+                    itemProductIdInput.value = '';
+                    itemSearchInput.value = '';
+                    itemPriceInput.value = '0';
+                    itemQuantityInput.value = '1';
+                    recalculateTotal();
+                }
             });
 
-            // 4. Append to DOM and focus
             lineItemsContainer.appendChild(fieldset);
             itemSearchInput.focus();
         }
 
-        // Add row button click
         btnAddLineItem.addEventListener('click', createLineItemRow);
 
-        // Create 1 initial empty row on page load
+        // Initialize 1 row
         createLineItemRow();
 
-        // Close all open dropdowns if clicked outside
+        // Close dropdowns on outside click
         document.addEventListener('click', function (e) {
             if (!e.target.closest('#customerSearchWrapper')) {
                 resultsContainer.classList.add('d-none');
@@ -442,6 +456,27 @@
                     wrapper.querySelector('.item-search-results').classList.add('d-none');
                 }
             });
+        });
+
+        // ==========================================
+        // 4. Form Submission Client Validation
+        // ==========================================
+        const factorForm = document.getElementById('factorForm');
+        factorForm.addEventListener('submit', function (e) {
+            if (!hiddenCustomerId.value) {
+                e.preventDefault();
+                alert('لطفاً ابتدا یک مشتری را انتخاب کنید.');
+                searchInput.focus();
+                return;
+            }
+
+            const validProducts = Array.from(document.querySelectorAll('.item-product-id'))
+                                       .filter(input => input.value.trim() !== '');
+
+            if (validProducts.length === 0) {
+                e.preventDefault();
+                alert('لطفاً حداقل یک کالا را به فاکتور اضافه کنید.');
+            }
         });
     });
 </script>

@@ -1,13 +1,21 @@
+import uuid
 import json
-from .models import *
+import jdatetime
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
+
 from django.contrib import messages
-from django.db.models import Sum
-from django.shortcuts import render, redirect
 from django.core.serializers.json import DjangoJSONEncoder
-from django.views import View
+from django.db.models import DecimalField, F, Sum, Value
+from django.db.models.functions import Coalesce
+from django.shortcuts import redirect, render
+from django.db import transaction
 from django.urls import reverse
+from django.views import View
 from django.views.generic import TemplateView
+
+from .models import *
+
 
 # MIXINS
 class PlusLoginRequiredMixin:
@@ -105,6 +113,137 @@ class LogoutView(PlusLoginRequiredMixin, View):
 
 class DashboardView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # 1. Get logged-in user's gucode
+        user_gucode = self.request.session.get("user_id")
+        if not user_gucode and hasattr(self.request, "plus_user"):
+            user_gucode = str(self.request.plus_user.gucode)
+
+        if not user_gucode:
+            context["recent_activities"] = []
+            return context
+
+        # 2. Fetch Status Map for styling and text
+        statuses = Salerequeststatus.objects.using("plus").all()
+        status_map = {
+            s.salerequeststatuscode: s.salerequeststatusname for s in statuses
+        }
+
+        # 3. Query Last 10 Sale Requests for the current user
+        recent_masters = list(
+            Salerequestmaster.objects.using("plus")
+            .filter(gcreatedby=user_gucode)
+            .order_by("-salerequestdate", "-salerequestno")[:10]
+        )
+
+        recent_activities = []
+        if recent_masters:
+            master_guids = [m.gsalerequestmasterid for m in recent_masters]
+            customer_guids = [
+                m.gcustomerid for m in recent_masters if m.gcustomerid
+            ]
+
+            # Batch Fetch Customers (Single Query - No N+1)
+            customer_map = {}
+            if customer_guids:
+                customers = Tblcustomer.objects.using("plus").filter(
+                    gcustomerid__in=customer_guids
+                )
+                customer_map = {c.gcustomerid: c.custname for c in customers}
+
+            # Batch Calculate Total Price per Factor (Single Query)
+            # Total = (Quantity * UnitPrice) - Discount
+            details_agg = (
+                Salerequestdetail.objects.using("plus")
+                .filter(gsalerequestmasterid__in=master_guids)
+                .values("gsalerequestmasterid")
+                .annotate(
+                    total=Sum(
+                        (F("quantity") * F("unitprice"))
+                        - Coalesce(F("discount"), Value(0)),
+                        output_field=DecimalField(),
+                    )
+                )
+            )
+            totals_map = {
+                d["gsalerequestmasterid"]: int(d["total"] or 0)
+                for d in details_agg
+            }
+
+            # Build list
+            for m in recent_masters:
+                customer_name = (
+                    customer_map.get(m.gcustomerid)
+                    or m.requestman
+                    or "مشتری نامشخص"
+                )
+                status_name = status_map.get(
+                    m.salerequeststatuscode, "ثبت شده"
+                )
+                style = get_status_style(status_name)
+
+                recent_activities.append(
+                    {
+                        "id": m.gsalerequestmasterid,
+                        "factor_no": m.salerequestno,
+                        "date": m.salerequestdate or m.createddate or "-",
+                        "customer_name": customer_name,
+                        "total_amount": totals_map.get(
+                            m.gsalerequestmasterid, 0
+                        ),
+                        "status_name": status_name,
+                        "chip_class": style["chip_class"],
+                        "dot_class": style["dot_class"],
+                    }
+                )
+
+        context["recent_activities"] = recent_activities
+
+        # -------------------------------------------------------------
+        # 4. Calculate Top Summary Cards Data
+        # -------------------------------------------------------------
+        today_jalali = jdatetime.date.today().strftime("%Y/%m/%d")
+
+        # Today's masters by this user
+        today_master_guids = list(
+            Salerequestmaster.objects.using("plus")
+            .filter(gcreatedby=user_gucode, salerequestdate=today_jalali)
+            .values_list("gsalerequestmasterid", flat=True)
+        )
+
+        today_total_sum = 0
+        if today_master_guids:
+            sum_agg = Salerequestdetail.objects.using("plus").filter(
+                gsalerequestmasterid__in=today_master_guids
+            ).aggregate(
+                total=Sum(
+                    (F("quantity") * F("unitprice"))
+                    - Coalesce(F("discount"), Value(0)),
+                    output_field=DecimalField(),
+                )
+            )[
+                "total"
+            ] or Decimal(
+                "0"
+            )
+            today_total_sum = int(sum_agg)
+
+        context["today_sales_total"] = today_total_sum
+        context["pending_count"] = (
+            Salerequestmaster.objects.using("plus")
+            .filter(gcreatedby=user_gucode, salerequeststatuscode=1)
+            .count()
+        )
+        context["total_requests_count"] = (
+            Salerequestmaster.objects.using("plus")
+            .filter(gcreatedby=user_gucode)
+            .count()
+        )
+
+        return context
     
     
 class CustomersView(PlusLoginRequiredMixin, TemplateView):
@@ -383,10 +522,9 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
             Statementprice.objects.using("plus")
             .filter(gkalaid__isnull=False)
             .values("gkalaid", "price")
-            .order_by("-statementpriceid")  # Latest declared price first
+            .order_by("-statementpriceid")
         )
 
-        # Build a fast lookup dictionary: {gkalaid: price}
         statement_price_map = {}
         for sp in statement_prices_qs:
             gid = str(sp["gkalaid"])
@@ -408,7 +546,6 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
         for p in products_queryset:
             gid = str(p["gkalaid"])
 
-            # Priority: StatementPrice -> Fallback to Tblkala.selprice -> 0
             if gid in statement_price_map:
                 final_price = statement_price_map[gid]
             elif p["selprice"] is not None:
@@ -426,7 +563,6 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                 }
             )
 
-        # Pass JSON data to template
         context["customers_json"] = json.dumps(
             customers_list, cls=DjangoJSONEncoder
         )
@@ -436,13 +572,127 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
         return context
 
     def post(self, request, *args, **kwargs):
-        customer_id = request.POST.get("customer_id")
+        customer_id = request.POST.get("customer_id", "").strip()
         product_ids = request.POST.getlist("product_id[]")
         quantities = request.POST.getlist("quantity[]")
         prices = request.POST.getlist("price[]")
 
-        # Factor submission logic will go here
-        return super().get(request, *args, **kwargs)
+        # 1. Validation
+        if not customer_id:
+            messages.error(request, "لطفاً مشتری را انتخاب کنید.")
+            return self.get(request, *args, **kwargs)
+
+        valid_items = []
+        for p_id, qty, prc in zip(product_ids, quantities, prices):
+            p_id = p_id.strip()
+            if not p_id:
+                continue
+
+            try:
+                dec_qty = Decimal(str(qty))
+                dec_price = Decimal(str(prc))
+                if dec_qty <= 0:
+                    continue
+                valid_items.append(
+                    {
+                        "product_id": p_id,
+                        "quantity": dec_qty,
+                        "price": dec_price,
+                    }
+                )
+            except (InvalidOperation, ValueError):
+                continue
+
+        if not valid_items:
+            messages.error(
+                request, "حداقل باید یک کالا با تعداد معتبر انتخاب شود."
+            )
+            return self.get(request, *args, **kwargs)
+
+        # 2. Database Insertion with Atomic Transaction
+        try:
+            with transaction.atomic(using="plus"):
+                today_jalali = jdatetime.date.today()
+                jalali_date_str = today_jalali.strftime("%Y/%m/%d")
+                acc_year = today_jalali.year
+
+                # SaleRequestNo formatting (e.g., 00001, 00002)
+                last_factor = (
+                    Salerequestmaster.objects.using("plus")
+                    .filter(accyear=acc_year)
+                    .order_by("-salerequestno")
+                    .first()
+                )
+
+                if (
+                    last_factor
+                    and last_factor.salerequestno
+                    and last_factor.salerequestno.isdigit()
+                ):
+                    next_factor_no = (
+                        f"{int(last_factor.salerequestno) + 1:05d}"
+                    )
+                else:
+                    next_factor_no = "00001"
+
+                master_guid = str(uuid.uuid4()).upper()
+                current_user_gucode = request.session.get("user_id")
+
+                # Create Master (Notice: salerequestmasterid is omitted, SQL Server Identity generates it)
+                master = Salerequestmaster.objects.using("plus").create(
+                    salerequestno=next_factor_no,
+                    salerequestdate=jalali_date_str,
+                    createddate=jalali_date_str,
+                    accyear=acc_year,
+                    gsalerequestmasterid=master_guid,
+                    gcustomerid=customer_id,
+                    gcreatedby=current_user_gucode,
+                    forcevat=True,
+                    salerequesttypecode=1,
+                    salerequeststatuscode=1,
+                    currencyrate=Decimal("1.0000"),
+                )
+
+                # Get the generated auto-increment ID from the master record
+                generated_master_id = master.salerequestmasterid
+
+                # Create Detail Line Items
+                detail_instances = []
+                for index, item in enumerate(valid_items, start=1):
+                    detail_guid = str(uuid.uuid4()).upper()
+                    unique_id = str(uuid.uuid4()).upper()
+
+                    # salerequestdetailid is omitted; SQL Server handles its identity
+                    detail = Salerequestdetail(
+                        salerequestmasterid=generated_master_id,
+                        gsalerequestmasterid=master_guid,
+                        gsalerequestdetailid=detail_guid,
+                        uniqueid=unique_id,
+                        gkalaid=item["product_id"],
+                        quantity=item["quantity"],
+                        unitprice=item["price"],
+                        salerequestdetailstatuscode=1,
+                        canchangeaward=False,
+                        currencyrate=Decimal("1.0000"),
+                        currencyprice=item["price"],
+                        rowid=index,
+                        kalamojodi=Decimal("0"),
+                    )
+                    detail_instances.append(detail)
+
+                # Bulk insert items
+                Salerequestdetail.objects.using("plus").bulk_create(
+                    detail_instances
+                )
+
+            messages.success(
+                request, f"درخواست فروش شماره {next_factor_no} با موفقیت ثبت شد."
+            )
+            return redirect("core:factor_list")
+
+        except Exception as e:
+            messages.error(request, f"خطا در ثبت درخواست فروش: {str(e)}")
+            return self.get(request, *args, **kwargs)
 
 
 class OfflineView(PlusLoginRequiredMixin, TemplateView):

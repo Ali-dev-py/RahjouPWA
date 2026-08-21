@@ -146,7 +146,8 @@ class Tblsanad(models.Model):
 
 
 class Salerequestmaster(models.Model):
-    salerequestmasterid = models.IntegerField(db_column='SaleRequestMasterID')
+    # 1. Change to AutoField with primary_key=True (This is an IDENTITY column in SQL Server)
+    salerequestmasterid = models.AutoField(db_column='SaleRequestMasterID', primary_key=True)
     salerequestno = models.CharField(db_column='SaleRequestNo', max_length=50, db_collation='Arabic_CI_AS')
     salerequestdate = models.CharField(db_column='SaleRequestDate', max_length=10, db_collation='Arabic_CI_AS')
     receipttypecode = models.SmallIntegerField(db_column='ReceiptTypeCode', blank=True, null=True)
@@ -157,7 +158,9 @@ class Salerequestmaster(models.Model):
     accyear = models.IntegerField(db_column='AccYear')
     userid = models.IntegerField(db_column='UserId', blank=True, null=True)
     descriptions = models.CharField(db_column='Descriptions', max_length=200, db_collation='Arabic_CI_AS', blank=True, null=True)
-    gsalerequestmasterid = models.CharField(db_column='GSaleRequestMasterID', primary_key=True, max_length=36)
+    
+    # 2. Remove primary_key=True from gsalerequestmasterid (it is a standard GUID)
+    gsalerequestmasterid = models.CharField(db_column='GSaleRequestMasterID', max_length=36)
     gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
     totalsumefect = models.SmallIntegerField(db_column='TotalSumEfect', blank=True, null=True)
     creditduration = models.IntegerField(db_column='CreditDuration', blank=True, null=True)
@@ -214,7 +217,8 @@ class Salerequestmaster(models.Model):
 
 
 class Salerequestdetail(models.Model):
-    salerequestdetailid = models.IntegerField(db_column='SaleRequestDetailID', primary_key=True)
+    # 3. Change to AutoField with primary_key=True
+    salerequestdetailid = models.AutoField(db_column='SaleRequestDetailID', primary_key=True)
     salerequestmasterid = models.IntegerField(db_column='SaleRequestMasterID', blank=True, null=True)
     kalaid = models.IntegerField(db_column='KalaID', blank=True, null=True)
     quantity = models.DecimalField(db_column='Quantity', max_digits=20, decimal_places=8, blank=True, null=True)
