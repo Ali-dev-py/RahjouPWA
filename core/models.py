@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Tblcustomer(models.Model):
-    customerid = models.IntegerField(db_column='CustomerID')
+    customerid = models.AutoField(db_column='CustomerID', primary_key=True)
     custno = models.CharField(db_column='CustNo', max_length=20, db_collation='Arabic_CI_AS')
     custname = models.CharField(db_column='CustName', max_length=100, db_collation='Arabic_CI_AS')
     address = models.CharField(db_column='Address', max_length=250, db_collation='Arabic_CI_AS', blank=True, null=True)
@@ -42,7 +42,7 @@ class Tblcustomer(models.Model):
     gprovinceid = models.CharField(db_column='GProvinceID', max_length=36, blank=True, null=True)
     gcityid = models.CharField(db_column='GCityID', max_length=36, blank=True, null=True)
     gsubdetailid = models.CharField(db_column='GSubDetailID', max_length=36, blank=True, null=True)
-    gcustomerid = models.CharField(db_column='GCustomerID', primary_key=True, max_length=36)
+    gcustomerid = models.CharField(db_column='GCustomerID', max_length=36)
     gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
     nationalid = models.CharField(db_column='NationalID', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
     geshteraktypeid = models.CharField(db_column='GEshterakTypeID', max_length=36, blank=True, null=True)
@@ -69,6 +69,31 @@ class Tblcustomer(models.Model):
     class Meta:
         managed = False
         db_table = 'tblCustomer'
+
+
+class Customer2Group(models.Model):
+    customer2groupid = models.AutoField(db_column='Customer2GroupID', primary_key=True)
+    customergroupid = models.IntegerField(db_column='CustomerGroupID', blank=True, null=True)
+    customerid = models.IntegerField(db_column='CustomerID', blank=True, null=True)
+    gcustomerid = models.CharField(db_column='GCustomerID', unique=True, max_length=36, blank=True, null=True)
+    gcustomergroupid = models.CharField(db_column='GCustomerGroupID', max_length=36, blank=True, null=True)
+    gcustomer2groupid = models.CharField(db_column='GCustomer2GroupID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'Customer2Group'
+
+
+class Customergroup(models.Model):
+    customergroupid = models.AutoField(db_column='CustomerGroupID', primary_key=True)
+    groupname = models.CharField(db_column='GroupName', max_length=50, db_collation='Arabic_CI_AS')
+    gcustomergroupid = models.CharField(db_column='GCustomerGroupID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'CustomerGroup'
 
 
 class Tblsanadrad(models.Model):
@@ -356,9 +381,9 @@ class Tblkala(models.Model):
 
 
 class Salerequeststatus(models.Model):
-    salerequeststatuscode = models.SmallIntegerField(db_column='SaleRequestStatusCode', primary_key=True)  # Field name made lowercase.
-    salerequeststatusname = models.CharField(db_column='SaleRequestStatusName', max_length=50, db_collation='Arabic_CI_AS')  # Field name made lowercase.
-    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)  # Field name made lowercase.
+    salerequeststatuscode = models.SmallIntegerField(db_column='SaleRequestStatusCode', primary_key=True)
+    salerequeststatusname = models.CharField(db_column='SaleRequestStatusName', max_length=50, db_collation='Arabic_CI_AS')
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
 
     class Meta:
         managed = False
@@ -366,23 +391,23 @@ class Salerequeststatus(models.Model):
 
 
 class Statementprice(models.Model):
-    statementpriceid = models.IntegerField(db_column='StatementPriceID')  # Field name made lowercase.
-    statementpricemainid = models.IntegerField(db_column='StatementPriceMainID', blank=True, null=True)  # Field name made lowercase.
-    kalaid = models.IntegerField(db_column='KalaID', blank=True, null=True)  # Field name made lowercase.
-    customergroupid = models.IntegerField(db_column='CustomerGroupID', blank=True, null=True)  # Field name made lowercase.
-    fromquantity = models.DecimalField(db_column='FromQuantity', max_digits=18, decimal_places=0)  # Field name made lowercase.
-    toquantity = models.DecimalField(db_column='ToQuantity', max_digits=18, decimal_places=0)  # Field name made lowercase.
-    price = models.DecimalField(db_column='Price', max_digits=18, decimal_places=0)  # Field name made lowercase.
-    pricetypecode = models.SmallIntegerField(db_column='PriceTypeCode')  # Field name made lowercase.
-    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)  # Field name made lowercase.
-    gstatementpriceid = models.CharField(db_column='GStatementPriceID', max_length=36)  # Field name made lowercase.
-    gstatementpricemainid = models.CharField(db_column='GStatementPriceMainID', max_length=36, blank=True, null=True)  # Field name made lowercase.
-    gcustomergroupid = models.CharField(db_column='GCustomerGroupID', max_length=36, blank=True, null=True)  # Field name made lowercase.
-    gkalaid = models.CharField(db_column='GKalaID', max_length=36, blank=True, null=True)  # Field name made lowercase.
-    pricearz = models.DecimalField(db_column='PriceArz', max_digits=18, decimal_places=4, blank=True, null=True)  # Field name made lowercase.
-    spno = models.CharField(db_column='SpNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    gkalasecunitid = models.CharField(db_column='GKalaSecUnitID', max_length=36, blank=True, null=True)  # Field name made lowercase.
-    secunitprice = models.DecimalField(db_column='SecUnitPrice', max_digits=18, decimal_places=0, blank=True, null=True)  # Field name made lowercase.
+    statementpriceid = models.IntegerField(db_column='StatementPriceID')
+    statementpricemainid = models.IntegerField(db_column='StatementPriceMainID', blank=True, null=True)
+    kalaid = models.IntegerField(db_column='KalaID', blank=True, null=True)
+    customergroupid = models.IntegerField(db_column='CustomerGroupID', blank=True, null=True)
+    fromquantity = models.DecimalField(db_column='FromQuantity', max_digits=18, decimal_places=0)
+    toquantity = models.DecimalField(db_column='ToQuantity', max_digits=18, decimal_places=0)
+    price = models.DecimalField(db_column='Price', max_digits=18, decimal_places=0)
+    pricetypecode = models.SmallIntegerField(db_column='PriceTypeCode')
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    gstatementpriceid = models.CharField(db_column='GStatementPriceID', max_length=36)
+    gstatementpricemainid = models.CharField(db_column='GStatementPriceMainID', max_length=36, blank=True, null=True)
+    gcustomergroupid = models.CharField(db_column='GCustomerGroupID', max_length=36, blank=True, null=True)
+    gkalaid = models.CharField(db_column='GKalaID', max_length=36, blank=True, null=True)
+    pricearz = models.DecimalField(db_column='PriceArz', max_digits=18, decimal_places=4, blank=True, null=True)
+    spno = models.CharField(db_column='SpNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    gkalasecunitid = models.CharField(db_column='GKalaSecUnitID', max_length=36, blank=True, null=True)
+    secunitprice = models.DecimalField(db_column='SecUnitPrice', max_digits=18, decimal_places=0, blank=True, null=True)
 
     class Meta:
         managed = False
@@ -390,33 +415,33 @@ class Statementprice(models.Model):
 
 
 class TuaUser(models.Model):
-    uid = models.CharField(db_column='uID', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    upw = models.CharField(db_column='uPW', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    uname = models.CharField(db_column='uName', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    utitle = models.CharField(db_column='uTitle', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    uactive = models.BooleanField(db_column='uActive')  # Field name made lowercase.
-    udate = models.CharField(db_column='uDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    ucode = models.IntegerField(db_column='uCode')  # Field name made lowercase.
-    isadmin = models.BooleanField(db_column='isAdmin', blank=True, null=True)  # Field name made lowercase.
-    persheet = models.CharField(db_column='PerSheet', max_length=100, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    hasmessage = models.BooleanField(db_column='HasMessage', blank=True, null=True)  # Field name made lowercase.
-    messagekind = models.CharField(db_column='MessageKind', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    alarmtypecode = models.CharField(db_column='AlarmTypeCode', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    gucode = models.CharField(db_column='GuCode', primary_key=True, max_length=36)  # Field name made lowercase.
-    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)  # Field name made lowercase.
-    emailaddress = models.CharField(db_column='EmailAddress', max_length=150, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    emailpass = models.CharField(db_column='EmailPass', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    hasletter = models.BooleanField(db_column='HasLetter', blank=True, null=True)  # Field name made lowercase.
-    havenewversion = models.BooleanField(db_column='HaveNewVersion')  # Field name made lowercase.
-    dailyalarm = models.BooleanField(db_column='DailyAlarm')  # Field name made lowercase.
-    lastalarmseendate = models.CharField(db_column='LastAlarmSeenDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    csmobile = models.CharField(db_column='CSMobile', max_length=11, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    cspassword = models.CharField(db_column='CSPassword', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    uaddress = models.CharField(db_column='uAddress', max_length=200, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    ubirthdate = models.CharField(db_column='uBirthDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
-    pwdtypecode = models.IntegerField(db_column='PwdTypeCode')  # Field name made lowercase.
-    canbackedup = models.BooleanField(db_column='CanBackedUp', blank=True, null=True)  # Field name made lowercase.
-    wpu = models.CharField(db_column='WPU', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)  # Field name made lowercase.
+    uid = models.CharField(db_column='uID', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    upw = models.CharField(db_column='uPW', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    uname = models.CharField(db_column='uName', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    utitle = models.CharField(db_column='uTitle', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    uactive = models.BooleanField(db_column='uActive')
+    udate = models.CharField(db_column='uDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)
+    ucode = models.IntegerField(db_column='uCode')
+    isadmin = models.BooleanField(db_column='isAdmin', blank=True, null=True)
+    persheet = models.CharField(db_column='PerSheet', max_length=100, db_collation='Arabic_CI_AS', blank=True, null=True)
+    hasmessage = models.BooleanField(db_column='HasMessage', blank=True, null=True)
+    messagekind = models.CharField(db_column='MessageKind', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    alarmtypecode = models.CharField(db_column='AlarmTypeCode', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    gucode = models.CharField(db_column='GuCode', primary_key=True, max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    emailaddress = models.CharField(db_column='EmailAddress', max_length=150, db_collation='Arabic_CI_AS', blank=True, null=True)
+    emailpass = models.CharField(db_column='EmailPass', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    hasletter = models.BooleanField(db_column='HasLetter', blank=True, null=True)
+    havenewversion = models.BooleanField(db_column='HaveNewVersion')
+    dailyalarm = models.BooleanField(db_column='DailyAlarm')
+    lastalarmseendate = models.CharField(db_column='LastAlarmSeenDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)
+    csmobile = models.CharField(db_column='CSMobile', max_length=11, db_collation='Arabic_CI_AS', blank=True, null=True)
+    cspassword = models.CharField(db_column='CSPassword', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    uaddress = models.CharField(db_column='uAddress', max_length=200, db_collation='Arabic_CI_AS', blank=True, null=True)
+    ubirthdate = models.CharField(db_column='uBirthDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)
+    pwdtypecode = models.IntegerField(db_column='PwdTypeCode')
+    canbackedup = models.BooleanField(db_column='CanBackedUp', blank=True, null=True)
+    wpu = models.CharField(db_column='WPU', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)
     pluspass = models.CharField(max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
 
     class Meta:

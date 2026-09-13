@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}ثبت مشتری جدید | رهجو{% endblock %}
+{% block body_class %}app-body page-customer-create has-bottom-nav{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="ثبت مشتری جدید" %}
+
+<main class="app-main container-fluid px-3">
+    <div class="app-content mx-auto">
+        
+        <!-- Header & Back Navigation -->
+        <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h1 class="h4 fw-bold mb-1">مشتری جدید</h1>
+                <p class="text-secondary mb-0">اطلاعات مشتری را وارد کنید</p>
+            </div>
+            <a href="{% url 'core:customers' %}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-1 rounded-pill px-3 py-1">
+                <span class="material-symbols-outlined fs-5">arrow_forward</span>
+                <span class="small">بازگشت</span>
+            </a>
+        </div>
+
+        <!-- Form Card -->
+        <div class="card factor-card border-0 overflow-hidden mb-4">
+            <div class="card-body p-4">
+
+                <!-- Display Errors -->
+                {% if errors %}
+                    <div class="alert alert-danger py-2 px-3 small rounded-3 mb-4">
+                        <ul class="mb-0 ps-3">
+                            {% for error in errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+
+                <!-- Form -->
+                <form method="post" action="{% url 'core:customer_create' %}">
+                    {% csrf_token %}
+                    
+                    <div class="d-grid gap-3">
+                        
+                        <!-- Customer Name (Required) -->
+                        <div>
+                            <label for="custname" class="form-label fw-medium small mb-1">
+                                نام مشتری <span class="text-danger">*</span>
+                            </label>
+                            <input type="text"
+                                   id="custname"
+                                   name="custname"
+                                   class="form-control"
+                                   placeholder="نام یا عنوان فروشگاه"
+                                   value="{{ custname|default:'' }}"
+                                   required
+                                   autocomplete="off">
+                        </div>
+
+                        <!-- Customer Group (Required) -->
+                        <div>
+                            <label for="customer_group" class="form-label fw-medium small mb-1">
+                                گروه مشتری <span class="text-danger">*</span>
+                            </label>
+                            <select id="customer_group" name="customer_group" class="form-select" required>
+                                <option value="">انتخاب گروه مشتری...</option>
+                                {% for group in groups %}
+                                    <option value="{{ group.gcustomergroupid }}" {% if selected_group_id == group.gcustomergroupid %}selected{% endif %}>
+                                        {{ group.groupname }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Phone Number (Optional) -->
+                        <div>
+                            <label for="phone" class="form-label fw-medium small mb-1">
+                                شماره تماس
+                            </label>
+                            <input type="tel"
+                                   id="phone"
+                                   name="phone"
+                                   class="form-control text-start"
+                                   dir="ltr"
+                                   placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                                   value="{{ phone|default:'' }}"
+                                   inputmode="tel">
+                        </div>
+
+                        <!-- Address (Optional) -->
+                        <div>
+                            <label for="address" class="form-label fw-medium small mb-1">
+                                نشانی
+                            </label>
+                            <textarea id="address"
+                                      name="address"
+                                      class="form-control"
+                                      rows="3"
+                                      placeholder="نشانی کامل مشتری...">{{ address|default:'' }}</textarea>
+                        </div>
+
+                        <!-- Form Buttons -->
+                        <div class="d-flex align-items-center justify-content-end gap-2 pt-3 border-top mt-2">
+                            <a href="{% url 'core:customers' %}" class="btn btn-light rounded-pill px-4">
+                                انصراف
+                            </a>
+                            <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2 rounded-pill px-4">
+                                <span class="material-symbols-outlined fs-5">check</span>
+                                <span>ثبت اطلاعات</span>
+                            </button>
+                        </div>
+
+                    </div>
+                </form>
+
+            </div>
+        </div>
+
+    </div>
+</main>
+
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

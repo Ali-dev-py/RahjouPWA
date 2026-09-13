@@ -11,6 +11,7 @@ from django.db.models.functions import Coalesce
 from django.shortcuts import redirect, render
 from django.db import transaction
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -289,6 +290,150 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
 
         context["customers"] = customers
         return context
+
+
+class CustomerCreateView(PlusLoginRequiredMixin, View):
+    template_name = "core/customer_create.html"
+
+    def get(self, request, *args, **kwargs):
+        groups = Customergroup.objects.using("plus").all().order_by("groupname")
+        return render(request, self.template_name, {"groups": groups})
+
+    def post(self, request, *args, **kwargs):
+        custname = request.POST.get("custname", "").strip()
+        phone = request.POST.get("phone", "").strip()
+        address = request.POST.get("address", "").strip()
+        selected_group_id = request.POST.get("customer_group", "").strip()
+
+        groups = Customergroup.objects.using("plus").all().order_by("groupname")
+
+        # Validation (only custname and customer_group are required)
+        errors = []
+        if not custname:
+            errors.append("نام مشتری الزامی است.")
+        if not selected_group_id:
+            errors.append("انتخاب گروه مشتری الزامی است.")
+
+        group = (
+            Customergroup.objects.using("plus")
+            .filter(gcustomergroupid=selected_group_id)
+            .first()
+        )
+
+        if selected_group_id and not group:
+            errors.append("گروه مشتری انتخاب‌شده نامعتبر است.")
+
+        if errors:
+            return render(
+                request,
+                self.template_name,
+                {
+                    "groups": groups,
+                    "errors": errors,
+                    "custname": custname,
+                    "phone": phone,
+                    "address": address,
+                    "selected_group_id": selected_group_id,
+                },
+            )
+
+        try:
+            # 1. Retrieve current user's username via plus_user
+            plus_user = getattr(request, "plus_user", None)
+            created_by = getattr(plus_user, "uname", "") if plus_user else ""
+
+            # 2. Calculate next CustNo strictly lower than 1900
+            existing_custnos = (
+                Tblcustomer.objects.using("plus")
+                .exclude(custno__isnull=True)
+                .exclude(custno="")
+                .values_list("custno", flat=True)
+            )
+
+            max_custno = 0
+            for val in existing_custnos:
+                clean_val = str(val).strip()
+                if clean_val.isdigit():
+                    num = int(clean_val)
+                    if num < 1900 and num > max_custno:
+                        max_custno = num
+
+            next_custno_int = (max_custno + 1) if max_custno > 0 else 1
+
+            if next_custno_int >= 1900:
+                return render(
+                    request,
+                    self.template_name,
+                    {
+                        "groups": groups,
+                        "errors": ["کد مشتری نمی‌تواند بیشتر یا مساوی ۱۹۰۰ باشد. سقف شماره مشتری پر شده است."],
+                        "custname": custname,
+                        "phone": phone,
+                        "address": address,
+                        "selected_group_id": selected_group_id,
+                    },
+                )
+
+            next_custno = str(next_custno_int)
+
+            # 3. Generate UUIDs and Shamsi date
+            new_gcustomerid = str(uuid.uuid4()).upper()
+            new_gsubdetailid = str(uuid.uuid4()).upper()  # New UUID for GSubDetailID
+            new_gc2g_id = str(uuid.uuid4()).upper()
+            shamsi_date = jdatetime.date.today().strftime("%Y/%m/%d")
+
+            with transaction.atomic(using="plus"):
+                # 4. Insert customer using Django ORM
+                new_customer = Tblcustomer.objects.using("plus").create(
+                    custno=next_custno,
+                    custname=custname,
+                    customername=custname,
+                    phone=phone,
+                    mobile=phone,
+                    address=address,
+                    status="1",
+                    salestatus=1,
+                    credit=0,
+                    debit=0,
+                    visitpriod=0,
+                    customertypecode=2,
+                    customertaxtype=3,
+                    gprovinceid= 'ECB49B7B-30FC-472C-A1AA-45E00F329135',
+                    gcityid='A8218140-B1D0-42DB-B4AD-1D5EAF501EC2',
+                    registerdate=timezone.now(),
+                    createddate=shamsi_date,
+                    createdby=created_by,
+                    gsubdetailid=new_gsubdetailid,  # Stored here
+                    gcustomerid=new_gcustomerid,
+                    gcompanyid=group.gcompanyid,
+                )
+
+                # 5. Insert into Customer2Group
+                Customer2Group.objects.using("plus").create(
+                    customergroupid=group.customergroupid,
+                    customerid=new_customer.customerid,
+                    gcustomerid=new_gcustomerid,
+                    gcustomergroupid=group.gcustomergroupid,
+                    gcustomer2groupid=new_gc2g_id,
+                    gcompanyid=group.gcompanyid,
+                )
+
+            # messages.success(request, f"مشتری «{custname}» با موفقیت افزوده شد.")
+            return redirect("core:customers")
+
+        except Exception as exc:
+            return render(
+                request,
+                self.template_name,
+                {
+                    "groups": groups,
+                    "errors": [f"خطا در ثبت اطلاعات: {str(exc)}"],
+                    "custname": custname,
+                    "phone": phone,
+                    "address": address,
+                    "selected_group_id": selected_group_id,
+                },
+            )
 
 
 def get_status_style(status_name):
@@ -685,9 +830,9 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                     detail_instances
                 )
 
-            messages.success(
-                request, f"درخواست فروش شماره {next_factor_no} با موفقیت ثبت شد."
-            )
+            # messages.success(
+            #     request, f"درخواست فروش شماره {next_factor_no} با موفقیت ثبت شد."
+            # )
             return redirect("core:factor_list")
 
         except Exception as e:

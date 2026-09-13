@@ -205,19 +205,13 @@
     </fieldset>
 </template>
 
-<!-- Fixed Bottom Action Bar -->
+<!-- Fixed Bottom Action Bar (Button Centralized) -->
 <div class="app-action-bar fixed-bottom bg-white border-top py-2 shadow-lg">
-    <div class="container-fluid app-content app-content--narrow mx-auto d-flex gap-2">
-        <button class="btn btn-outline-secondary w-50 d-flex align-items-center justify-content-center gap-2"
+    <div class="container-fluid app-content app-content--narrow mx-auto d-flex justify-content-center">
+        <button class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2 px-5 py-2 shadow-sm"
                 type="submit"
                 form="factorForm">
-            <span class="material-symbols-outlined" aria-hidden="true">save</span>
-            <span>ذخیره پیش‌نویس</span>
-        </button>
-        <button class="btn btn-primary w-50 d-flex align-items-center justify-content-center gap-2"
-                type="submit"
-                form="factorForm">
-            <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+            <span class="material-symbols-outlined fs-5">check</span>
             <span>ثبت نهایی درخواست</span>
         </button>
     </div>
@@ -428,7 +422,6 @@
                     fieldset.remove();
                     recalculateTotal();
                 } else {
-                    // Clear the single existing row instead of deleting
                     itemProductIdInput.value = '';
                     itemSearchInput.value = '';
                     itemPriceInput.value = '0';
