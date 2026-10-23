@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
+{% load humanize %}
 {% load i18n_extras %}
 
-{% block title %}جزئیات درخواست #{{ master.salerequestno|default:''|persian_digits }} | رهجو{% endblock %}
+{% block title %}جزئیات درخواست {{ master.salerequestno|default:''|persian_digits }} | رهجو{% endblock %}
 {% block body_class %}app-body page-factor-detail has-action-bar{% endblock %}
 
 {% block content %}
@@ -45,7 +46,7 @@
                         <dl class="invoice-meta text-start mb-0">
                             <div class="mb-2">
                                 <dt class="small text-secondary fw-normal">شماره درخواست</dt>
-                                <dd class="fw-bold mb-0">#{{ master.salerequestno|persian_digits }}</dd>
+                                <dd class="fw-bold mb-0">{{ master.salerequestno|persian_digits }}</dd>
                             </div>
                             <div>
                                 <dt class="small text-secondary fw-normal">تاریخ ثبت</dt>
@@ -94,16 +95,16 @@
                                             {% endif %}
                                         </div>
                                         <strong class="text-start flex-shrink-0 text-primary">
-                                            {{ item.row_total|persian_digits }} تومان
+                                            {{ item.row_total|persian_digits|intcomma:False }} ریال
                                         </strong>
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center gap-3 text-secondary small mt-2 pt-2 border-top">
                                         <span>تعداد: {{ item.quantity|persian_digits }} {{ item.unit }}</span>
-                                        <span>فی: {{ item.unit_price|persian_digits }} تومان</span>
+                                        <span>فی: {{ item.unit_price|persian_digits|intcomma:False }} ریال</span>
                                     </div>
                                     {% if item.discount > 0 %}
                                         <div class="text-danger small mt-1">
-                                            <span>تخفیف سطر: {{ item.discount|persian_digits }} تومان</span>
+                                            <span>تخفیف سطر: {{ item.discount|persian_digits|intcomma:False }} ریال</span>
                                         </div>
                                     {% endif %}
                                 </article>
@@ -119,17 +120,17 @@
                     <section class="invoice-totals d-grid gap-2 pt-3 border-top" aria-label="جمع فاکتور">
                         <div class="d-flex justify-content-between gap-3 text-secondary">
                             <span>جمع مبالغ:</span>
-                            <strong>{{ subtotal|persian_digits }} تومان</strong>
+                            <strong>{{ subtotal|persian_digits|intcomma:False }} ریال</strong>
                         </div>
                         {% if total_discount > 0 %}
                             <div class="d-flex justify-content-between gap-3 text-danger">
                                 <span>تخفیف کل:</span>
-                                <strong>- {{ total_discount|persian_digits }} تومان</strong>
+                                <strong>- {{ total_discount|persian_digits|intcomma:False }} ریال</strong>
                             </div>
                         {% endif %}
                         <div class="invoice-total d-flex justify-content-between align-items-center gap-3 rounded-3 p-3 mt-2 bg-primary-subtle text-primary">
                             <strong class="fs-6">مبلغ قابل پرداخت:</strong>
-                            <strong class="fs-5">{{ total_payable|persian_digits }} تومان</strong>
+                            <strong class="fs-5">{{ total_payable|persian_digits|intcomma:False }} ریال</strong>
                         </div>
                     </section>
                 </div>

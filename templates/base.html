@@ -1,4 +1,7 @@
 {% load static %}
+{% load humanize %}
+{% load i18n_extras %}
+
 <!doctype html>
 <html lang="fa" dir="rtl">
 <head>
@@ -42,7 +45,8 @@
         <span class="visually-hidden">در حال بارگذاری...</span>
     </div>
 
-    {% block content %}{% endblock %}
+    {% block content %}
+    {% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" defer></script>
     <script src="{% static 'js/app.js' %}?v=9" defer></script>

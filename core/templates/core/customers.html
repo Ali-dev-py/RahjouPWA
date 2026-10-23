@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% load i18n_extras %}
 
 {% block title %}مشتریان | رهجو{% endblock %}
@@ -93,9 +94,9 @@
                                 <div>
                                     <small class="text-secondary d-block mb-1">مانده حساب</small>
                                     <strong class="factor-card__amount d-inline-block fs-6 {% if customer.hesab > 0 %}text-danger{% elif customer.hesab < 0 %}text-success{% else %}text-muted{% endif %}">
-                                        {{ customer.hesab|persian_digits }}
+                                        {{ customer.hesab|persian_digits|intcomma:False }}
                                     </strong>
-                                    <small class="text-secondary">تومان</small>
+                                    <small class="text-secondary">ریال</small>
                                 </div>
                             </span>
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load humanize %}
 {% load i18n_extras %}
 
 {% block title %}خانه | رهجو{% endblock %}
@@ -28,7 +28,7 @@
                             <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">trending_up</span>
                         </div>
                         <div class="position-relative mt-4 text-start" dir="ltr">
-                            <strong class="summary-card__value d-block">{{ today_sales_total|persian_digits }}</strong>
+                            <strong class="summary-card__value d-block">{{ today_sales_total|persian_digits|intcomma:False }}</strong>
                             <small>تومان</small>
                         </div>
                     </div>
@@ -80,13 +80,13 @@
                                     description
                                 </span>
                                 <div class="min-width-0">
-                                    <strong class="d-block text-dark text-truncate">درخواست فروش #{{ item.factor_no|persian_digits }}</strong>
+                                    <strong class="d-block text-dark text-truncate">درخواست فروش {{ item.factor_no|persian_digits }}</strong>
                                     <small class="text-secondary d-block text-truncate">{{ item.customer_name }} • {{ item.date|persian_digits }}</small>
                                 </div>
                             </div>
-                            <div class="text-start flex-shrink-0">
-                                <strong class="d-block text-dark" dir="ltr">{{ item.total_amount|persian_digits }} تومان</strong>
+                            <div class="d-flex flex-column align-items-end">
                                 <span class="status-chip {{ item.chip_class }}">{{ item.status_name }}</span>
+                                <strong class="d-block text-dark" dir="ltr">{{ item.total_amount|persian_digits|intcomma:False }} تومان</strong>
                             </div>
                         </div>
                     </a>

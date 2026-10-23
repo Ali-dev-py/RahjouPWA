@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% load i18n_extras %}
 
 {% block title %}درخواست فروش جدید | رهجو{% endblock %}
@@ -27,6 +28,19 @@
         background-color: #f8f9fa !important;
         cursor: not-allowed;
     }
+    /* Active Row Highlight for enhanced visual context */
+    .line-item {
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .line-item:focus-within {
+        border-color: #0d6efd !important;
+        box-shadow: 0 0.125rem 0.35rem rgba(13, 110, 253, 0.08);
+    }
+    .line-item-index {
+        font-size: 0.8rem;
+        min-width: 24px;
+        height: 24px;
+    }
 </style>
 {% endblock %}
 
@@ -48,6 +62,59 @@
 
     <form id="factorForm" class="app-content app-content--narrow mx-auto" action="{% url 'core:factor_create' %}" method="post">
         {% csrf_token %}
+
+        <!-- Order Settings: Branch, Inventory & Visitor -->
+        <section class="card editor-card border-0 mb-4" aria-labelledby="order-settings-title">
+            <div class="card-body p-3">
+                <h2 class="h5 fw-bold d-flex align-items-center gap-2 mb-3" id="order-settings-title">
+                    <span class="material-symbols-outlined text-primary" aria-hidden="true">tune</span>
+                    اطلاعات پایه درخواست
+                </h2>
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label for="branchSelect" class="form-label small text-secondary fw-semibold">
+                            شعبه <span class="text-danger">*</span>
+                        </label>
+                        <select name="branch_id" id="branchSelect" class="form-select" required>
+                            <option value="">-- شعبه --</option>
+                            {% for b in branches %}
+                                <option value="{{ b.gbranchid }}">
+                                    {{ b.branchname }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label for="invSelect" class="form-label small text-secondary fw-semibold">
+                            انبار مبدا <span class="text-danger">*</span>
+                        </label>
+                        <select name="inv_id" id="invSelect" class="form-select" required>
+                            <option value="">-- انبار --</option>
+                            {% for inv in inventories %}
+                                <option value="{{ inv.ginvid }}">
+                                    {{ inv.invname }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label for="visitorSelect" class="form-label small text-secondary fw-semibold">
+                            بازاریاب <span class="text-danger">*</span>
+                        </label>
+                        <select name="visitor_id" id="visitorSelect" class="form-select" required>
+                            <option value="">-- بازاریاب --</option>
+                            {% for v in visitors %}
+                                <option value="{{ v.id }}">
+                                    {{ v.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <!-- Customer Section -->
         <section class="card editor-card border-0 position-relative mb-4" aria-labelledby="customer-info-title">            
@@ -110,12 +177,19 @@
                         <span class="material-symbols-outlined text-success" aria-hidden="true">shopping_cart</span>
                         اقلام فاکتور
                     </h2>
-                    <button class="btn btn-sm add-line-button rounded-pill" type="button" id="btnAddLineItem">+ افزودن محصول</button>
                 </div>
 
                 <!-- Container where line items are dynamically inserted -->
                 <div class="d-grid gap-2" id="lineItemsContainer">
                     <!-- Cloned from HTML5 template below -->
+                </div>
+
+                <!-- Bottom Manual Add Button -->
+                <div class="mt-3 text-center">
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-4 d-inline-flex align-items-center gap-1" type="button" id="btnAddLineItemBottom">
+                        <span class="material-symbols-outlined fs-6">add</span>
+                        افزودن سطر جدید
+                    </button>
                 </div>
             </div>
         </section>
@@ -130,12 +204,12 @@
                 <dl class="financial-summary d-grid gap-3 mb-0">
                     <div class="d-flex justify-content-between gap-3">
                         <dt class="fw-normal">جمع مبالغ:</dt>
-                        <dd class="fw-bold mb-0"><span id="summarySubtotal">{{ 0|persian_digits }}</span> تومان</dd>
+                        <dd class="fw-bold mb-0"><span id="summarySubtotal">{{ 0|persian_digits }}</span> ریال</dd>
                     </div>
                     <div class="financial-summary__total d-flex justify-content-between align-items-baseline gap-3 pt-3 mt-1">
                         <dt class="h5 fw-bold text-primary mb-0">مبلغ قابل پرداخت:</dt>
                         <dd class="h5 fw-bold text-primary text-start mb-0">
-                            <span id="summaryTotal">{{ 0|persian_digits }}</span> <small class="text-secondary fw-normal">تومان</small>
+                            <span id="summaryTotal">{{ 0|persian_digits }}</span> <small class="text-secondary fw-normal">ریال</small>
                         </dd>
                     </div>
                 </dl>
@@ -144,13 +218,14 @@
     </form>
 </main>
 
-<!-- ============================================================ -->
-<!-- HTML5 TEMPLATE FOR PRODUCT ROW                               -->
-<!-- ============================================================ -->
+<!-- HTML5 TEMPLATE FOR PRODUCT ROW -->
 <template id="lineItemTemplate">
     <fieldset class="line-item rounded-3 p-3 border mb-2 bg-white">
         <input type="hidden" name="product_id[]" class="item-product-id" value="">
         <div class="d-flex align-items-start gap-2">
+            <!-- Row Index Badge -->
+            <span class="badge rounded-circle bg-light text-secondary border d-inline-flex align-items-center justify-content-center line-item-index flex-shrink-0 mt-1">۱</span>
+
             <div class="flex-grow-1 min-width-0">
                 <!-- Search / Autocomplete Box -->
                 <div class="position-relative item-search-wrapper mb-2">
@@ -180,7 +255,7 @@
                     </div>
                     <div class="col-auto pb-2 text-secondary" aria-hidden="true">×</div>
                     <div class="col">
-                        <label class="form-label line-item__label small text-secondary mb-1">فی واحد (تومان)</label>
+                        <label class="form-label line-item__label small text-secondary mb-1">فی واحد (ریال)</label>
                         <input class="form-control line-item__input text-start readonly-input item-price-input"
                                name="price[]"
                                type="number"
@@ -200,12 +275,12 @@
         <!-- Row Total Display -->
         <div class="line-item__total d-flex justify-content-end gap-2 mt-2 pt-2 border-top">
             <span class="text-secondary small">جمع سطر:</span>
-            <strong class="text-primary small"><span class="line-item-total-display">{{ 0|persian_digits }}</span> تومان</strong>
+            <strong class="text-primary small"><span class="line-item-total-display">{{ 0|persian_digits }}</span> ریال</strong>
         </div>
     </fieldset>
 </template>
 
-<!-- Fixed Bottom Action Bar (Button Centralized) -->
+<!-- Fixed Bottom Action Bar -->
 <div class="app-action-bar fixed-bottom bg-white border-top py-2 shadow-lg">
     <div class="container-fluid app-content app-content--narrow mx-auto d-flex justify-content-center">
         <button class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2 px-5 py-2 shadow-sm"
@@ -254,9 +329,7 @@
             return toPersianDigits(formatted);
         }
 
-        // ==========================================
         // 2. Customer Autocomplete Logic
-        // ==========================================
         const searchInput = document.getElementById('customerSearchInput');
         const searchWrapper = document.getElementById('customerSearchWrapper');
         const resultsContainer = document.getElementById('customerSearchResults');
@@ -332,14 +405,22 @@
             filterCustomers(this.value);
         });
 
-        // ==========================================
         // 3. Product Row Items Logic
-        // ==========================================
         const lineItemsContainer = document.getElementById('lineItemsContainer');
         const lineItemTemplate = document.getElementById('lineItemTemplate');
-        const btnAddLineItem = document.getElementById('btnAddLineItem');
+        const btnAddLineItemBottom = document.getElementById('btnAddLineItemBottom');
         const summarySubtotal = document.getElementById('summarySubtotal');
         const summaryTotal = document.getElementById('summaryTotal');
+
+        function updateRowIndices() {
+            const rows = lineItemsContainer.querySelectorAll('.line-item');
+            rows.forEach((row, index) => {
+                const badge = row.querySelector('.line-item-index');
+                if (badge) {
+                    badge.textContent = toPersianDigits(index + 1);
+                }
+            });
+        }
 
         function recalculateTotal() {
             let total = 0;
@@ -356,7 +437,21 @@
             summaryTotal.textContent = formatCurrency(total);
         }
 
-        function createLineItemRow() {
+        // Checks if the last row already has a chosen product; if so, appends a new empty row
+        function ensureTrailingRow() {
+            const rows = lineItemsContainer.querySelectorAll('.line-item');
+            if (rows.length === 0) {
+                createLineItemRow(false);
+                return;
+            }
+            const lastRow = rows[rows.length - 1];
+            const lastRowProductId = lastRow.querySelector('.item-product-id').value;
+            if (lastRowProductId.trim() !== '') {
+                createLineItemRow(false);
+            }
+        }
+
+        function createLineItemRow(autoFocus = true) {
             const clone = lineItemTemplate.content.cloneNode(true);
             const fieldset = clone.querySelector('fieldset');
 
@@ -368,8 +463,12 @@
             const itemQuantityInput = fieldset.querySelector('.item-quantity-input');
             const btnDeleteRow = fieldset.querySelector('.btn-delete-row');
 
+            // Autocomplete Search
             itemSearchInput.addEventListener('input', function () {
                 const query = normalizePersian(this.value);
+                // If user alters query, invalidate current selection
+                itemProductIdInput.value = '';
+
                 if (!query) {
                     itemResultsContainer.innerHTML = '';
                     itemResultsContainer.classList.add('d-none');
@@ -395,7 +494,7 @@
                                     <strong class="d-block text-dark small">${p.name}</strong>
                                     <small class="text-secondary">کد: ${toPersianDigits(p.code || '-')} | واحد: ${p.unit}</small>
                                 </div>
-                                <span class="text-primary fw-bold small">${formatCurrency(p.price)} تومان</span>
+                                <span class="text-primary fw-bold small">${formatCurrency(p.price)} ریال</span>
                             </div>
                         `;
                         itemEl.addEventListener('click', function (e) {
@@ -407,7 +506,13 @@
                             itemResultsContainer.classList.add('d-none');
 
                             recalculateTotal();
+
+                            // Automatically add a blank row beneath
+                            ensureTrailingRow();
+
+                            // Focus on quantity for quick change
                             itemQuantityInput.focus();
+                            itemQuantityInput.select();
                         });
                         itemResultsContainer.appendChild(itemEl);
                     });
@@ -417,27 +522,67 @@
 
             itemQuantityInput.addEventListener('input', recalculateTotal);
 
+            // Pressing Enter on Quantity jumps to the next row's product search input
+            itemQuantityInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    ensureTrailingRow();
+                    const nextRow = fieldset.nextElementSibling;
+                    if (nextRow) {
+                        const nextSearchInput = nextRow.querySelector('.item-search-input');
+                        if (nextSearchInput) {
+                            nextSearchInput.focus();
+                        }
+                    }
+                }
+            });
+
+            // Delete Row Logic
             btnDeleteRow.addEventListener('click', function () {
-                if (lineItemsContainer.querySelectorAll('.line-item').length > 1) {
+                const totalRows = lineItemsContainer.querySelectorAll('.line-item').length;
+                if (totalRows > 1) {
                     fieldset.remove();
+                    updateRowIndices();
                     recalculateTotal();
                 } else {
+                    // Reset single row instead of removing it
                     itemProductIdInput.value = '';
                     itemSearchInput.value = '';
                     itemPriceInput.value = '0';
                     itemQuantityInput.value = '1';
+                    itemUnitLabel.textContent = 'عدد';
                     recalculateTotal();
+                    itemSearchInput.focus();
                 }
             });
 
             lineItemsContainer.appendChild(fieldset);
-            itemSearchInput.focus();
+            updateRowIndices();
+
+            if (autoFocus) {
+                itemSearchInput.focus();
+            }
+
+            return fieldset;
         }
 
-        btnAddLineItem.addEventListener('click', createLineItemRow);
+        // Add Row Button Listener
+        btnAddLineItemBottom.addEventListener('click', function () {
+            const rows = lineItemsContainer.querySelectorAll('.line-item');
+            const lastRow = rows[rows.length - 1];
+            // If the last row is empty, focus it instead of adding redundant rows
+            if (lastRow && lastRow.querySelector('.item-product-id').value === '') {
+                const searchInp = lastRow.querySelector('.item-search-input');
+                searchInp.focus();
+                searchInp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                const newRow = createLineItemRow(true);
+                newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
 
         // Initialize 1 row
-        createLineItemRow();
+        createLineItemRow(false);
 
         // Close dropdowns on outside click
         document.addEventListener('click', function (e) {
@@ -451,11 +596,34 @@
             });
         });
 
-        // ==========================================
-        // 4. Form Submission Client Validation
-        // ==========================================
+        // 4. Form Submission Validation & Cleanup
         const factorForm = document.getElementById('factorForm');
+        const branchSelect = document.getElementById('branchSelect');
+        const invSelect = document.getElementById('invSelect');
+        const visitorSelect = document.getElementById('visitorSelect');
+
         factorForm.addEventListener('submit', function (e) {
+            if (!branchSelect.value) {
+                e.preventDefault();
+                alert('لطفاً شعبه مورد نظر را انتخاب کنید.');
+                branchSelect.focus();
+                return;
+            }
+
+            if (!invSelect.value) {
+                e.preventDefault();
+                alert('لطفاً انبار مورد نظر را انتخاب کنید.');
+                invSelect.focus();
+                return;
+            }
+
+            if (!visitorSelect.value) {
+                e.preventDefault();
+                alert('لطفاً ویزیتور / بازاریاب را انتخاب کنید.');
+                visitorSelect.focus();
+                return;
+            }
+
             if (!hiddenCustomerId.value) {
                 e.preventDefault();
                 alert('لطفاً ابتدا یک مشتری را انتخاب کنید.');
@@ -463,13 +631,23 @@
                 return;
             }
 
+            const rows = lineItemsContainer.querySelectorAll('.line-item');
             const validProducts = Array.from(document.querySelectorAll('.item-product-id'))
                                        .filter(input => input.value.trim() !== '');
 
             if (validProducts.length === 0) {
                 e.preventDefault();
                 alert('لطفاً حداقل یک کالا را به فاکتور اضافه کنید.');
+                return;
             }
+
+            // Disable trailing empty inputs so they aren't posted to the server
+            rows.forEach(row => {
+                const pId = row.querySelector('.item-product-id').value;
+                if (!pId || pId.trim() === '') {
+                    row.querySelectorAll('input').forEach(inp => inp.disabled = true);
+                }
+            });
         });
     });
 </script>

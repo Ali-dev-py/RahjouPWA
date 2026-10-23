@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import DecimalField, F, Sum, Value
+from django.db.models import DecimalField, F, Sum, Value, Q, Max
 from django.db.models.functions import Coalesce
 from django.shortcuts import redirect, render
 from django.db import transaction
@@ -662,7 +662,44 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
             for c in customers_queryset
         ]
 
-        # 2. Fetch Prices from Statementprice mapped by gkalaid
+        # 2. Fetch Branches
+        branches = (
+            Branches.objects.using("plus")
+            .values("gbranchid", "branchname", "branchcode")
+            .order_by("branchname")
+        )
+
+        # 3. Fetch Inventories
+        inventories = (
+            Tblinv.objects.using("plus")
+            .values("ginvid", "invname", "invcode")
+            .order_by("invname")
+        )
+
+        # 4. Fetch Visitors (Deduplicated by GVisitorID)
+        visitors_queryset = (
+            ViewAllvisitors.objects.using("plus")
+            .filter(Q(active=True) | Q(active__isnull=True))
+            .values("gvisitorid", "vizitorname", "personname", "vizitorcode")
+            .order_by("vizitorname", "personname")
+        )
+        visitors_list = []
+        seen_visitors = set()
+        for v in visitors_queryset:
+            gid = str(v["gvisitorid"])
+            if gid and gid not in seen_visitors:
+                seen_visitors.add(gid)
+                visitors_list.append(
+                    {
+                        "id": gid,
+                        "name": v["vizitorname"]
+                        or v["personname"]
+                        or "بدون نام",
+                        "code": v["vizitorcode"] or "",
+                    }
+                )
+
+        # 5. Fetch Prices from Statementprice mapped by gkalaid
         statement_prices_qs = (
             Statementprice.objects.using("plus")
             .filter(gkalaid__isnull=False)
@@ -680,7 +717,7 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
             ):
                 statement_price_map[gid] = int(sp["price"])
 
-        # 3. Fetch Products (Tblkala) & apply StatementPrice
+        # 6. Fetch Products (Tblkala) & apply StatementPrice
         products_queryset = (
             Tblkala.objects.using("plus")
             .values("gkalaid", "kalaname", "kalano", "vahed1", "selprice")
@@ -714,21 +751,53 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
         context["products_json"] = json.dumps(
             products_list, cls=DjangoJSONEncoder
         )
+        context["branches"] = branches
+        context["inventories"] = inventories
+        context["visitors"] = visitors_list
         return context
 
     def post(self, request, *args, **kwargs):
         customer_id = request.POST.get("customer_id", "").strip()
+        branch_id = request.POST.get("branch_id", "").strip()
+        inv_id = request.POST.get("inv_id", "").strip()
+        visitor_id = request.POST.get("visitor_id", "").strip()
+        
         product_ids = request.POST.getlist("product_id[]")
         quantities = request.POST.getlist("quantity[]")
         prices = request.POST.getlist("price[]")
+        discount_percents = request.POST.getlist("discount_percent[]")
+        
+        overall_discount_raw = request.POST.get("overall_discount_percent", "").strip()
+
+        # Parse overall discount percentage
+        try:
+            overall_discount_percent = Decimal(overall_discount_raw) if overall_discount_raw else Decimal("0")
+            if overall_discount_percent < Decimal("0"):
+                overall_discount_percent = Decimal("0")
+            elif overall_discount_percent > Decimal("100"):
+                overall_discount_percent = Decimal("100")
+        except (InvalidOperation, ValueError):
+            overall_discount_percent = Decimal("0")
 
         # 1. Validation
         if not customer_id:
             messages.error(request, "لطفاً مشتری را انتخاب کنید.")
             return self.get(request, *args, **kwargs)
 
+        if not branch_id:
+            messages.error(request, "لطفاً شعبه را انتخاب کنید.")
+            return self.get(request, *args, **kwargs)
+
+        if not inv_id:
+            messages.error(request, "لطفاً انبار را انتخاب کنید.")
+            return self.get(request, *args, **kwargs)
+
+        if not visitor_id:
+            messages.error(request, "لطفاً ویزیتور را انتخاب کنید.")
+            return self.get(request, *args, **kwargs)
+
         valid_items = []
-        for p_id, qty, prc in zip(product_ids, quantities, prices):
+        for index, (p_id, qty, prc) in enumerate(zip(product_ids, quantities, prices)):
             p_id = p_id.strip()
             if not p_id:
                 continue
@@ -738,11 +807,33 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                 dec_price = Decimal(str(prc))
                 if dec_qty <= 0:
                     continue
+
+                # Parse row-level discount percent
+                raw_item_disc = discount_percents[index].strip() if index < len(discount_percents) else ""
+                try:
+                    item_disc_pct = Decimal(raw_item_disc) if raw_item_disc else Decimal("0")
+                except (InvalidOperation, ValueError):
+                    item_disc_pct = Decimal("0")
+
+                # If item discount is set, prioritize it; otherwise use the factor's overall discount
+                effective_disc_pct = item_disc_pct if item_disc_pct > Decimal("0") else overall_discount_percent
+                if effective_disc_pct < Decimal("0"):
+                    effective_disc_pct = Decimal("0")
+                elif effective_disc_pct > Decimal("100"):
+                    effective_disc_pct = Decimal("100")
+
+                # Calculate monetary discount amount (Total Decreased Price = Quantity * UnitPrice * Discount%)
+                gross_row_amount = dec_qty * dec_price
+                discount_amount = (gross_row_amount * (effective_disc_pct / Decimal("100"))).quantize(
+                    Decimal("1"), rounding=ROUND_HALF_UP
+                )
+
                 valid_items.append(
                     {
                         "product_id": p_id,
                         "quantity": dec_qty,
                         "price": dec_price,
+                        "discount": discount_amount,
                     }
                 )
             except (InvalidOperation, ValueError):
@@ -760,37 +851,64 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                 today_jalali = jdatetime.date.today()
                 jalali_date_str = today_jalali.strftime("%Y/%m/%d")
                 acc_year = today_jalali.year
+                current_time_str = datetime.now().strftime("%H:%M:%S")
 
-                # SaleRequestNo formatting (e.g., 00001, 00002)
+                # Fetch visitor details safely
+                visitor_data = (
+                    ViewAllvisitors.objects.using("plus")
+                    .filter(gvisitorid=visitor_id)
+                    .values("visitorid", "poorsant")
+                    .first()
+                )
+
+                visitor_int_id = (
+                    visitor_data.get("visitorid") if visitor_data else None
+                )
+                visitor_poorsant = (
+                    visitor_data.get("poorsant")
+                    if (
+                        visitor_data
+                        and visitor_data.get("poorsant") is not None
+                    )
+                    else Decimal("0.00")
+                )
+
+                # Next Factor Number
                 last_factor = (
                     Salerequestmaster.objects.using("plus")
                     .filter(accyear=acc_year)
                     .order_by("-salerequestno")
+                    .values("salerequestno")
                     .first()
                 )
 
-                if (
-                    last_factor
-                    and last_factor.salerequestno
-                    and last_factor.salerequestno.isdigit()
-                ):
-                    next_factor_no = (
-                        f"{int(last_factor.salerequestno) + 1:05d}"
-                    )
+                last_no = last_factor.get("salerequestno") if last_factor else None
+                if last_no and str(last_no).isdigit():
+                    next_factor_no = f"{int(last_no) + 1:06d}"
                 else:
-                    next_factor_no = "00001"
+                    next_factor_no = "000001"
 
                 master_guid = str(uuid.uuid4()).upper()
                 current_user_gucode = request.session.get("user_id")
 
-                # Create Master (Notice: salerequestmasterid is omitted, SQL Server Identity generates it)
+                # A. Create Master Record
                 master = Salerequestmaster.objects.using("plus").create(
                     salerequestno=next_factor_no,
+                    atfno=next_factor_no,
+                    receipttypecode=1,
+                    typesalecode=7,
+                    transferlocationcode=3,
+                    ispersonal=False,
                     salerequestdate=jalali_date_str,
                     createddate=jalali_date_str,
+                    createdtime=current_time_str,
+                    tahvildate=jalali_date_str,
                     accyear=acc_year,
                     gsalerequestmasterid=master_guid,
                     gcustomerid=customer_id,
+                    gbranchid=branch_id,
+                    ginvid=inv_id,
+                    visitorid=visitor_int_id,
                     gcreatedby=current_user_gucode,
                     forcevat=True,
                     salerequesttypecode=1,
@@ -798,16 +916,47 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                     currencyrate=Decimal("1.0000"),
                 )
 
-                # Get the generated auto-increment ID from the master record
                 generated_master_id = master.salerequestmasterid
 
-                # Create Detail Line Items
+                # B. Create SaleRequestToVisitor Record
+                max_visitor_rel_id = (
+                    Salerequesttovisitor.objects.using("plus").aggregate(
+                        max_id=Max("salerequesttovisitorid")
+                    )["max_id"]
+                    or 0
+                )
+                next_visitor_rel_id = max_visitor_rel_id + 1
+                srv_guid = str(uuid.uuid4()).upper()
+
+                srv_fields = {f.name for f in Salerequesttovisitor._meta.get_fields()}
+                srv_kwargs = {
+                    "salerequesttovisitorid": next_visitor_rel_id,
+                    "gsalerequesttovisitorid": srv_guid,
+                    "gvisitorid": visitor_id,
+                    "porsant": visitor_poorsant,
+                }
+
+                if "gsalerequestmasterid" in srv_fields:
+                    srv_kwargs["gsalerequestmasterid"] = master_guid
+                if "gsalerequestid" in srv_fields:
+                    srv_kwargs["gsalerequestid"] = master_guid
+
+                if "salerequestmasterid" in srv_fields:
+                    srv_kwargs["salerequestmasterid"] = generated_master_id
+                if "salerequestid" in srv_fields:
+                    srv_kwargs["salerequestid"] = generated_master_id
+
+                if "visitorid" in srv_fields and visitor_int_id:
+                    srv_kwargs["visitorid"] = visitor_int_id
+
+                Salerequesttovisitor.objects.using("plus").create(**srv_kwargs)
+
+                # C. Create Detail Line Items with Discount
                 detail_instances = []
                 for index, item in enumerate(valid_items, start=1):
                     detail_guid = str(uuid.uuid4()).upper()
                     unique_id = str(uuid.uuid4()).upper()
 
-                    # salerequestdetailid is omitted; SQL Server handles its identity
                     detail = Salerequestdetail(
                         salerequestmasterid=generated_master_id,
                         gsalerequestmasterid=master_guid,
@@ -816,6 +965,7 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                         gkalaid=item["product_id"],
                         quantity=item["quantity"],
                         unitprice=item["price"],
+                        discount=item["discount"],  # Stores the total decreased amount
                         salerequestdetailstatuscode=1,
                         canchangeaward=False,
                         currencyrate=Decimal("1.0000"),
@@ -830,15 +980,11 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                     detail_instances
                 )
 
-            # messages.success(
-            #     request, f"درخواست فروش شماره {next_factor_no} با موفقیت ثبت شد."
-            # )
             return redirect("core:factor_list")
 
         except Exception as e:
             messages.error(request, f"خطا در ثبت درخواست فروش: {str(e)}")
             return self.get(request, *args, **kwargs)
-
 
 class OfflineView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/offline.html"
