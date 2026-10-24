@@ -1,19 +1,28 @@
+import io
+import os
 import uuid
 import json
 import jdatetime
+import base64
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from playwright.sync_api import sync_playwright
 
 from django.contrib import messages
+from django.conf import settings
+from urllib.parse import quote
+from django.contrib.staticfiles import finders
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import DecimalField, F, Sum, Value, Q, Max
 from django.db.models.functions import Coalesce
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect, render, get_object_or_404
 from django.db import transaction
 from django.urls import reverse
+from django.http import HttpResponse, Http404
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
+from django.template.loader import render_to_string
 
 from .models import *
 
@@ -761,23 +770,9 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
         branch_id = request.POST.get("branch_id", "").strip()
         inv_id = request.POST.get("inv_id", "").strip()
         visitor_id = request.POST.get("visitor_id", "").strip()
-        
         product_ids = request.POST.getlist("product_id[]")
         quantities = request.POST.getlist("quantity[]")
         prices = request.POST.getlist("price[]")
-        discount_percents = request.POST.getlist("discount_percent[]")
-        
-        overall_discount_raw = request.POST.get("overall_discount_percent", "").strip()
-
-        # Parse overall discount percentage
-        try:
-            overall_discount_percent = Decimal(overall_discount_raw) if overall_discount_raw else Decimal("0")
-            if overall_discount_percent < Decimal("0"):
-                overall_discount_percent = Decimal("0")
-            elif overall_discount_percent > Decimal("100"):
-                overall_discount_percent = Decimal("100")
-        except (InvalidOperation, ValueError):
-            overall_discount_percent = Decimal("0")
 
         # 1. Validation
         if not customer_id:
@@ -797,7 +792,7 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
             return self.get(request, *args, **kwargs)
 
         valid_items = []
-        for index, (p_id, qty, prc) in enumerate(zip(product_ids, quantities, prices)):
+        for p_id, qty, prc in zip(product_ids, quantities, prices):
             p_id = p_id.strip()
             if not p_id:
                 continue
@@ -807,33 +802,11 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                 dec_price = Decimal(str(prc))
                 if dec_qty <= 0:
                     continue
-
-                # Parse row-level discount percent
-                raw_item_disc = discount_percents[index].strip() if index < len(discount_percents) else ""
-                try:
-                    item_disc_pct = Decimal(raw_item_disc) if raw_item_disc else Decimal("0")
-                except (InvalidOperation, ValueError):
-                    item_disc_pct = Decimal("0")
-
-                # If item discount is set, prioritize it; otherwise use the factor's overall discount
-                effective_disc_pct = item_disc_pct if item_disc_pct > Decimal("0") else overall_discount_percent
-                if effective_disc_pct < Decimal("0"):
-                    effective_disc_pct = Decimal("0")
-                elif effective_disc_pct > Decimal("100"):
-                    effective_disc_pct = Decimal("100")
-
-                # Calculate monetary discount amount (Total Decreased Price = Quantity * UnitPrice * Discount%)
-                gross_row_amount = dec_qty * dec_price
-                discount_amount = (gross_row_amount * (effective_disc_pct / Decimal("100"))).quantize(
-                    Decimal("1"), rounding=ROUND_HALF_UP
-                )
-
                 valid_items.append(
                     {
                         "product_id": p_id,
                         "quantity": dec_qty,
                         "price": dec_price,
-                        "discount": discount_amount,
                     }
                 )
             except (InvalidOperation, ValueError):
@@ -853,7 +826,7 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                 acc_year = today_jalali.year
                 current_time_str = datetime.now().strftime("%H:%M:%S")
 
-                # Fetch visitor details safely
+                # Fetch visitor details safely using .values()
                 visitor_data = (
                     ViewAllvisitors.objects.using("plus")
                     .filter(gvisitorid=visitor_id)
@@ -894,11 +867,11 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                 # A. Create Master Record
                 master = Salerequestmaster.objects.using("plus").create(
                     salerequestno=next_factor_no,
-                    atfno=next_factor_no,
-                    receipttypecode=1,
-                    typesalecode=7,
-                    transferlocationcode=3,
-                    ispersonal=False,
+                    atfno=next_factor_no,                      # Same as SaleRequestNo
+                    receipttypecode=1,                         # 1
+                    typesalecode=7,                            # 7
+                    transferlocationcode=3,                    # 3
+                    ispersonal=False,                          # 0 (False for bit/boolean)
                     salerequestdate=jalali_date_str,
                     createddate=jalali_date_str,
                     createdtime=current_time_str,
@@ -951,7 +924,7 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
 
                 Salerequesttovisitor.objects.using("plus").create(**srv_kwargs)
 
-                # C. Create Detail Line Items with Discount
+                # C. Create Detail Line Items
                 detail_instances = []
                 for index, item in enumerate(valid_items, start=1):
                     detail_guid = str(uuid.uuid4()).upper()
@@ -965,7 +938,6 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                         gkalaid=item["product_id"],
                         quantity=item["quantity"],
                         unitprice=item["price"],
-                        discount=item["discount"],  # Stores the total decreased amount
                         salerequestdetailstatuscode=1,
                         canchangeaward=False,
                         currencyrate=Decimal("1.0000"),
@@ -986,5 +958,139 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
             messages.error(request, f"خطا در ثبت درخواست فروش: {str(e)}")
             return self.get(request, *args, **kwargs)
 
+
 class OfflineView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/offline.html"
+
+
+class FactorPDFView(PlusLoginRequiredMixin, View):    
+    def get(self, request, pk=None, *args, **kwargs):
+        factor_id = pk or request.GET.get("id")
+        if not factor_id:
+            raise Http404("فاکتور مورد نظر یافت نشد.")
+
+        # 1. Fetch Master Record
+        master = (
+            Salerequestmaster.objects.using("plus")
+            .filter(gsalerequestmasterid=factor_id)
+            .first()
+        )
+        if not master:
+            raise Http404("فاکتور مورد نظر یافت نشد.")
+
+        # 2. Fetch Customer Info
+        customer = None
+        if master.gcustomerid:
+            customer = (
+                Tblcustomer.objects.using("plus")
+                .filter(gcustomerid=master.gcustomerid)
+                .first()
+            )
+
+        # 3. Fetch Line Items & Products
+        details = (
+            Salerequestdetail.objects.using("plus")
+            .filter(gsalerequestmasterid=master.gsalerequestmasterid)
+            .order_by("rowid")
+        )
+
+        kala_ids = [d.gkalaid for d in details if d.gkalaid]
+        kala_map = {}
+        if kala_ids:
+            kalas = Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids)
+            kala_map = {k.gkalaid: k for k in kalas}
+
+        items = []
+        total_quantity = 0
+        subtotal = 0
+        total_discount = 0
+
+        for idx, d in enumerate(details, start=1):
+            kala = kala_map.get(d.gkalaid)
+            qty = float(d.quantity or 0)
+            price = float(d.unitprice or 0)
+            discount = float(d.discount or 0)
+            gross = qty * price
+            row_total = gross - discount
+
+            total_quantity += qty
+            subtotal += gross
+            total_discount += discount
+
+            items.append({
+                "row_no": idx,
+                "name": kala.kalaname if kala else (d.descript or "کالای نامشخص"),
+                "quantity": int(qty) if qty.is_integer() else qty,
+                "unit": kala.vahed1 if (kala and kala.vahed1) else "عدد",
+                "unit_price": int(price),
+                "discount": int(discount),
+                "row_total": int(row_total),
+            })
+
+        payable = subtotal - total_discount
+
+        # 4. Read & Encode Logo to Base64
+        logo_base64 = ""
+        logo_path = finders.find("images/logo.png")
+        if not logo_path:
+            alt_path = os.path.join(settings.BASE_DIR, "static", "images", "logo.png")
+            if os.path.exists(alt_path):
+                logo_path = alt_path
+
+        if logo_path and os.path.exists(logo_path):
+            with open(logo_path, "rb") as image_file:
+                logo_base64 = base64.b64encode(image_file.read()).decode("utf-8")
+
+        context = {
+            "master": master,
+            "customer": customer,
+            "items": items,
+            "total_quantity": int(total_quantity) if isinstance(total_quantity, float) and total_quantity.is_integer() else total_quantity,
+            "subtotal": int(subtotal),
+            "total_discount": int(total_discount),
+            "payable": int(payable),
+            "logo_base64": logo_base64,
+            "seller_name": "رهجو پلاس",
+            "seller_phone": "",
+            "seller_address": "",
+            "bank_card": "۶۲۱۹۸۶۱۰۹۲۳۹۹۴۲۶",
+            "bank_sheba": "IR۵۲۰۵۶۰۲۱۳۷۸۰۰۰۵۳۱۱۸۰۰۰۰۱",
+            "bank_owner": "خانم سپیده جیحانی",
+            "bank_name": "بانک سامان",
+        }
+
+        # 5. Render HTML to String
+        # مطمئن شوید نام فایل در پوشه templates/core برابر factor_pdf.html است
+        html_string = render_to_string("core/factor_pdf.html", context, request=request)
+
+        # 6. Generate A5 PDF via Playwright (بخش مفقود شده که باعث ارور می‌شد)
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_content(html_string, wait_until="networkidle")
+            
+            pdf_bytes = page.pdf(
+                format="A5",
+                print_background=True,
+                margin={
+                    "top": "6mm",
+                    "bottom": "6mm",
+                    "left": "7mm",
+                    "right": "7mm",
+                },
+            )
+            browser.close()
+
+        # 7. ساخت پاسخ دانلود
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        factor_no = master.salerequestno or "factor"
+        filename = f"Factor-{factor_no}.pdf"
+        encoded_filename = quote(filename)
+
+        # تنظیم هدر attachment جهت دانلود مستقیم
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        )
+        return response
+    
+    

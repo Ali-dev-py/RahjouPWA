@@ -12,6 +12,7 @@ urlpatterns = [
     path("customers/create/", CustomerCreateView.as_view(), name="customer_create"),
     path("factors/", FactorListView.as_view(), name="factor_list"),
     path("factors/detail/", FactorDetailView.as_view(), name="factor_detail"),
+    path("factor/<str:pk>/pdf/", FactorPDFView.as_view(), name="factor_pdf"),
     path("factors/new/", FactorCreateView.as_view(), name="factor_create"),
     path("offline/", OfflineView.as_view(), name="offline"),
 ]
