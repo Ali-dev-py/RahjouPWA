@@ -28,9 +28,9 @@ SECRET_KEY = 'django-insecure-n!_^#1&k9ak8%xcrlel!&@@i+i$v8uuaw5wysgj(n(&_ugl0%d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['https://app.rahjouinfo.ir', 'http://app.rahjouinfo.ir', 'localhost', '127.0.0.1']
 
-CSRF_TRUSTED_ORIGINS = [
+CSRF_TRUSTED_ORIGINS = ['https://app.rahjouinfo.ir', 'http://app.rahjouinfo.ir'] + [
     f'http://192.168.1.{i}' for i in range(1, 255)
 ]
 
