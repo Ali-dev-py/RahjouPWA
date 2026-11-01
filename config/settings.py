@@ -11,13 +11,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 import os
 from pathlib import Path
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent   
 
-# load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -34,6 +34,7 @@ CSRF_TRUSTED_ORIGINS = ['https://app.rahjouinfo.ir', 'http://app.rahjouinfo.ir']
     f'http://192.168.1.{i}' for i in range(1, 255)
 ]
 
+CSRF_COOKIE_SECURE = True
 
 # Application definition
 
@@ -93,7 +94,7 @@ DATABASES = {
         "NAME": "DpaTotalSystem291405",
         "USER": "sa",
         "PASSWORD": "Sql123!@#",
-        "HOST": "194.147.167.175",
+        "HOST": os.getenv("HOST"),
         "PORT": "9090",
         "OPTIONS": {
             "driver": "ODBC Driver 17 for SQL Server",
