@@ -20,7 +20,7 @@
                 </span>
                 <a class="btn app-icon-button app-icon-button--surface"
                     href="{% url 'core:factor_pdf' pk=master.gsalerequestmasterid %}"
-                    target="_blank"
+                    id="btnTopPrintFactor"
                     aria-label="چاپ فاکتور"
                     title="چاپ فاکتور">
                     <span class="material-symbols-outlined" aria-hidden="true">print</span>
@@ -151,6 +151,7 @@
     </div>
 </main>
 
+{% if factor_found %}
 <div class="app-action-bar fixed-bottom bg-white border-top py-2 shadow-lg" id="download-pdf-bar">
     <div class="container-fluid app-content app-content--narrow mx-auto">
         <button class="btn btn-primary app-download-button w-100 d-flex align-items-center justify-content-center gap-2 py-2"
@@ -164,28 +165,38 @@
         </button>
     </div>
 </div>
+{% endif %}
+
+<!-- jsPDF & html2canvas Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const downloadBtn = document.getElementById('btnDownloadFactor');
+        const topPrintBtn = document.getElementById('btnTopPrintFactor');
         if (!downloadBtn) return;
 
         const downloadIcon = document.getElementById('downloadIcon');
         const downloadSpinner = document.getElementById('downloadSpinner');
         const downloadBtnText = document.getElementById('downloadBtnText');
 
-        downloadBtn.addEventListener('click', async function () {
+        async function generateAndDownloadPDF(e) {
+            if (e) e.preventDefault();
+
             const url = downloadBtn.getAttribute('data-url');
             const filename = downloadBtn.getAttribute('data-filename') || 'factor.pdf';
 
-            // 1. نمایش حالت لودینگ
+            // 1. Show loading state
             downloadBtn.disabled = true;
             downloadIcon.classList.add('d-none');
             downloadSpinner.classList.remove('d-none');
             downloadBtnText.textContent = 'در حال آماده‌سازی و دانلود...';
 
+            let sandboxWrapper = null;
+
             try {
-                // 2. دریافت فایل به صورت باینری (Blob)
+                // 2. Fetch server-rendered factor_pdf.html from Django View
                 const response = await fetch(url, {
                     method: 'GET',
                     headers: {
@@ -194,56 +205,111 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('خطا در دریافت فایل فاکتور از سرور');
+                    throw new Error('خطا در دریافت اطلاعات فاکتور از سرور');
                 }
 
-                const blob = await response.blob();
-                const file = new File([blob], filename, { type: 'application/pdf' });
+                const htmlText = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
 
-                // 3. بررسی قابلیت Native Share (مخصوص PWA موبایل در Android و iOS)
-                const isMobilePWA = window.matchMedia('(display-mode: standalone)').matches || 
-                                    window.navigator.standalone === true || 
-                                    /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+                const pdfContainer = doc.getElementById('invoice-pdf-container');
+                const pdfStyles = doc.getElementById('factor-pdf-styles');
 
-                if (isMobilePWA && navigator.canShare && navigator.canShare({ files: [file] })) {
-                    // در PWA منوی نیتیو ذخیره در فایل یا اشتراک باز می‌شود
-                    await navigator.share({
-                        files: [file],
-                        title: 'درخواست فروش',
-                        text: `درخواست شماره ${filename}`
-                    });
-                } else {
-                    // 4. دانلود استاندارد برای دسکتاپ و مرورگرهای وب
-                    const blobUrl = window.URL.createObjectURL(blob);
-                    const tempLink = document.createElement('a');
-                    tempLink.style.display = 'none';
-                    tempLink.href = blobUrl;
-                    tempLink.download = filename;
-                    
-                    document.body.appendChild(tempLink);
-                    tempLink.click();
-                    
-                    // پاکسازی حافظه
-                    setTimeout(() => {
-                        window.URL.revokeObjectURL(blobUrl);
-                        tempLink.remove();
-                    }, 1000);
+                if (!pdfContainer) {
+                    throw new Error('ساختار قالب فاکتور یافت نشد');
                 }
+
+                // 3. Create an off-screen container to render exact A5 layout
+                sandboxWrapper = document.createElement('div');
+                sandboxWrapper.style.position = 'fixed';
+                sandboxWrapper.style.top = '0';
+                sandboxWrapper.style.left = '-9999px';
+                sandboxWrapper.style.zIndex = '-1000';
+                sandboxWrapper.style.backgroundColor = '#ffffff';
+
+                if (pdfStyles) {
+                    sandboxWrapper.appendChild(pdfStyles.cloneNode(true));
+                }
+                sandboxWrapper.appendChild(pdfContainer.cloneNode(true));
+                document.body.appendChild(sandboxWrapper);
+
+                // Wait for fonts and images to load completely
+                if (document.fonts && document.fonts.ready) {
+                    await document.fonts.ready;
+                }
+
+                const targetElement = sandboxWrapper.querySelector('#invoice-pdf-container');
+
+                // 4. Render HTML to high-DPI Canvas
+                const canvas = await html2canvas(targetElement, {
+                    scale: 3,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false
+                });
+
+                // 5. Generate A5 PDF using jsPDF
+                const imgData = canvas.toDataURL('image/jpeg', 0.98);
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a5',
+                    compress: true
+                });
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();   // 148mm
+                const pdfHeight = pdf.internal.pageSize.getHeight(); // 210mm
+                const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+
+                // Handle multi-page A5 if items overflow one page
+                while (heightLeft > 2) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                    heightLeft -= pdfHeight;
+                }
+
+                // 6. Direct Download on Device (PWA & Browser compatible)
+                const pdfBlob = pdf.output('blob');
+                const blobUrl = window.URL.createObjectURL(pdfBlob);
+                const tempLink = document.createElement('a');
+                tempLink.style.display = 'none';
+                tempLink.href = blobUrl;
+                tempLink.setAttribute('download', filename);
+                document.body.appendChild(tempLink);
+                tempLink.click();
+
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(blobUrl);
+                    tempLink.remove();
+                }, 1500);
 
             } catch (error) {
-                console.error('Download error:', error);
-                // در صورتی که کاربر منوی اشتراک را ببندد (AbortError) پیام خطا نشان ندهد
-                if (error.name !== 'AbortError') {
-                    alert('خطا در دانلود فاکتور. لطفاً مجدداً تلاش نمایید.');
-                }
+                console.error('PDF generation error:', error);
+                alert('خطا در تولید و دانلود فاکتور. لطفاً مجدداً تلاش نمایید.');
             } finally {
-                // 5. بازگرداندن دکمه به حالت اولیه
+                if (sandboxWrapper && sandboxWrapper.parentNode) {
+                    sandboxWrapper.parentNode.removeChild(sandboxWrapper);
+                }
+                // 7. Restore button state
                 downloadBtn.disabled = false;
                 downloadSpinner.classList.add('d-none');
                 downloadIcon.classList.remove('d-none');
-                downloadBtnText.textContent = 'دریافت مستقیم فاکتور (PDF)';
+                downloadBtnText.textContent = 'دریافت فاکتور (PDF)';
             }
-        });
+        }
+
+        downloadBtn.addEventListener('click', generateAndDownloadPDF);
+        if (topPrintBtn) {
+            topPrintBtn.addEventListener('click', generateAndDownloadPDF);
+        }
     });
 </script>
 

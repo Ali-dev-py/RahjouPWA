@@ -73,7 +73,7 @@
                                 <small class="text-secondary d-block">درخواست {{ factor.number|persian_digits }}</small>
                                 <h2 class="h5 fw-bold mb-0 mt-1 text-truncate">
                                     <a class="stretched-link text-reset text-decoration-none"
-                                       href="{% url 'core:factor_detail' %}">{{ factor.customer_name }}</a>
+                                       href="{% url 'core:factor_detail' pk=factor.id %}">{{ factor.customer_name }}</a>
                                 </h2>
                             </div>
                             <span class="status-chip {{ factor.chip_class }} flex-shrink-0">

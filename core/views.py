@@ -559,11 +559,11 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
         if factor_id:
             master = (
                 Salerequestmaster.objects.using("plus")
-                .filter(gsalerequestmasterid=factor_id)
+                .filter(gsalerequestmasterid=str(factor_id).strip())
                 .first()
             )
         else:
-            # Fallback to the latest factor if no ID is passed
+            # Fallback to the latest factor only if no ID was provided at all
             master = (
                 Salerequestmaster.objects.using("plus")
                 .order_by("-salerequestdate", "-salerequestno")
@@ -963,7 +963,7 @@ class OfflineView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/offline.html"
 
 
-class FactorPDFView(PlusLoginRequiredMixin, View):    
+class FactorPDFView(PlusLoginRequiredMixin, View):
     def get(self, request, pk=None, *args, **kwargs):
         factor_id = pk or request.GET.get("id")
         if not factor_id:
@@ -1041,6 +1041,10 @@ class FactorPDFView(PlusLoginRequiredMixin, View):
             with open(logo_path, "rb") as image_file:
                 logo_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
+        factor_no = master.salerequestno or "factor"
+        cust_name = customer.custname if (customer and customer.custname) else (master.requestman or "")
+        filename = f"درخواست فروش {cust_name} شماره {factor_no}.pdf".strip()
+
         context = {
             "master": master,
             "customer": customer,
@@ -1057,40 +1061,10 @@ class FactorPDFView(PlusLoginRequiredMixin, View):
             "bank_sheba": "IR۵۲۰۵۶۰۲۱۳۷۸۰۰۰۵۳۱۱۸۰۰۰۰۱",
             "bank_owner": "خانم سپیده جیحانی",
             "bank_name": "بانک سامان",
+            "pdf_filename": filename,
         }
 
-        # 5. Render HTML to String
-        # مطمئن شوید نام فایل در پوشه templates/core برابر factor_pdf.html است
-        html_string = render_to_string("core/factor_pdf.html", context, request=request)
-
-        # 6. Generate A5 PDF via Playwright (بخش مفقود شده که باعث ارور می‌شد)
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.set_content(html_string, wait_until="networkidle")
-            
-            pdf_bytes = page.pdf(
-                format="A5",
-                print_background=True,
-                margin={
-                    "top": "6mm",
-                    "bottom": "6mm",
-                    "left": "7mm",
-                    "right": "7mm",
-                },
-            )
-            browser.close()
-
-        # 7. ساخت پاسخ دانلود
-        response = HttpResponse(pdf_bytes, content_type="application/pdf")
-        factor_no = master.salerequestno or "factor"
-        filename = f"Factor-{factor_no}.pdf"
-        encoded_filename = quote(filename)
-
-        # تنظیم هدر attachment جهت دانلود مستقیم
-        response["Content-Disposition"] = (
-            f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
-        )
-        return response
+        # 5. Render Server-Side HTML for jsPDF
+        return render(request, "core/factor_pdf.html", context)
     
     
