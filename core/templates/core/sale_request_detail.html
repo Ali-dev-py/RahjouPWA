@@ -4,30 +4,30 @@
 {% load i18n_extras %}
 
 {% block title %}جزئیات درخواست {{ master.salerequestno|default:''|persian_digits }} | رهجو{% endblock %}
-{% block body_class %}app-body page-factor-detail has-action-bar{% endblock %}
+{% block body_class %}app-body page-sale-request-detail has-action-bar{% endblock %}
 
 {% block content %}
-{% include "partials/_app_header.html" with heading="جزئیات درخواست فروش" back_url_name="core:factor_list" %}
+{% include "partials/_app_header.html" with heading="جزئیات درخواست فروش" back_url_name="core:sale_request_list" %}
 
 <main class="app-main container-fluid px-3">
     <div class="app-content app-content--narrow mx-auto">
-        {% if factor_found %}
+        {% if sale_request_found %}
             <!-- Status and Action Toolbar -->
             <div class="d-flex align-items-center justify-content-between mb-3">
-                <span class="badge factor-status d-inline-flex align-items-center gap-1 rounded-pill fw-normal bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+                <span class="badge sale-request-status d-inline-flex align-items-center gap-1 rounded-pill fw-normal bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
                     <span class="material-symbols-outlined fs-6" aria-hidden="true">verified</span>
                     {{ status_name }}
                 </span>
                 <a class="btn app-icon-button app-icon-button--surface"
-                    href="{% url 'core:factor_pdf' pk=master.gsalerequestmasterid %}"
-                    id="btnTopPrintFactor"
-                    aria-label="چاپ فاکتور"
-                    title="چاپ فاکتور">
+                    href="{% url 'core:sale_request_pdf' pk=master.gsalerequestmasterid %}"
+                    id="btnTopPrintSaleRequest"
+                    aria-label="چاپ درخواست فروش"
+                    title="چاپ درخواست فروش">
                     <span class="material-symbols-outlined" aria-hidden="true">print</span>
                 </a>
             </div>
 
-            <!-- Factor Card -->
+            <!-- Sale Request Card -->
             <article class="card invoice-card border-0 position-relative overflow-hidden shadow-sm">
                 <div class="invoice-card__top-edge" aria-hidden="true"></div>
                 <div class="card-body p-4">
@@ -117,7 +117,7 @@
                     </section>
 
                     <!-- Financial Summary -->
-                    <section class="invoice-totals d-grid gap-2 pt-3 border-top" aria-label="جمع فاکتور">
+                    <section class="invoice-totals d-grid gap-2 pt-3 border-top" aria-label="جمع درخواست فروش">
                         <div class="d-flex justify-content-between gap-3 text-secondary">
                             <span>جمع مبالغ:</span>
                             <strong>{{ subtotal|persian_digits|intcomma:False }} ریال</strong>
@@ -136,14 +136,14 @@
                 </div>
             </article>
         {% else %}
-            <!-- Factor Not Found -->
+            <!-- Sale Request Not Found -->
             <div class="card border-0 text-center py-5">
                 <div class="card-body">
                     <span class="material-symbols-outlined fs-1 text-muted mb-3">error_outline</span>
-                    <h2 class="h5 fw-bold">فاکتور مورد نظر یافت نشد</h2>
-                    <p class="text-secondary small">ممکن است این فاکتور حذف شده باشد یا شناسه آن اشتباه باشد.</p>
-                    <a href="{% url 'core:factor_list' %}" class="btn btn-outline-primary rounded-pill btn-sm mt-2">
-                        بازگشت به فهرست فاکتورها
+                    <h2 class="h5 fw-bold">درخواست فروش مورد نظر یافت نشد</h2>
+                    <p class="text-secondary small">ممکن است این درخواست فروش حذف شده باشد یا شناسه آن اشتباه باشد.</p>
+                    <a href="{% url 'core:sale_request_list' %}" class="btn btn-outline-primary rounded-pill btn-sm mt-2">
+                        بازگشت به فهرست درخواست‌های فروش
                     </a>
                 </div>
             </div>
@@ -151,17 +151,17 @@
     </div>
 </main>
 
-{% if factor_found %}
+{% if sale_request_found %}
 <div class="app-action-bar fixed-bottom bg-white border-top py-2 shadow-lg" id="download-pdf-bar">
     <div class="container-fluid app-content app-content--narrow mx-auto">
         <button class="btn btn-primary app-download-button w-100 d-flex align-items-center justify-content-center gap-2 py-2"
                 type="button"
-                id="btnDownloadFactor"
-                data-url="{% url 'core:factor_pdf' pk=master.gsalerequestmasterid %}"
-                data-filename="درخواست فروش {{ customer.custname }} شماره {{ master.salerequestno|default:'invoice' }}.pdf">
+                id="btnDownloadSaleRequest"
+                data-url="{% url 'core:sale_request_pdf' pk=master.gsalerequestmasterid %}"
+                data-filename="درخواست فروش {{ customer.custname }} شماره {{ master.salerequestno|default:'sale_request' }}.pdf">
             <span class="material-symbols-outlined fs-5" id="downloadIcon">download</span>
             <span class="spinner-border spinner-border-sm d-none" id="downloadSpinner" role="status" aria-hidden="true"></span>
-            <span id="downloadBtnText">دریافت فاکتور (PDF)</span>
+            <span id="downloadBtnText">دریافت درخواست فروش (PDF)</span>
         </button>
     </div>
 </div>
@@ -173,8 +173,8 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const downloadBtn = document.getElementById('btnDownloadFactor');
-        const topPrintBtn = document.getElementById('btnTopPrintFactor');
+        const downloadBtn = document.getElementById('btnDownloadSaleRequest');
+        const topPrintBtn = document.getElementById('btnTopPrintSaleRequest');
         if (!downloadBtn) return;
 
         const downloadIcon = document.getElementById('downloadIcon');
@@ -185,7 +185,7 @@
             if (e) e.preventDefault();
 
             const url = downloadBtn.getAttribute('data-url');
-            const filename = downloadBtn.getAttribute('data-filename') || 'factor.pdf';
+            const filename = downloadBtn.getAttribute('data-filename') || 'sale_request.pdf';
 
             // 1. Show loading state
             downloadBtn.disabled = true;
@@ -196,7 +196,7 @@
             let sandboxWrapper = null;
 
             try {
-                // 2. Fetch server-rendered factor_pdf.html from Django View
+                // 2. Fetch server-rendered sale_request_pdf.html from Django View
                 const response = await fetch(url, {
                     method: 'GET',
                     headers: {
@@ -205,7 +205,7 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('خطا در دریافت اطلاعات فاکتور از سرور');
+                    throw new Error('خطا در دریافت اطلاعات درخواست فروش از سرور');
                 }
 
                 const htmlText = await response.text();
@@ -213,10 +213,10 @@
                 const doc = parser.parseFromString(htmlText, 'text/html');
 
                 const pdfContainer = doc.getElementById('invoice-pdf-container');
-                const pdfStyles = doc.getElementById('factor-pdf-styles');
+                const pdfStyles = doc.getElementById('sale-request-pdf-styles');
 
                 if (!pdfContainer) {
-                    throw new Error('ساختار قالب فاکتور یافت نشد');
+                    throw new Error('ساختار قالب درخواست فروش یافت نشد');
                 }
 
                 // 3. Create an off-screen container to render exact A5 layout
@@ -293,7 +293,7 @@
 
             } catch (error) {
                 console.error('PDF generation error:', error);
-                alert('خطا در تولید و دانلود فاکتور. لطفاً مجدداً تلاش نمایید.');
+                alert('خطا در تولید و دانلود درخواست فروش. لطفاً مجدداً تلاش نمایید.');
             } finally {
                 if (sandboxWrapper && sandboxWrapper.parentNode) {
                     sandboxWrapper.parentNode.removeChild(sandboxWrapper);
@@ -302,7 +302,7 @@
                 downloadBtn.disabled = false;
                 downloadSpinner.classList.add('d-none');
                 downloadIcon.classList.remove('d-none');
-                downloadBtnText.textContent = 'دریافت فاکتور (PDF)';
+                downloadBtnText.textContent = 'دریافت درخواست فروش (PDF)';
             }
         }
 

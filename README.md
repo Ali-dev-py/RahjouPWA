@@ -9,9 +9,9 @@ A conventional Django project for the Rahjou mobile-first accounting and sales i
 | Splash | `/` | `core:splash` | `core/splash.html` |
 | Login | `/login/` | `core:login` | `core/login.html` |
 | Dashboard | `/dashboard/` | `core:dashboard` | `core/dashboard.html` |
-| Factor list | `/factors/` | `core:factor_list` | `core/factor_list.html` |
-| Factor detail | `/factors/detail/` | `core:factor_detail` | `core/factor_detail.html` |
-| New factor | `/factors/new/` | `core:factor_create` | `core/factor_create.html` |
+| Sale request list | `/sale-requests/` | `core:sale_request_list` | `core/sale_request_list.html` |
+| Sale request detail | `/sale-requests/detail/` | `core:sale_request_detail` | `core/sale_request_detail.html` |
+| New sale request | `/sale-requests/new/` | `core:sale_request_create` | `core/sale_request_create.html` |
 | Offline fallback | `/offline/` | `core:offline` | `core/offline.html` |
 
 All six source files originally used Tailwind and none used Bootstrap. They now extend `base.html`, use pinned Bootstrap 5.3 RTL assets, use Django `{% url %}` and `{% static %}` references, and share header/navigation partials. See [`docs/STATIC_HTML_AUDIT.md`](docs/STATIC_HTML_AUDIT.md) for the original audit.

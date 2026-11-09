@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "rahjou-shell-v8";
+const CACHE_NAME = "rahjou-shell-v9";
 const CORE_ASSETS = [
     "/",
     "/?source=pwa",

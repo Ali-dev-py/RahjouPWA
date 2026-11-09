@@ -6,7 +6,6 @@ import jdatetime
 import base64
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from playwright.sync_api import sync_playwright
 
 from django.contrib import messages
 from django.conf import settings
@@ -164,7 +163,7 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
                 )
                 customer_map = {c.gcustomerid: c.custname for c in customers}
 
-            # Batch Calculate Total Price per Factor (Single Query)
+            # Batch Calculate Total Price per Sale Request (Single Query)
             # Total = (Quantity * UnitPrice) - Discount
             details_agg = (
                 Salerequestdetail.objects.using("plus")
@@ -198,7 +197,7 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
                 recent_activities.append(
                     {
                         "id": m.gsalerequestmasterid,
-                        "factor_no": m.salerequestno,
+                        "sale_request_no": m.salerequestno,
                         "date": m.salerequestdate or m.createddate or "-",
                         "customer_name": customer_name,
                         "total_amount": totals_map.get(
@@ -463,8 +462,8 @@ def get_status_style(status_name):
         return {"chip_class": "status-chip--pending", "dot_class": "status-dot"}
     
     
-class FactorListView(PlusLoginRequiredMixin, TemplateView):
-    template_name = "core/factor_list.html"
+class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/sale_request_list.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -483,7 +482,7 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
         }
 
         # 2. Fetch Sale Requests QuerySet
-        factors_qs = (
+        sale_requests_qs = (
             Salerequestmaster.objects.using("plus")
             .all()
             .order_by("-salerequestdate", "-salerequestno")
@@ -491,15 +490,17 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
 
         # Filter by selected status tab (if not 'all')
         if status_filter != "all" and status_filter.isdigit():
-            factors_qs = factors_qs.filter(
+            sale_requests_qs = sale_requests_qs.filter(
                 salerequeststatuscode=int(status_filter)
             )
 
         # Limit to top 150 records for optimal performance
-        factors_list = list(factors_qs[:150])
+        sale_requests_list = list(sale_requests_qs[:150])
 
         # 3. Batch Fetch Customer Names (prevents N+1 query issue)
-        customer_ids = [f.gcustomerid for f in factors_list if f.gcustomerid]
+        customer_ids = [
+            sr.gcustomerid for sr in sale_requests_list if sr.gcustomerid
+        ]
         customer_map = {}
         if customer_ids:
             customers = Tblcustomer.objects.using("plus").filter(
@@ -508,62 +509,62 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
             customer_map = {c.gcustomerid: c.custname for c in customers}
 
         # 4. Construct Final Data List
-        factors = []
-        for f in factors_list:
+        sale_requests = []
+        for sr in sale_requests_list:
             customer_name = (
-                customer_map.get(f.gcustomerid)
-                or f.requestman
+                customer_map.get(sr.gcustomerid)
+                or sr.requestman
                 or "مشتری نامشخص"
             )
 
-            # Search by keyword (Factor No or Customer Name)
+            # Search by keyword (Sale Request No or Customer Name)
             if (
                 query
-                and query not in f.salerequestno
+                and query not in sr.salerequestno
                 and query not in customer_name
             ):
                 continue
 
-            status_name = status_map.get(f.salerequeststatuscode, "نامشخص")
+            status_name = status_map.get(sr.salerequeststatuscode, "نامشخص")
             style = get_status_style(status_name)
 
-            factors.append(
+            sale_requests.append(
                 {
-                    "id": f.gsalerequestmasterid,
-                    "number": f.salerequestno,
-                    "date": f.salerequestdate or f.createddate or "-",
+                    "id": sr.gsalerequestmasterid,
+                    "number": sr.salerequestno,
+                    "date": sr.salerequestdate or sr.createddate or "-",
                     "customer_name": customer_name,
-                    "status_code": f.salerequeststatuscode,
+                    "status_code": sr.salerequeststatuscode,
                     "status_name": status_name,
                     "chip_class": style["chip_class"],
                     "dot_class": style["dot_class"],
                 }
             )
 
-        context["factors"] = factors
+        context["sale_requests"] = sale_requests
         context["statuses"] = statuses
         context["current_status"] = status_filter
         context["query"] = query
         return context
 
 
-class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
-    template_name = "core/factor_detail.html"
+class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/sale_request_detail.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # 1. Retrieve Factor ID from URL kwargs or GET parameters
-        factor_id = self.kwargs.get("pk") or self.request.GET.get("id")
+        # 1. Retrieve Sale Request ID from URL kwargs or GET parameters
+        sale_request_id = self.kwargs.get("pk") or self.request.GET.get("id")
 
-        if factor_id:
+        if sale_request_id:
             master = (
                 Salerequestmaster.objects.using("plus")
-                .filter(gsalerequestmasterid=str(factor_id).strip())
+                .filter(gsalerequestmasterid=str(sale_request_id).strip())
                 .first()
             )
         else:
-            # Fallback to the latest factor only if no ID was provided at all
+            # Fallback to the latest sale request only if no ID was provided at all
             master = (
                 Salerequestmaster.objects.using("plus")
                 .order_by("-salerequestdate", "-salerequestno")
@@ -571,10 +572,10 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
             )
 
         if not master:
-            context["factor_found"] = False
+            context["sale_request_found"] = False
             return context
 
-        context["factor_found"] = True
+        context["sale_request_found"] = True
         context["master"] = master
 
         # 2. Fetch Status
@@ -597,7 +598,7 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
             )
         context["customer"] = customer
 
-        # 4. Fetch Factor Line Items & Products
+        # 4. Fetch Sale Request Line Items & Products
         details = (
             Salerequestdetail.objects.using("plus")
             .filter(gsalerequestmasterid=master.gsalerequestmasterid)
@@ -649,8 +650,8 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
         return context
     
 
-class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
-    template_name = "core/factor_create.html"
+class SaleRequestCreateView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/sale_request_create.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -846,8 +847,8 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                     else Decimal("0.00")
                 )
 
-                # Next Factor Number
-                last_factor = (
+                # Next Sale Request Number
+                last_sale_request = (
                     Salerequestmaster.objects.using("plus")
                     .filter(accyear=acc_year)
                     .order_by("-salerequestno")
@@ -855,19 +856,23 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                     .first()
                 )
 
-                last_no = last_factor.get("salerequestno") if last_factor else None
+                last_no = (
+                    last_sale_request.get("salerequestno")
+                    if last_sale_request
+                    else None
+                )
                 if last_no and str(last_no).isdigit():
-                    next_factor_no = f"{int(last_no) + 1:06d}"
+                    next_sale_request_no = f"{int(last_no) + 1:06d}"
                 else:
-                    next_factor_no = "000001"
+                    next_sale_request_no = "000001"
 
                 master_guid = str(uuid.uuid4()).upper()
                 current_user_gucode = request.session.get("user_id")
 
                 # A. Create Master Record
                 master = Salerequestmaster.objects.using("plus").create(
-                    salerequestno=next_factor_no,
-                    atfno=next_factor_no,                      # Same as SaleRequestNo
+                    salerequestno=next_sale_request_no,
+                    atfno=next_sale_request_no,                # Same as SaleRequestNo
                     receipttypecode=1,                         # 1
                     typesalecode=7,                            # 7
                     transferlocationcode=3,                    # 3
@@ -952,7 +957,7 @@ class FactorCreateView(PlusLoginRequiredMixin, TemplateView):
                     detail_instances
                 )
 
-            return redirect("core:factor_list")
+            return redirect("core:sale_request_list")
 
         except Exception as e:
             messages.error(request, f"خطا در ثبت درخواست فروش: {str(e)}")
@@ -963,20 +968,20 @@ class OfflineView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/offline.html"
 
 
-class FactorPDFView(PlusLoginRequiredMixin, View):
+class SaleRequestPDFView(PlusLoginRequiredMixin, View):
     def get(self, request, pk=None, *args, **kwargs):
-        factor_id = pk or request.GET.get("id")
-        if not factor_id:
-            raise Http404("فاکتور مورد نظر یافت نشد.")
+        sale_request_id = pk or request.GET.get("id")
+        if not sale_request_id:
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
 
         # 1. Fetch Master Record
         master = (
             Salerequestmaster.objects.using("plus")
-            .filter(gsalerequestmasterid=factor_id)
+            .filter(gsalerequestmasterid=sale_request_id)
             .first()
         )
         if not master:
-            raise Http404("فاکتور مورد نظر یافت نشد.")
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
 
         # 2. Fetch Customer Info
         customer = None
@@ -1041,9 +1046,9 @@ class FactorPDFView(PlusLoginRequiredMixin, View):
             with open(logo_path, "rb") as image_file:
                 logo_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
-        factor_no = master.salerequestno or "factor"
+        sale_request_no = master.salerequestno or "sale_request"
         cust_name = customer.custname if (customer and customer.custname) else (master.requestman or "")
-        filename = f"درخواست فروش {cust_name} شماره {factor_no}.pdf".strip()
+        filename = f"درخواست فروش {cust_name} شماره {sale_request_no}.pdf".strip()
 
         context = {
             "master": master,
@@ -1065,6 +1070,6 @@ class FactorPDFView(PlusLoginRequiredMixin, View):
         }
 
         # 5. Render Server-Side HTML for jsPDF
-        return render(request, "core/factor_pdf.html", context)
+        return render(request, "core/sale_request_pdf.html", context)
     
     
