@@ -732,6 +732,13 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn('data-status="debtor"', html)
         self.assertIn('data-status="creditor"', html)
         self.assertIn('data-status="settled"', html)
+        self.assertIn('id="customerOrderSelect"', html)
+        self.assertIn('value="debt_desc"', html)
+        self.assertIn('value="debt_asc"', html)
+        self.assertIn('data-hesab="400000"', html)
+        self.assertIn('data-hesab="-250000"', html)
+        self.assertIn('data-hesab="0"', html)
+        self.assertEqual(response.context_data["current_order"], "name")
 
         # Verify initial ?status=creditor hides non-creditors on server render
         def _build_customers(*_args, **_kwargs):
@@ -812,4 +819,34 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
                 if c.is_initially_visible
             ],
             ["مشتری تسویه"],
+        )
+
+        # Verify ?order=debt_desc sorts customers by highest debt first (+400000 -> 0 -> -250000)
+        debt_desc_req = _attach_authenticated_session(
+            self.factory.get(f"{url}?order=debt_desc")
+        )
+        debt_desc_req.resolver_match = SimpleNamespace(url_name="customers")
+        debt_desc_resp = CustomersView.as_view()(debt_desc_req)
+        debt_desc_resp.render()
+        self.assertEqual(
+            debt_desc_resp.context_data["current_order"], "debt_desc"
+        )
+        self.assertEqual(
+            [c.custname for c in debt_desc_resp.context_data["customers"]],
+            ["مشتری بدهکار", "مشتری تسویه", "مشتری بستانکار"],
+        )
+
+        # Verify ?order=debt_asc sorts customers by lowest debt / highest credit first (-250000 -> 0 -> +400000)
+        debt_asc_req = _attach_authenticated_session(
+            self.factory.get(f"{url}?order=debt_asc")
+        )
+        debt_asc_req.resolver_match = SimpleNamespace(url_name="customers")
+        debt_asc_resp = CustomersView.as_view()(debt_asc_req)
+        debt_asc_resp.render()
+        self.assertEqual(
+            debt_asc_resp.context_data["current_order"], "debt_asc"
+        )
+        self.assertEqual(
+            [c.custname for c in debt_asc_resp.context_data["customers"]],
+            ["مشتری بستانکار", "مشتری تسویه", "مشتری بدهکار"],
         )
