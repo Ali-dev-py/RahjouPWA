@@ -7,7 +7,7 @@
     <meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
     <title>درخواست فروش - {{ master.salerequestno|default:'' }}</title>
-    <style id="factor-pdf-styles">
+    <style id="sale-request-pdf-styles">
         @page {
             size: A5 portrait;
             margin: 6mm 7mm 6mm 7mm;
@@ -179,7 +179,7 @@
 </head>
 <body>
 
-    <div id="invoice-pdf-container" data-filename="{{ pdf_filename|default:'factor.pdf' }}">
+    <div id="invoice-pdf-container" data-filename="{{ pdf_filename|default:'sale_request.pdf' }}">
         <!-- Header Section: Right (Logo) | Middle (Title) | Left (Data) -->
         <table class="header-table">
             <tr>
@@ -310,7 +310,7 @@
         </div>
     </div>
 
-    <!-- Direct PDF generation if factor_pdf.html is opened directly in browser -->
+    <!-- Direct PDF generation if sale_request_pdf.html is opened directly in browser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
@@ -318,7 +318,7 @@
             const container = document.getElementById('invoice-pdf-container');
             if (!container || !window.jspdf) return;
 
-            const filename = container.getAttribute('data-filename') || 'Factor.pdf';
+            const filename = container.getAttribute('data-filename') || 'sale_request.pdf';
 
             if (document.fonts && document.fonts.ready) {
                 await document.fonts.ready;
@@ -349,4 +349,15 @@
             pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
             heightLeft -= pdfHeight;
 
-            while 
+            while (heightLeft > 2) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
+
+            pdf.save(filename);
+        });
+    </script>
+</body>
+</html>

@@ -56,12 +56,12 @@ body {
 
 /* Hide only horizontal carousel scrollbars, never the page scrollbar. */
 .summary-scroller,
-.factor-filters {
+.sale-request-filters {
     scrollbar-width: none;
 }
 
 .summary-scroller::-webkit-scrollbar,
-.factor-filters::-webkit-scrollbar {
+.sale-request-filters::-webkit-scrollbar {
     display: none;
 }
 
@@ -165,7 +165,7 @@ textarea {
 .editor-card,
 .invoice-card,
 .activity-card,
-.factor-card {
+.sale-request-card {
     background: var(--rahjou-card);
     border-radius: 0.75rem;
     box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 4%);
@@ -781,8 +781,8 @@ textarea {
     opacity: 0.5;
 }
 
-/* Factor list */
-.factor-toolbar {
+/* Sale request list */
+.sale-request-toolbar {
     top: calc(var(--rahjou-header-height) + env(safe-area-inset-top, 0px));
     z-index: 1010;
     margin-inline: -1rem;
@@ -792,7 +792,7 @@ textarea {
     backdrop-filter: blur(0.75rem);
 }
 
-.factor-filters .nav-link {
+.sale-request-filters .nav-link {
     padding: 0.55rem 1rem;
     border-radius: 999px;
     color: #434654;
@@ -801,16 +801,16 @@ textarea {
     font-weight: 600;
 }
 
-.factor-filters .nav-link.active {
+.sale-request-filters .nav-link.active {
     color: #fff;
     background: var(--rahjou-primary);
 }
 
-.factor-card {
+.sale-request-card {
     transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
-.factor-card::before {
+.sale-request-card::before {
     position: absolute;
     top: 0;
     right: 0;
@@ -820,29 +820,29 @@ textarea {
     border-radius: 0 0.75rem 0.75rem 0;
 }
 
-.factor-card--approved::before {
+.sale-request-card--approved::before {
     background: var(--rahjou-primary);
 }
 
-.factor-card--pending::before {
+.sale-request-card--pending::before {
     background: #785900;
 }
 
-.factor-card--paid::before {
+.sale-request-card--paid::before {
     background: var(--rahjou-success);
 }
 
-.factor-card:hover,
-.factor-card:focus-within {
+.sale-request-card:hover,
+.sale-request-card:focus-within {
     box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 8%);
     transform: translateY(-0.0625rem);
 }
 
-.factor-card__amount {
+.sale-request-card__amount {
     font-size: 1.25rem;
 }
 
-.factor-card__download {
+.sale-request-card__download {
     width: 2.5rem;
     height: 2.5rem;
     display: inline-flex;
@@ -853,8 +853,8 @@ textarea {
     background: var(--rahjou-surface-mid);
 }
 
-/* Factor detail */
-.factor-status {
+/* Sale request detail */
+.sale-request-status {
     padding: 0.45rem 0.75rem;
     color: #fff;
     background: var(--rahjou-primary);
@@ -917,7 +917,7 @@ textarea {
     font-size: 1rem;
 }
 
-/* Factor editor */
+/* Sale request editor */
 .doc-switch {
     border-radius: 0.65rem;
     background: var(--rahjou-surface-low);
@@ -1078,11 +1078,11 @@ textarea {
     }
 
     .activity-card .card-body,
-    .factor-card .card-body {
+    .sale-request-card .card-body {
         padding: 0.8rem !important;
     }
 
-    .factor-card__amount {
+    .sale-request-card__amount {
         font-size: 1.05rem;
     }
 
@@ -1121,7 +1121,7 @@ textarea {
     .app-action-bar,
     .app-bottom-nav,
     .app-fab,
-    .factor-status,
+    .sale-request-status,
     .app-icon-button {
         display: none !important;
     }

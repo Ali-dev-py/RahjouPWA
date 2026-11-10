@@ -16,7 +16,7 @@
             <div class="d-flex justify-content-between align-items-end mb-3">
                 <h1 class="h4 fw-bold mb-0" id="summary-title">خلاصه وضعیت</h1>
                 <a class="app-link fw-semibold text-decoration-none"
-                   href="{% url 'core:factor_list' %}">گزارش کامل</a>
+                   href="{% url 'core:sale_request_list' %}">گزارش کامل</a>
             </div>
 
             <div class="summary-scroller d-flex gap-2 overflow-x-auto pb-3">
@@ -67,20 +67,20 @@
             <div class="d-flex justify-content-between align-items-end mb-3">
                 <h2 class="h5 fw-bold mb-0" id="recent-title">فعالیت‌های اخیر</h2>
                 <a class="small text-secondary text-decoration-none"
-                   href="{% url 'core:factor_list' %}">همه موارد</a>
+                   href="{% url 'core:sale_request_list' %}">همه موارد</a>
             </div>
 
             <div class="d-grid gap-2">
                 {% for item in recent_activities %}
                     <a class="card activity-card border-0 text-decoration-none"
-                       href="{% url 'core:factor_detail' %}?id={{ item.id }}">
+                       href="{% url 'core:sale_request_detail' %}?id={{ item.id }}">
                         <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
                             <div class="d-flex align-items-center gap-3 min-width-0">
                                 <span class="activity-card__icon material-symbols-outlined flex-shrink-0 text-primary" aria-hidden="true">
                                     description
                                 </span>
                                 <div class="min-width-0">
-                                    <strong class="d-block text-dark text-truncate">درخواست فروش {{ item.factor_no|persian_digits }}</strong>
+                                    <strong class="d-block text-dark text-truncate">درخواست فروش {{ item.sale_request_no|persian_digits }}</strong>
                                     <small class="text-secondary d-block text-truncate">{{ item.customer_name }} • {{ item.date|persian_digits }}</small>
                                 </div>
                             </div>
@@ -110,10 +110,10 @@
     </div>
 </main>
 
-<!-- Floating Action Button for New Factor -->
+<!-- Floating Action Button for New Sale Request -->
 <a class="btn app-fab d-flex align-items-center justify-content-center"
-   href="{% url 'core:factor_create' %}"
-   aria-label="ایجاد فاکتور جدید">
+   href="{% url 'core:sale_request_create' %}"
+   aria-label="ایجاد درخواست فروش جدید">
     <span class="material-symbols-outlined" aria-hidden="true">add</span>
 </a>
 

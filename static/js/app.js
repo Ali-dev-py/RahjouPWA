@@ -161,7 +161,7 @@ function setupPasswordToggles() {
     });
 }
 
-/** Keep the factor/prefactor segmented control accessible and visual only. */
+/** Keep the sale request/prefactor segmented control accessible and visual only. */
 function setupDocumentTypeSwitch() {
     const buttons = document.querySelectorAll("[data-document-type]");
     const input = document.querySelector("[data-document-type-input]");

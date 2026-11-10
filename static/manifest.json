@@ -63,9 +63,9 @@
       ]
     },
     {
-      "name": "فاکتور جدید",
-      "short_name": "فاکتور جدید",
-      "url": "/factors/new/?source=pwa-shortcut",
+      "name": "درخواست فروش جدید",
+      "short_name": "درخواست فروش",
+      "url": "/sale-requests/new/?source=pwa-shortcut",
       "icons": [
         {
           "src": "/static/icons/icon-192.png",
