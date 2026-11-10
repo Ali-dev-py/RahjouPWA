@@ -1,0 +1,449 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% load i18n_extras %}
+
+{% block title %}گردش حساب {{ customer.custname }} | رهجو{% endblock %}
+{% block body_class %}app-body page-customer-detail has-bottom-nav{% endblock %}
+
+{% block extra_css %}
+    <style>
+        .customer-detail-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.65rem;
+        }
+
+        .customer-tx-card--factor {
+            border-inline-start: 0.25rem solid var(--rahjou-primary, #0b57d0) !important;
+        }
+
+        .customer-tx-card--pay {
+            border-inline-start: 0.25rem solid #198754 !important;
+        }
+
+        .customer-detail-sort-select {
+            min-height: 2.4rem;
+            font-size: 0.82rem;
+            padding-block: 0.35rem;
+            padding-inline: 0.5rem 1.75rem;
+            cursor: pointer;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="جزئیات مشتری" back_url_name="core:customers" %}
+
+<main class="app-main container-fluid px-3">
+    <div class="app-content mx-auto">
+
+        <!-- Customer Profile & Financial Summary Card -->
+        <section class="card sale-request-card border-0 overflow-hidden mb-3" aria-label="اطلاعات و وضعیت حساب مشتری">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                    <div class="min-width-0">
+                        {% if customer.custno %}
+                            <small class="text-secondary d-block mb-1">
+                                کد مشتری: {{ customer.custno|persian_digits }}
+                            </small>
+                        {% endif %}
+                        <h1 class="h5 fw-bold mb-1 text-break">{{ customer.custname }}</h1>
+                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                            <span class="status-chip {% if has_visitor %}status-chip--approved{% else %}status-chip--neutral{% endif %}">
+                                {% if has_visitor %}
+                                    <span class="status-dot flex-shrink-0" aria-hidden="true"></span>
+                                {% endif %}
+                                <span>{{ visitor_name }}</span>
+                            </span>
+                            {% if group_name %}
+                                <span class="badge bg-light text-secondary border fw-normal px-2 py-1">
+                                    {{ group_name }}
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <a href="{% url 'core:customer_edit' pk=customer_pk %}?from=detail"
+                       class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1 rounded-pill px-3 py-1 flex-shrink-0">
+                        <span class="material-symbols-outlined fs-6" aria-hidden="true">edit</span>
+                        <span class="small fw-medium">ویرایش</span>
+                    </a>
+                </div>
+
+                {% if customer.mobile or customer.phone or customer.address %}
+                    <div class="bg-light rounded-3 p-2 px-3 mb-3 small">
+                        {% if customer.mobile or customer.phone %}
+                            {% with contact_phone=customer.mobile|default:customer.phone %}
+                                <div class="d-flex align-items-center justify-content-between gap-2 {% if customer.address %}mb-1 pb-1 border-bottom{% endif %}">
+                                    <span class="text-secondary d-inline-flex align-items-center gap-1">
+                                        <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">call</span>
+                                        شماره تماس:
+                                    </span>
+                                    <a href="tel:{{ contact_phone }}" class="fw-medium text-decoration-none" dir="ltr">
+                                        {{ contact_phone|persian_digits }}
+                                    </a>
+                                </div>
+                            {% endwith %}
+                        {% endif %}
+                        {% if customer.address %}
+                            <div class="text-secondary d-flex align-items-start gap-1 pt-1">
+                                <span class="material-symbols-outlined app-symbol-sm mt-1" aria-hidden="true">location_on</span>
+                                <span>{{ customer.address }}</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                <!-- Main Account Balance -->
+                <div class="d-flex justify-content-between align-items-center gap-2 pt-2 border-top mb-3">
+                    <div>
+                        <small class="text-secondary d-block mb-1">مانده حساب کل</small>
+                        <strong class="fs-5 {% if hesab > 0 %}text-danger{% elif hesab < 0 %}text-success{% else %}text-muted{% endif %}">
+                            {{ hesab|persian_digits|intcomma:False }}
+                        </strong>
+                        <small class="text-secondary">ریال</small>
+                    </div>
+                    {% if hesab > 0 %}
+                        <span class="badge bg-danger-subtle text-danger fw-medium px-3 py-2 rounded-pill">بدهکار</span>
+                    {% elif hesab < 0 %}
+                        <span class="badge bg-success-subtle text-success fw-medium px-3 py-2 rounded-pill">بستانکار</span>
+                    {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary fw-medium px-3 py-2 rounded-pill">تسویه</span>
+                    {% endif %}
+                </div>
+
+                <!-- Totals Breakdown: Factors vs Pays -->
+                <div class="customer-detail-summary-grid">
+                    <div class="rounded-3 p-2 px-3 border bg-white">
+                        <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+                            <small class="text-secondary">جمع فاکتورها</small>
+                            <span class="badge bg-primary-subtle text-primary rounded-pill fw-normal">
+                                {{ factors_count|persian_digits }}
+                            </span>
+                        </div>
+                        <strong class="small d-block text-dark text-truncate">
+                            {{ total_factors_amount|persian_digits|intcomma:False }} ریال
+                        </strong>
+                    </div>
+
+                    <div class="rounded-3 p-2 px-3 border bg-white">
+                        <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+                            <small class="text-secondary">جمع پرداختی‌ها</small>
+                            <span class="badge bg-success-subtle text-success rounded-pill fw-normal">
+                                {{ pays_count|persian_digits }}
+                            </span>
+                        </div>
+                        <strong class="small d-block text-success text-truncate">
+                            {{ total_pays_amount|persian_digits|intcomma:False }} ریال
+                        </strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sticky Filter & Date Ordering Toolbar -->
+        <section class="sale-request-toolbar sticky-top mb-3" aria-label="فیلتر و مرتب‌سازی فاکتورها و پرداختی‌ها">
+            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                <div class="sale-request-filters nav nav-pills flex-nowrap gap-2 overflow-x-auto pb-1"
+                     id="txTypeFilters"
+                     role="group"
+                     aria-label="نوع تراکنش">
+                    <button type="button"
+                            class="nav-link border-0 flex-shrink-0 {% if current_type == 'all' %}active{% endif %}"
+                            data-tx-filter="all"
+                            aria-pressed="{% if current_type == 'all' %}true{% else %}false{% endif %}">
+                        همه ({{ total_transactions_count|persian_digits }})
+                    </button>
+                    <button type="button"
+                            class="nav-link border-0 flex-shrink-0 {% if current_type == 'factor' %}active{% endif %}"
+                            data-tx-filter="factor"
+                            aria-pressed="{% if current_type == 'factor' %}true{% else %}false{% endif %}">
+                        فاکتورها ({{ factors_count|persian_digits }})
+                    </button>
+                    <button type="button"
+                            class="nav-link border-0 flex-shrink-0 {% if current_type == 'pay' %}active{% endif %}"
+                            data-tx-filter="pay"
+                            aria-pressed="{% if current_type == 'pay' %}true{% else %}false{% endif %}">
+                        پرداختی‌ها ({{ pays_count|persian_digits }})
+                    </button>
+                </div>
+
+                <div class="input-group app-input-group w-auto flex-shrink-0">
+                    <label class="input-group-text border-0 bg-transparent pe-1 ps-2" for="txDateOrderSelect">
+                        <span class="material-symbols-outlined fs-6" aria-hidden="true">swap_vert</span>
+                    </label>
+                    <select id="txDateOrderSelect"
+                            class="form-select border-0 bg-transparent shadow-none fw-medium customer-detail-sort-select"
+                            aria-label="مرتب‌سازی بر اساس تاریخ">
+                        <option value="date_desc" {% if current_order == 'date_desc' %}selected{% endif %}>جدیدترین</option>
+                        <option value="date_asc" {% if current_order == 'date_asc' %}selected{% endif %}>قدیمی‌ترین</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chronological List of Customer Pays & Factors -->
+        <section class="d-grid gap-2 mb-4" id="customerTransactionsList" aria-label="فهرست فاکتورها و پرداختی‌های مشتری">
+            {% for tx in transactions %}
+                {% if tx.kind == 'factor' %}
+                    <!-- Sale Factor Card (Clickable -> Factor Detail Page) -->
+                    <article class="card sale-request-card customer-tx-card customer-tx-card--factor border-0 position-relative overflow-hidden{% if not tx.is_initially_visible %} d-none{% endif %}"
+                             data-tx-kind="factor"
+                             data-has-date="{% if tx.has_date %}1{% else %}0{% endif %}"
+                             data-sort-token="{{ tx.sort_token }}"
+                             data-seq="{{ tx.sort_seq }}">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                <div class="min-width-0">
+                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                        <span class="material-symbols-outlined fs-6 text-primary" aria-hidden="true">receipt_long</span>
+                                        <small class="fw-bold text-primary">فاکتور فروش</small>
+                                        {% if tx.number %}
+                                            <small class="text-secondary">#{{ tx.number|persian_digits }}</small>
+                                        {% endif %}
+                                    </div>
+                                    <h2 class="h6 fw-bold mb-0 text-truncate">
+                                        {% if tx.detail_url %}
+                                            <a class="stretched-link text-reset text-decoration-none"
+                                               href="{{ tx.detail_url }}">
+                                                فاکتور شماره {{ tx.number|default:"—"|persian_digits }}
+                                            </a>
+                                        {% else %}
+                                            فاکتور شماره {{ tx.number|default:"—"|persian_digits }}
+                                        {% endif %}
+                                    </h2>
+                                    {% if tx.description %}
+                                        <small class="text-secondary d-block text-truncate mt-1">{{ tx.description }}</small>
+                                    {% endif %}
+                                </div>
+                                <span class="status-chip {{ tx.chip_class }} flex-shrink-0">
+                                    {% if tx.dot_class %}
+                                        <span class="{{ tx.dot_class }}" aria-hidden="true"></span>
+                                    {% endif %}
+                                    {{ tx.status_name }}
+                                </span>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top mt-2">
+                                <span class="small text-secondary d-inline-flex align-items-center gap-1">
+                                    <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
+                                    {{ tx.date|persian_digits }}
+                                    {% if tx.time %}
+                                        <span class="me-1">{{ tx.time|persian_digits }}</span>
+                                    {% endif %}
+                                </span>
+
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="text-end">
+                                        <strong class="text-dark">
+                                            {{ tx.amount|persian_digits|intcomma:False }}
+                                        </strong>
+                                        <small class="text-secondary">ریال</small>
+                                    </div>
+                                    <span class="sale-request-card__download material-symbols-outlined text-primary"
+                                          aria-hidden="true"
+                                          title="مشاهده جزئیات فاکتور">chevron_left</span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                {% else %}
+                    <!-- Customer Payment Card (Tblsanadrad Credit) -->
+                    <article class="card sale-request-card customer-tx-card customer-tx-card--pay border-0 position-relative overflow-hidden{% if not tx.is_initially_visible %} d-none{% endif %}"
+                             data-tx-kind="pay"
+                             data-has-date="{% if tx.has_date %}1{% else %}0{% endif %}"
+                             data-sort-token="{{ tx.sort_token }}"
+                             data-seq="{{ tx.sort_seq }}">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                <div class="min-width-0">
+                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                        <span class="material-symbols-outlined fs-6 text-success" aria-hidden="true">payments</span>
+                                        <small class="fw-bold text-success">پرداختی مشتری</small>
+                                        {% if tx.number %}
+                                            <small class="text-secondary">(سند {{ tx.number|persian_digits }})</small>
+                                        {% endif %}
+                                    </div>
+                                    <p class="mb-0 fw-medium text-dark small text-break">
+                                        {{ tx.description }}
+                                    </p>
+                                </div>
+                                <span class="badge bg-success-subtle text-success fw-normal px-2 py-1 flex-shrink-0">
+                                    واریزی / بستانکار
+                                </span>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top mt-2">
+                                <span class="small text-secondary d-inline-flex align-items-center gap-1">
+                                    <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
+                                    {{ tx.date|persian_digits }}
+                                    {% if tx.time %}
+                                        <span class="me-1">{{ tx.time|persian_digits }}</span>
+                                    {% endif %}
+                                </span>
+
+                                <div class="text-end">
+                                    <strong class="text-success">
+                                        {{ tx.amount|persian_digits|intcomma:False }}
+                                    </strong>
+                                    <small class="text-secondary">ریال</small>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                {% endif %}
+            {% empty %}
+                <div class="card customer-empty-state border-0 text-center mt-2">
+                    <div class="card-body px-4 py-5">
+                        <span class="customer-empty-state__icon material-symbols-outlined d-block mb-3" aria-hidden="true">receipt_long</span>
+                        <h2 class="h6 fw-bold">فاکتور یا پرداختی ثبت نشده است</h2>
+                        <p class="text-secondary small mb-0">
+                            تاکنون هیچ فاکتور فروش یا پرداختی برای این مشتری ثبت نشده است.
+                        </p>
+                    </div>
+                </div>
+            {% endfor %}
+
+            <!-- Dynamic Empty State When Filtering -->
+            <div id="txEmptyFilterState"
+                 class="card customer-empty-state border-0 text-center mt-2{% if visible_transactions_count > 0 or not transactions %} d-none{% endif %}">
+                <div class="card-body px-4 py-5">
+                    <span class="customer-empty-state__icon material-symbols-outlined d-block mb-3" aria-hidden="true">filter_list_off</span>
+                    <h2 class="h6 fw-bold">موردی در این بخش وجود ندارد</h2>
+                    <p class="text-secondary small mb-0" id="txEmptyFilterText">
+                        هیچ موردی مطابق فیلتر انتخاب‌شده ثبت نشده است.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</main>
+
+{% include "partials/_bottom_nav.html" %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const filterButtons = document.querySelectorAll('[data-tx-filter]');
+        const orderSelect = document.getElementById('txDateOrderSelect');
+        const txList = document.getElementById('customerTransactionsList');
+        const txCards = Array.from(document.querySelectorAll('.customer-tx-card'));
+        const emptyFilterState = document.getElementById('txEmptyFilterState');
+        const emptyFilterText = document.getElementById('txEmptyFilterText');
+
+        let activeFilter = '{{ current_type|default:"all"|escapejs }}';
+        let activeOrder = orderSelect ? orderSelect.value : '{{ current_order|default:"date_desc"|escapejs }}';
+
+        function syncUrlParams() {
+            const url = new URL(window.location.href);
+            if (activeFilter === 'all') {
+                url.searchParams.delete('type');
+            } else {
+                url.searchParams.set('type', activeFilter);
+            }
+
+            if (activeOrder === 'date_desc') {
+                url.searchParams.delete('order');
+            } else {
+                url.searchParams.set('order', activeOrder);
+            }
+
+            window.history.replaceState({}, '', url);
+        }
+
+        function sortTransactions() {
+            if (!txList || txCards.length === 0) return;
+
+            const sorted = txCards.slice().sort((a, b) => {
+                const hasDateA = a.getAttribute('data-has-date') === '1';
+                const hasDateB = b.getAttribute('data-has-date') === '1';
+                if (hasDateA !== hasDateB) {
+                    return hasDateA ? -1 : 1;
+                }
+
+                const tokenA = a.getAttribute('data-sort-token') || '';
+                const tokenB = b.getAttribute('data-sort-token') || '';
+                if (tokenA !== tokenB) {
+                    if (activeOrder === 'date_asc') {
+                        return tokenA.localeCompare(tokenB);
+                    }
+                    return tokenB.localeCompare(tokenA);
+                }
+
+                const kindA = a.getAttribute('data-tx-kind') === 'factor' ? 0 : 1;
+                const kindB = b.getAttribute('data-tx-kind') === 'factor' ? 0 : 1;
+                if (kindA !== kindB) {
+                    return kindA - kindB;
+                }
+
+                const seqA = parseInt(a.getAttribute('data-seq') || '0', 10);
+                const seqB = parseInt(b.getAttribute('data-seq') || '0', 10);
+                return seqA - seqB;
+            });
+
+            const fragment = document.createDocumentFragment();
+            sorted.forEach(card => fragment.appendChild(card));
+            if (emptyFilterState && emptyFilterState.parentNode === txList) {
+                txList.insertBefore(fragment, emptyFilterState);
+            } else {
+                txList.appendChild(fragment);
+            }
+        }
+
+        function applyFilters() {
+            if (txCards.length === 0) return;
+            let visibleCount = 0;
+
+            txCards.forEach(card => {
+                const kind = card.getAttribute('data-tx-kind');
+                const matches = activeFilter === 'all' || kind === activeFilter;
+                if (matches) {
+                    card.classList.remove('d-none');
+                    visibleCount++;
+                } else {
+                    card.classList.add('d-none');
+                }
+            });
+
+            if (emptyFilterState) {
+                if (visibleCount === 0) {
+                    emptyFilterState.classList.remove('d-none');
+                    if (emptyFilterText) {
+                        if (activeFilter === 'factor') {
+                            emptyFilterText.textContent = 'هیچ فاکتور فروشی برای این مشتری ثبت نشده است.';
+                        } else if (activeFilter === 'pay') {
+                            emptyFilterText.textContent = 'هیچ پرداختی برای این مشتری ثبت نشده است.';
+                        } else {
+                            emptyFilterText.textContent = 'هیچ موردی مطابق فیلتر انتخاب‌شده ثبت نشده است.';
+                        }
+                    }
+                } else {
+                    emptyFilterState.classList.add('d-none');
+                }
+            }
+        }
+
+        filterButtons.forEach(btn => {
+            btn.addEventListener('click', function () {
+                activeFilter = this.getAttribute('data-tx-filter') || 'all';
+                filterButtons.forEach(other => {
+                    const isCurrent = other === this;
+                    other.classList.toggle('active', isCurrent);
+                    other.setAttribute('aria-pressed', isCurrent ? 'true' : 'false');
+                });
+                applyFilters();
+                syncUrlParams();
+            });
+        });
+
+        if (orderSelect) {
+            orderSelect.addEventListener('change', function () {
+                activeOrder = this.value || 'date_desc';
+                sortTransactions();
+                applyFilters();
+                syncUrlParams();
+            });
+        }
+    });
+</script>
+{% endblock %}

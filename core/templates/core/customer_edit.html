@@ -22,7 +22,7 @@
                     {% endif %}
                 </p>
             </div>
-            <a href="{% url 'core:customers' %}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-1 rounded-pill px-3 py-1">
+            <a href="{{ cancel_url|default:'' }}{% if not cancel_url %}{% url 'core:customers' %}{% endif %}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-1 rounded-pill px-3 py-1">
                 <span class="material-symbols-outlined fs-5">arrow_forward</span>
                 <span class="small">بازگشت</span>
             </a>
@@ -46,6 +46,9 @@
                 <!-- Form -->
                 <form method="post" action="{% url 'core:customer_edit' pk=edit_pk %}">
                     {% csrf_token %}
+                    {% if return_to %}
+                        <input type="hidden" name="return_to" value="{{ return_to }}">
+                    {% endif %}
                     
                     <div class="d-grid gap-3">
                         
@@ -108,7 +111,7 @@
 
                         <!-- Form Buttons -->
                         <div class="d-flex align-items-center justify-content-end gap-2 pt-3 border-top mt-2">
-                            <a href="{% url 'core:customers' %}" class="btn btn-light rounded-pill px-4">
+                            <a href="{{ cancel_url|default:'' }}{% if not cancel_url %}{% url 'core:customers' %}{% endif %}" class="btn btn-light rounded-pill px-4">
                                 انصراف
                             </a>
                             <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2 rounded-pill px-4">

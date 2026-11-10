@@ -13,6 +13,7 @@ from django.test import RequestFactory, SimpleTestCase
 from django.urls import NoReverseMatch, reverse
 
 from core.views import (
+    CustomerDetailView,
     CustomerEditView,
     CustomersView,
     DashboardView,
@@ -71,6 +72,10 @@ class RouteAndPWASmokeTests(SimpleTestCase):
         self.assertEqual(
             reverse("core:customer_edit", kwargs={"pk": "CUST-GUID-1"}),
             "/customers/CUST-GUID-1/edit/",
+        )
+        self.assertEqual(
+            reverse("core:customer_detail", kwargs={"pk": "CUST-GUID-1"}),
+            "/customers/CUST-GUID-1/",
         )
         self.assertEqual(reverse("core:pre_factor_list"), "/pre-factors/")
         self.assertEqual(
@@ -134,6 +139,7 @@ class RouteAndPWASmokeTests(SimpleTestCase):
             reverse("core:factor_detail"),
             reverse("core:factor_detail", kwargs={"pk": "FAC-1"}),
             reverse("core:factor_pdf", kwargs={"pk": "FAC-1"}),
+            reverse("core:customer_detail", kwargs={"pk": "CUST-1"}),
             reverse("core:customer_edit", kwargs={"pk": "CUST-1"}),
         ]
         for url in protected_urls:
@@ -892,6 +898,10 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             ["مشتری بستانکار", "مشتری تسویه", "مشتری بدهکار"],
         )
         self.assertIn(
+            reverse("core:customer_detail", kwargs={"pk": "CUST-GUID-1"}),
+            html,
+        )
+        self.assertIn(
             reverse("core:customer_edit", kwargs={"pk": "CUST-GUID-1"}),
             html,
         )
@@ -1387,3 +1397,199 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         )
         with self.assertRaises(Http404):
             FactorPDFView.as_view()(pdf_req, pk="MISSING-FAC")
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Salefactordetail")
+    @patch("core.views.Salefactorstatus")
+    @patch("core.views.Salefactormaster")
+    @patch("core.views.Tblsanad")
+    @patch("core.views.Tblsanadrad")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Visitortocustomer")
+    @patch("core.views.Customergroup")
+    @patch("core.views.Customer2Group")
+    @patch("core.views.Tblcustomer")
+    def test_customer_detail_orders_pays_and_factors_by_date_and_links_factor(
+        self,
+        mock_customer,
+        mock_c2g,
+        mock_group,
+        mock_v2c,
+        mock_visitors,
+        mock_sanadrad,
+        mock_sanad,
+        mock_sf_master,
+        mock_sf_status,
+        mock_sf_detail,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            customerid=77,
+            gcustomerid="CUST-GUID-77",
+            gsubdetailid="SUB-GUID-77",
+            custno="177",
+            custname="بازرگانی سپهر",
+            mobile="09121112233",
+            phone="",
+            address="تهران، خیابان شریعتی",
+        )
+        mock_c2g.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            gcustomergroupid="GRP-1",
+            customergroupid=1,
+        )
+        mock_group.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            groupname="مشتریان ویژه"
+        )
+        mock_v2c.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            gvisitorid="VIS-1"
+        )
+        mock_visitors.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            vizitorname="رضا محمدی",
+            personname="",
+        )
+
+        # Balance aggregate: 1,500,000 debit - 600,000 credit = +900,000 (بدهکار)
+        sanadrad_qs = MagicMock()
+        mock_sanadrad.objects.using.return_value.filter.side_effect = [
+            sanadrad_qs,
+            [
+                SimpleNamespace(
+                    gsanadradid="RAD-1",
+                    gsanadid_id="SANAD-1",
+                    credit=Decimal("200000"),
+                    description="واریز نقدی اول",
+                    serialid=10,
+                    createddate=None,
+                ),
+                SimpleNamespace(
+                    gsanadradid="RAD-2",
+                    gsanadid_id="SANAD-2",
+                    credit=Decimal("400000"),
+                    description="حواله بانکی دوم",
+                    serialid=20,
+                    createddate=None,
+                ),
+            ],
+            sanadrad_qs,
+            [
+                SimpleNamespace(
+                    gsanadradid="RAD-1",
+                    gsanadid_id="SANAD-1",
+                    credit=Decimal("200000"),
+                    description="واریز نقدی اول",
+                    serialid=10,
+                    createddate=None,
+                ),
+                SimpleNamespace(
+                    gsanadradid="RAD-2",
+                    gsanadid_id="SANAD-2",
+                    credit=Decimal("400000"),
+                    description="حواله بانکی دوم",
+                    serialid=20,
+                    createddate=None,
+                ),
+            ],
+        ]
+        sanadrad_qs.aggregate.return_value = {
+            "total_debit": Decimal("1500000"),
+            "total_credit": Decimal("600000"),
+        }
+
+        mock_sanad.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(
+                gsanadid="sanad-1",
+                sanadno="501",
+                sanaddate="1405/01/10",
+                sanadtime="09:00",
+                sanaddesc="",
+            ),
+            SimpleNamespace(
+                gsanadid="sanad-2",
+                sanadno="505",
+                sanaddate="1405/02/20",
+                sanadtime="15:30",
+                sanaddesc="",
+            ),
+        ]
+
+        mock_sf_master.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(
+                gsalefactormasterid="FAC-GUID-301",
+                salefactorno="301",
+                salefactordate="1405/02/05",
+                salefactortime="11:00",
+                createddate="1405/02/05",
+                salefactorstatuscode=1,
+                discount=Decimal("50000"),
+                salefactordesc="ارسال فوری",
+            )
+        ]
+        mock_sf_status.objects.using.return_value.all.return_value = [
+            SimpleNamespace(
+                salefactorstatuscode=1, salefactorstatusname="قطعی شده"
+            )
+        ]
+        mock_sf_detail.objects.using.return_value.filter.return_value.values.return_value.annotate.return_value = [
+            {
+                "gsalefactormasterid": "fac-guid-301",
+                "line_net": Decimal("1550000"),
+            }
+        ]
+
+        detail_url = reverse(
+            "core:customer_detail", kwargs={"pk": "CUST-GUID-77"}
+        )
+        req = _attach_authenticated_session(self.factory.get(detail_url))
+        req.resolver_match = SimpleNamespace(url_name="customer_detail")
+        resp = CustomerDetailView.as_view()(req, pk="CUST-GUID-77")
+        resp.render()
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context_data["hesab"], 900000)
+        self.assertEqual(resp.context_data["status_name"], "بدهکار")
+        self.assertEqual(resp.context_data["total_pays_amount"], 600000)
+        self.assertEqual(resp.context_data["total_factors_amount"], 1500000)
+
+        # Default order is newest first: 1405/02/20 (pay) -> 1405/02/05 (factor) -> 1405/01/10 (pay)
+        txs = resp.context_data["transactions"]
+        self.assertEqual(
+            [(t["kind"], t["date"]) for t in txs],
+            [
+                ("pay", "1405/02/20"),
+                ("factor", "1405/02/05"),
+                ("pay", "1405/01/10"),
+            ],
+        )
+
+        html = resp.content.decode("utf-8")
+        expected_factor_link = (
+            f"{reverse('core:factor_detail', kwargs={'pk': 'FAC-GUID-301'})}"
+            "?from_customer=CUST-GUID-77"
+        )
+        self.assertIn(expected_factor_link, html)
+        self.assertIn("حواله بانکی دوم", html)
+
+        # Verify ?order=date_asc orders oldest first
+        asc_req = _attach_authenticated_session(
+            self.factory.get(f"{detail_url}?order=date_asc")
+        )
+        asc_req.resolver_match = SimpleNamespace(url_name="customer_detail")
+        asc_resp = CustomerDetailView.as_view()(asc_req, pk="CUST-GUID-77")
+        self.assertEqual(
+            [(t["kind"], t["date"]) for t in asc_resp.context_data["transactions"]],
+            [
+                ("pay", "1405/01/10"),
+                ("factor", "1405/02/05"),
+                ("pay", "1405/02/20"),
+            ],
+        )
+
+        # Missing customer raises Http404
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = (
+            None
+        )
+        with self.assertRaises(Http404):
+            CustomerDetailView.as_view()(req, pk="MISSING-CUST")

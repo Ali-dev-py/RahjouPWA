@@ -156,7 +156,7 @@
                                 <h2 class="h5 fw-bold mb-0 mt-1 text-truncate customer-name">
                                     {% if customer.edit_pk %}
                                         <a class="stretched-link text-reset text-decoration-none"
-                                           href="{% url 'core:customer_edit' pk=customer.edit_pk %}">{{ customer.custname }}</a>
+                                           href="{% url 'core:customer_detail' pk=customer.edit_pk %}">{{ customer.custname }}</a>
                                     {% else %}
                                         {{ customer.custname }}
                                     {% endif %}
@@ -198,9 +198,12 @@
                                     <span class="badge bg-secondary-subtle text-secondary fw-normal px-2 py-1">تسویه</span>
                                 {% endif %}
                                 {% if customer.edit_pk %}
-                                    <span class="sale-request-card__download material-symbols-outlined text-secondary fs-5"
-                                          aria-hidden="true"
-                                          title="ویرایش اطلاعات مشتری">edit</span>
+                                    <a href="{% url 'core:customer_edit' pk=customer.edit_pk %}"
+                                       class="sale-request-card__download text-secondary text-decoration-none position-relative z-2"
+                                       title="ویرایش اطلاعات مشتری"
+                                       aria-label="ویرایش {{ customer.custname }}">
+                                        <span class="material-symbols-outlined fs-5" aria-hidden="true">edit</span>
+                                    </a>
                                 {% endif %}
                             </div>
                         </div>
