@@ -154,8 +154,12 @@
                         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                             <div class="min-width-0">                                
                                 <h2 class="h5 fw-bold mb-0 mt-1 text-truncate customer-name">
-                                    <a class="stretched-link text-reset text-decoration-none"
-                                       href="{% url 'core:dashboard' %}">{{ customer.custname }}</a>
+                                    {% if customer.edit_pk %}
+                                        <a class="stretched-link text-reset text-decoration-none"
+                                           href="{% url 'core:customer_edit' pk=customer.edit_pk %}">{{ customer.custname }}</a>
+                                    {% else %}
+                                        {{ customer.custname }}
+                                    {% endif %}
                                 </h2>
                                 {% if customer.mobile or customer.phone %}
                                     <small class="text-muted d-block mt-1">
@@ -184,14 +188,19 @@
                                 </div>
                             </span>
 
-                            <!-- Accounting Status Badge -->
-                            <div>
+                            <!-- Accounting Status Badge & Edit Action -->
+                            <div class="d-flex align-items-center gap-2">
                                 {% if customer.hesab > 0 %}
                                     <span class="badge bg-danger-subtle text-danger fw-normal px-2 py-1">بدهکار</span>
                                 {% elif customer.hesab < 0 %}
                                     <span class="badge bg-success-subtle text-success fw-normal px-2 py-1">بستانکار</span>
                                 {% else %}
                                     <span class="badge bg-secondary-subtle text-secondary fw-normal px-2 py-1">تسویه</span>
+                                {% endif %}
+                                {% if customer.edit_pk %}
+                                    <span class="sale-request-card__download material-symbols-outlined text-secondary fs-5"
+                                          aria-hidden="true"
+                                          title="ویرایش اطلاعات مشتری">edit</span>
                                 {% endif %}
                             </div>
                         </div>
