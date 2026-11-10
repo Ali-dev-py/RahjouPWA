@@ -1,28 +1,36 @@
 {% with current=request.resolver_match.url_name %}
 <nav class="app-bottom-nav fixed-bottom" aria-label="پیمایش اصلی">
-    <div class="container-fluid app-bottom-nav__inner">
+    <div class="container-fluid app-bottom-nav__inner px-1">
         <a class="app-bottom-nav__link{% if current == 'dashboard' %} is-active{% endif %}"
            href="{% url 'core:dashboard' %}"
            {% if current == 'dashboard' %}aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">home</span>
             <span>خانه</span>
         </a>
-        <a class="app-bottom-nav__link{% if current == 'sale_request_list' %} is-active{% endif %}"
+        <a class="app-bottom-nav__link{% if current == 'sale_request_list' or current == 'sale_request_detail' or current == 'sale_request_create' %} is-active{% endif %}"
            href="{% url 'core:sale_request_list' %}"
            {% if current == 'sale_request_list' %}aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">description</span>
             <span>درخواست فروش</span>
         </a>
-        <a class="app-bottom-nav__link"
-           href="{% url 'core:customers' %}">
+        <a class="app-bottom-nav__link{% if current == 'pre_factor_list' or current == 'pre_factor_detail' %} is-active{% endif %}"
+           href="{% url 'core:pre_factor_list' %}"
+           {% if current == 'pre_factor_list' %}aria-current="page"{% endif %}>
+            <span class="material-symbols-outlined" aria-hidden="true">request_quote</span>
+            <span>پیش‌فاکتور</span>
+        </a>
+        <a class="app-bottom-nav__link{% if current == 'factor_list' or current == 'factor_detail' %} is-active{% endif %}"
+           href="{% url 'core:factor_list' %}"
+           {% if current == 'factor_list' %}aria-current="page"{% endif %}>
+            <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+            <span>فاکتور فروش</span>
+        </a>
+        <a class="app-bottom-nav__link{% if current == 'customers' or current == 'customer_create' or current == 'customer_edit' %} is-active{% endif %}"
+           href="{% url 'core:customers' %}"
+           {% if current == 'customers' %}aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">group</span>
             <span>مشتریان</span>
         </a>
-        {% comment %} <a class="app-bottom-nav__link"
-           href="{% url 'core:dashboard' %}#profile-placeholder">
-            <span class="material-symbols-outlined" aria-hidden="true">person_outline</span>
-            <span>پروفایل</span>
-        </a> {% endcomment %}
     </div>
 </nav>
 {% endwith %}

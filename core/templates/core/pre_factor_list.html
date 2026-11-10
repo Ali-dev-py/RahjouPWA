@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% load i18n_extras %}
+
+{% block title %}پیش‌فاکتورها | رهجو{% endblock %}
+{% block body_class %}app-body page-pre-factor-list has-bottom-nav{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="پیش‌فاکتورها" %}
+
+<main class="app-main container-fluid px-3">
+    <div class="app-content mx-auto">
+        <!-- Toolbar: Search & Dynamic Status Tabs -->
+        <section class="sale-request-toolbar sticky-top" aria-label="جستجو و فیلتر پیش‌فاکتورها">
+            <form action="{% url 'core:pre_factor_list' %}" method="get" role="search">
+                <input type="hidden" name="status" value="{{ current_status }}">
+                <div class="input-group app-search">
+                    <span class="input-group-text border-0 bg-transparent">
+                        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                    </span>
+                    <input class="form-control border-0 bg-transparent"
+                           type="search"
+                           name="q"
+                           value="{{ query|default:'' }}"
+                           aria-label="جستجوی پیش‌فاکتور"
+                           placeholder="جستجوی پیش‌فاکتور (شماره، نام مشتری...)">
+                    {% if query %}
+                        <a href="?status={{ current_status }}" class="btn border-0 text-secondary d-flex align-items-center" aria-label="پاک کردن جستجو">
+                            <span class="material-symbols-outlined fs-5">close</span>
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+
+            <!-- Dynamic Status Filter Tabs from DB -->
+            <div class="sale-request-filters nav nav-pills flex-nowrap gap-2 overflow-x-auto mt-3 pb-1" role="group" aria-label="وضعیت پیش‌فاکتور">
+                <a href="?status=all{% if query %}&q={{ query }}{% endif %}"
+                   class="nav-link flex-shrink-0 text-decoration-none {% if current_status == 'all' or not current_status %}active{% endif %}">
+                    همه
+                </a>
+                {% for status in statuses %}
+                    <a href="?status={{ status.prefactorstatuscode }}{% if query %}&q={{ query }}{% endif %}"
+                       class="nav-link flex-shrink-0 text-decoration-none {% if current_status == status.prefactorstatuscode|stringformat:'s' %}active{% endif %}">
+                        {{ status.prefactorstatusname }}
+                    </a>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Pre-Factors List Header & Counter -->
+        <div class="d-flex align-items-center justify-content-between mt-4 mb-3">
+            <div>
+                <h1 class="h5 fw-bold mb-1">فهرست پیش‌فاکتورها</h1>
+                <p class="text-secondary small mb-0">
+                    {% if query %}
+                        نتایج جست‌وجو برای «{{ query }}»
+                    {% else %}
+                        فهرست پیش‌فاکتورهای ثبت‌شده
+                    {% endif %}
+                </p>
+            </div>
+            <span class="customer-count rounded-pill">
+                {{ pre_factors|length|persian_digits }} مورد
+            </span>
+        </div>
+
+        <!-- Pre-Factor Cards List -->
+        <section class="d-grid gap-3" aria-label="فهرست پیش‌فاکتورها">
+            {% for pre_factor in pre_factors %}
+                <article class="card sale-request-card border-0 position-relative overflow-hidden">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div class="min-width-0">
+                                <small class="text-secondary d-block">پیش‌فاکتور {{ pre_factor.number|persian_digits }}</small>
+                                <h2 class="h5 fw-bold mb-0 mt-1 text-truncate">
+                                    <a class="stretched-link text-reset text-decoration-none"
+                                       href="{% url 'core:pre_factor_detail' pk=pre_factor.id %}">{{ pre_factor.customer_name }}</a>
+                                </h2>
+                            </div>
+                            <span class="status-chip {{ pre_factor.chip_class }} flex-shrink-0">
+                                {% if pre_factor.dot_class %}
+                                    <span class="{{ pre_factor.dot_class }}" aria-hidden="true"></span>
+                                {% endif %}
+                                {{ pre_factor.status_name }}
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-end gap-3">
+                            <span class="small text-secondary d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
+                                {{ pre_factor.date|persian_digits }}
+                            </span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span class="sale-request-card__download material-symbols-outlined text-secondary" aria-hidden="true">visibility</span>
+                            </span>
+                        </div>
+                    </div>
+                </article>
+            {% empty %}
+                <!-- Empty State -->
+                <div class="card customer-empty-state border-0 text-center mt-4">
+                    <div class="card-body px-4 py-5">
+                        <span class="customer-empty-state__icon material-symbols-outlined d-block mb-3" aria-hidden="true">request_quote</span>
+                        <h2 class="h5 fw-bold">پیش‌فاکتوری یافت نشد</h2>
+                        <p class="text-secondary mb-0">
+                            {% if query %}
+                                هیچ پیش‌فاکتوری با مشخصات «{{ query }}» پیدا نشد.
+                            {% else %}
+                                در حال حاضر هیچ پیش‌فاکتوری در این وضعیت ثبت نشده است.
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            {% endfor %}
+        </section>
+    </div>
+</main>
+
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

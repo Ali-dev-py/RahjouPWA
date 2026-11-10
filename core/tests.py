@@ -16,6 +16,12 @@ from core.views import (
     CustomerEditView,
     CustomersView,
     DashboardView,
+    FactorDetailView,
+    FactorListView,
+    FactorPDFView,
+    PreFactorDetailView,
+    PreFactorListView,
+    PreFactorPDFView,
     SaleRequestCreateView,
     SaleRequestDetailView,
     SaleRequestListView,
@@ -66,17 +72,38 @@ class RouteAndPWASmokeTests(SimpleTestCase):
             reverse("core:customer_edit", kwargs={"pk": "CUST-GUID-1"}),
             "/customers/CUST-GUID-1/edit/",
         )
+        self.assertEqual(reverse("core:pre_factor_list"), "/pre-factors/")
+        self.assertEqual(
+            reverse("core:pre_factor_detail"),
+            "/pre-factors/detail/",
+        )
+        self.assertEqual(
+            reverse("core:pre_factor_detail", kwargs={"pk": "PF-GUID-1"}),
+            "/pre-factors/detail/PF-GUID-1/",
+        )
+        self.assertEqual(
+            reverse("core:pre_factor_pdf", kwargs={"pk": "PF-GUID-1"}),
+            "/pre-factors/PF-GUID-1/pdf/",
+        )
+        self.assertEqual(reverse("core:factor_list"), "/factors/")
+        self.assertEqual(reverse("core:factor_detail"), "/factors/detail/")
+        self.assertEqual(
+            reverse("core:factor_detail", kwargs={"pk": "FAC-GUID-1"}),
+            "/factors/detail/FAC-GUID-1/",
+        )
+        self.assertEqual(
+            reverse("core:factor_pdf", kwargs={"pk": "FAC-GUID-1"}),
+            "/factors/FAC-GUID-1/pdf/",
+        )
 
-    def test_legacy_factor_route_names_are_removed(self) -> None:
-        for legacy_name in (
-            "core:factor_list",
-            "core:factor_detail",
+    def test_pre_factor_and_factor_have_no_create_routes(self) -> None:
+        for absent_create_name in (
+            "core:pre_factor_create",
             "core:factor_create",
-            "core:factor_pdf",
         ):
-            with self.subTest(route=legacy_name):
+            with self.subTest(route=absent_create_name):
                 with self.assertRaises(NoReverseMatch):
-                    reverse(legacy_name)
+                    reverse(absent_create_name)
 
     def test_public_pages_render(self) -> None:
         public_pages = {
@@ -99,6 +126,14 @@ class RouteAndPWASmokeTests(SimpleTestCase):
             reverse("core:sale_request_detail", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_pdf", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_create"),
+            reverse("core:pre_factor_list"),
+            reverse("core:pre_factor_detail"),
+            reverse("core:pre_factor_detail", kwargs={"pk": "PF-1"}),
+            reverse("core:pre_factor_pdf", kwargs={"pk": "PF-1"}),
+            reverse("core:factor_list"),
+            reverse("core:factor_detail"),
+            reverse("core:factor_detail", kwargs={"pk": "FAC-1"}),
+            reverse("core:factor_pdf", kwargs={"pk": "FAC-1"}),
             reverse("core:customer_edit", kwargs={"pk": "CUST-1"}),
         ]
         for url in protected_urls:
@@ -1040,3 +1075,315 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertEqual(c2g_obj.customergroupid, 1)
         self.assertEqual(c2g_obj.gcustomergroupid, "GRP-GUID-1")
         c2g_obj.save.assert_called_once()
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Prefactormaster")
+    @patch("core.views.Prefactorstatus")
+    def test_pre_factor_list_view_and_bottom_nav(
+        self,
+        mock_pf_status,
+        mock_pf_master,
+        mock_customer,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_pf_status.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                prefactorstatuscode=1, prefactorstatusname="ثبت اولیه"
+            ),
+            SimpleNamespace(
+                prefactorstatuscode=2, prefactorstatusname="تایید شده"
+            ),
+        ]
+        mock_pf_master.objects.using.return_value.filter.return_value.order_by.return_value = [
+            SimpleNamespace(
+                gprefactormasterid="PF-GUID-100",
+                prefactorno="000501",
+                prefactordate="1405/02/01",
+                createddate="1405/02/01",
+                gcustomerid="CUST-GUID-1",
+                requestman="",
+                prefactorstatuscode=2,
+            )
+        ]
+        mock_customer.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(gcustomerid="cust-guid-1", custname="شرکت سپهر")
+        ]
+
+        request = _attach_authenticated_session(
+            self.factory.get(reverse("core:pre_factor_list"))
+        )
+        request.resolver_match = SimpleNamespace(url_name="pre_factor_list")
+        response = PreFactorListView.as_view()(request)
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context_data["pre_factors"]), 1)
+        self.assertEqual(
+            response.context_data["pre_factors"][0]["customer_name"],
+            "شرکت سپهر",
+        )
+        html = response.content.decode("utf-8")
+        self.assertIn(
+            reverse("core:pre_factor_detail", kwargs={"pk": "PF-GUID-100"}),
+            html,
+        )
+        # Verify bottom navbar contains all 5 navigation links
+        for nav_route in (
+            "core:dashboard",
+            "core:sale_request_list",
+            "core:pre_factor_list",
+            "core:factor_list",
+            "core:customers",
+        ):
+            self.assertIn(reverse(nav_route), html)
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Tblkala")
+    @patch("core.views.Prefactordetail")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Prefactorstatus")
+    @patch("core.views.Prefactormaster")
+    def test_pre_factor_detail_and_pdf_views(
+        self,
+        mock_pf_master,
+        mock_pf_status,
+        mock_customer,
+        mock_pf_detail,
+        mock_kala,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        master_obj = SimpleNamespace(
+            gprefactormasterid="PF-GUID-200",
+            prefactorno="000502",
+            prefactordate="1405/02/05",
+            createddate="1405/02/05",
+            createdtime="10:30:00",
+            gcustomerid="CUST-GUID-2",
+            requestman="",
+            prefactorstatuscode=2,
+        )
+        mock_pf_master.objects.using.return_value.filter.return_value.first.return_value = (
+            master_obj
+        )
+        mock_pf_status.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            prefactorstatuscode=2, prefactorstatusname="تایید شده"
+        )
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            custname="فروشگاه ستاره",
+            economno="123456",
+            nationalid="",
+            mobile="09121234567",
+            phone="",
+            address="تهران",
+        )
+        mock_pf_detail.objects.using.return_value.filter.return_value.order_by.return_value = [
+            SimpleNamespace(
+                gkalaid="KALA-1",
+                quantity=Decimal("3"),
+                unitprice=Decimal("200000"),
+                discount=Decimal("50000"),
+                descript="",
+            )
+        ]
+        mock_kala.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(
+                gkalaid="kala-1",
+                kalaname="کالای تستی",
+                kalano="K-01",
+                vahed1="بسته",
+            )
+        ]
+
+        detail_url = reverse(
+            "core:pre_factor_detail", kwargs={"pk": "PF-GUID-200"}
+        )
+        detail_req = _attach_authenticated_session(
+            self.factory.get(detail_url)
+        )
+        detail_req.resolver_match = SimpleNamespace(
+            url_name="pre_factor_detail"
+        )
+        detail_resp = PreFactorDetailView.as_view()(
+            detail_req, pk="PF-GUID-200"
+        )
+        detail_resp.render()
+
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertTrue(detail_resp.context_data["pre_factor_found"])
+        self.assertEqual(detail_resp.context_data["subtotal"], 600000)
+        self.assertEqual(detail_resp.context_data["total_discount"], 50000)
+        self.assertEqual(detail_resp.context_data["total_payable"], 550000)
+        self.assertIn(
+            reverse("core:pre_factor_pdf", kwargs={"pk": "PF-GUID-200"}),
+            detail_resp.content.decode("utf-8"),
+        )
+
+        # PDF view
+        pdf_url = reverse("core:pre_factor_pdf", kwargs={"pk": "PF-GUID-200"})
+        pdf_req = _attach_authenticated_session(self.factory.get(pdf_url))
+        pdf_resp = PreFactorPDFView.as_view()(pdf_req, pk="PF-GUID-200")
+        self.assertEqual(pdf_resp.status_code, 200)
+        self.assertIn("پیش‌فاکتور فروش", pdf_resp.content.decode("utf-8"))
+
+        # Missing PreFactor raises Http404 on PDF
+        mock_pf_master.objects.using.return_value.filter.return_value.first.return_value = (
+            None
+        )
+        with self.assertRaises(Http404):
+            PreFactorPDFView.as_view()(pdf_req, pk="MISSING-PF")
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Salefactormaster")
+    @patch("core.views.Salefactorstatus")
+    def test_factor_list_view_and_bottom_nav(
+        self,
+        mock_sf_status,
+        mock_sf_master,
+        mock_customer,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_sf_status.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                salefactorstatuscode=1, salefactorstatusname="قطعی شده"
+            )
+        ]
+        mock_sf_master.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                gsalefactormasterid="FAC-GUID-100",
+                salefactorno="000901",
+                salefactordate="1405/02/10",
+                createddate="1405/02/10",
+                gcustomerid="CUST-GUID-9",
+                requestman="",
+                salefactorstatuscode=1,
+            )
+        ]
+        mock_customer.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(gcustomerid="cust-guid-9", custname="بازرگانی نوین")
+        ]
+
+        request = _attach_authenticated_session(
+            self.factory.get(reverse("core:factor_list"))
+        )
+        request.resolver_match = SimpleNamespace(url_name="factor_list")
+        response = FactorListView.as_view()(request)
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context_data["factors"]), 1)
+        self.assertEqual(
+            response.context_data["factors"][0]["customer_name"],
+            "بازرگانی نوین",
+        )
+        html = response.content.decode("utf-8")
+        self.assertIn(
+            reverse("core:factor_detail", kwargs={"pk": "FAC-GUID-100"}),
+            html,
+        )
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Tblkala")
+    @patch("core.views.Salefactordetail")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Salefactorstatus")
+    @patch("core.views.Salefactormaster")
+    def test_factor_detail_and_pdf_views(
+        self,
+        mock_sf_master,
+        mock_sf_status,
+        mock_customer,
+        mock_sf_detail,
+        mock_kala,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        master_obj = SimpleNamespace(
+            gsalefactormasterid="FAC-GUID-200",
+            salefactorno="000902",
+            salefactordate="1405/02/12",
+            salefactortime="14:15",
+            createddate="1405/02/12",
+            gcustomerid="CUST-GUID-9",
+            requestman="",
+            salefactorstatuscode=1,
+            discount=Decimal("25000"),
+        )
+        mock_sf_master.objects.using.return_value.filter.return_value.first.return_value = (
+            master_obj
+        )
+        mock_sf_status.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            salefactorstatuscode=1, salefactorstatusname="قطعی شده"
+        )
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            custname="بازرگانی نوین",
+            economno="",
+            nationalid="0012345678",
+            mobile="09120009988",
+            phone="",
+            address="اصفهان",
+        )
+        mock_sf_detail.objects.using.return_value.filter.return_value.order_by.return_value = [
+            SimpleNamespace(
+                gkalaid="KALA-9",
+                quantity=Decimal("2"),
+                unitprice=Decimal("500000"),
+                discount=Decimal("50000"),
+                descript="",
+            )
+        ]
+        mock_kala.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(
+                gkalaid="kala-9",
+                kalaname="محصول ویژه",
+                kalano="K-09",
+                vahed1="عدد",
+            )
+        ]
+
+        detail_url = reverse(
+            "core:factor_detail", kwargs={"pk": "FAC-GUID-200"}
+        )
+        detail_req = _attach_authenticated_session(
+            self.factory.get(detail_url)
+        )
+        detail_req.resolver_match = SimpleNamespace(url_name="factor_detail")
+        detail_resp = FactorDetailView.as_view()(detail_req, pk="FAC-GUID-200")
+        detail_resp.render()
+
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertTrue(detail_resp.context_data["factor_found"])
+        self.assertEqual(detail_resp.context_data["subtotal"], 1000000)
+        # 50,000 line discount + 25,000 master discount = 75,000
+        self.assertEqual(detail_resp.context_data["total_discount"], 75000)
+        self.assertEqual(detail_resp.context_data["total_payable"], 925000)
+        self.assertIn(
+            reverse("core:factor_pdf", kwargs={"pk": "FAC-GUID-200"}),
+            detail_resp.content.decode("utf-8"),
+        )
+
+        # PDF view
+        pdf_url = reverse("core:factor_pdf", kwargs={"pk": "FAC-GUID-200"})
+        pdf_req = _attach_authenticated_session(self.factory.get(pdf_url))
+        pdf_resp = FactorPDFView.as_view()(pdf_req, pk="FAC-GUID-200")
+        self.assertEqual(pdf_resp.status_code, 200)
+        self.assertIn("فاکتور فروش", pdf_resp.content.decode("utf-8"))
+
+        # Missing Factor raises Http404 on PDF
+        mock_sf_master.objects.using.return_value.filter.return_value.first.return_value = (
+            None
+        )
+        with self.assertRaises(Http404):
+            FactorPDFView.as_view()(pdf_req, pk="MISSING-FAC")
