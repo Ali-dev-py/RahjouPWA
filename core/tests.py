@@ -669,21 +669,62 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         customers = response.context_data["customers"]
         self.assertEqual(
             [
-                (c.custname, c.status_code, c.status_name, c.visitor_name)
+                (
+                    c.custname,
+                    c.status_code,
+                    c.status_name,
+                    c.visitor_code,
+                    c.visitor_name,
+                )
                 for c in customers
             ],
             [
-                ("مشتری بدهکار", "debtor", "بدهکار", "رضا محمدی"),
-                ("مشتری بستانکار", "creditor", "بستانکار", "سارا احمدی"),
-                ("مشتری تسویه", "settled", "تسویه", "نامشخص"),
+                (
+                    "مشتری بدهکار",
+                    "debtor",
+                    "بدهکار",
+                    "vis-guid-1",
+                    "رضا محمدی",
+                ),
+                (
+                    "مشتری بستانکار",
+                    "creditor",
+                    "بستانکار",
+                    "vis-guid-2",
+                    "سارا احمدی",
+                ),
+                (
+                    "مشتری تسویه",
+                    "settled",
+                    "تسویه",
+                    "none",
+                    "بدون ویزیتور",
+                ),
             ],
         )
+        visitors = response.context_data["visitors"]
+        self.assertEqual(
+            visitors,
+            [
+                {"code": "vis-guid-1", "name": "رضا محمدی"},
+                {"code": "vis-guid-2", "name": "سارا احمدی"},
+            ],
+        )
+        self.assertEqual(response.context_data["current_visitor"], "all")
         self.assertEqual(response.context_data["visible_customers_count"], 3)
 
         html = response.content.decode("utf-8")
         self.assertIn("رضا محمدی", html)
         self.assertIn("سارا احمدی", html)
-        self.assertIn("نامشخص", html)
+        self.assertIn("بدون ویزیتور", html)
+        self.assertNotIn("نامشخص", html)
+        self.assertIn('id="customerVisitorFilter"', html)
+        self.assertIn('value="none"', html)
+        self.assertIn('value="vis-guid-1"', html)
+        self.assertIn('value="vis-guid-2"', html)
+        self.assertIn('data-visitor="vis-guid-1"', html)
+        self.assertIn('data-visitor="vis-guid-2"', html)
+        self.assertIn('data-visitor="none"', html)
         self.assertIn('data-status-filter="all"', html)
         self.assertIn('data-status-filter="debtor"', html)
         self.assertIn('data-status-filter="creditor"', html)
@@ -692,23 +733,35 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn('data-status="creditor"', html)
         self.assertIn('data-status="settled"', html)
 
-        # Also verify initial ?status=creditor hides non-creditors on server render
-        mock_customer.objects.using.return_value.all.return_value.order_by.return_value = [
-            SimpleNamespace(
-                gcustomerid="CUST-GUID-1",
-                custname="مشتری بدهکار",
-                gsubdetailid="SUB-DEBTOR",
-                mobile="09120000001",
-                phone="",
-            ),
-            SimpleNamespace(
-                gcustomerid="CUST-GUID-2",
-                custname="مشتری بستانکار",
-                gsubdetailid="SUB-CREDITOR",
-                mobile="09120000002",
-                phone="",
-            ),
-        ]
+        # Verify initial ?status=creditor hides non-creditors on server render
+        def _build_customers(*_args, **_kwargs):
+            return [
+                SimpleNamespace(
+                    gcustomerid="CUST-GUID-1",
+                    custname="مشتری بدهکار",
+                    gsubdetailid="SUB-DEBTOR",
+                    mobile="09120000001",
+                    phone="",
+                ),
+                SimpleNamespace(
+                    gcustomerid="CUST-GUID-2",
+                    custname="مشتری بستانکار",
+                    gsubdetailid="SUB-CREDITOR",
+                    mobile="09120000002",
+                    phone="",
+                ),
+                SimpleNamespace(
+                    gcustomerid="CUST-GUID-3",
+                    custname="مشتری تسویه",
+                    gsubdetailid="SUB-SETTLED",
+                    mobile="09120000003",
+                    phone="",
+                ),
+            ]
+
+        mock_customer.objects.using.return_value.all.return_value.order_by.side_effect = (
+            _build_customers
+        )
         filtered_req = _attach_authenticated_session(
             self.factory.get(f"{url}?status=creditor")
         )
@@ -720,4 +773,43 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         )
         self.assertEqual(
             filtered_resp.context_data["visible_customers_count"], 1
+        )
+
+        # Verify ?visitor=vis-guid-1 filters to only that visitor's customers
+        vis_req = _attach_authenticated_session(
+            self.factory.get(f"{url}?visitor=VIS-GUID-1")
+        )
+        vis_req.resolver_match = SimpleNamespace(url_name="customers")
+        vis_resp = CustomersView.as_view()(vis_req)
+        vis_resp.render()
+        self.assertEqual(
+            vis_resp.context_data["current_visitor"], "vis-guid-1"
+        )
+        self.assertEqual(
+            vis_resp.context_data["visible_customers_count"], 1
+        )
+        self.assertEqual(
+            [
+                c.custname
+                for c in vis_resp.context_data["customers"]
+                if c.is_initially_visible
+            ],
+            ["مشتری بدهکار"],
+        )
+
+        # Verify ?visitor=none filters to unassigned (بدون ویزیتور) customers
+        none_req = _attach_authenticated_session(
+            self.factory.get(f"{url}?visitor=none")
+        )
+        none_req.resolver_match = SimpleNamespace(url_name="customers")
+        none_resp = CustomersView.as_view()(none_req)
+        none_resp.render()
+        self.assertEqual(none_resp.context_data["current_visitor"], "none")
+        self.assertEqual(
+            [
+                c.custname
+                for c in none_resp.context_data["customers"]
+                if c.is_initially_visible
+            ],
+            ["مشتری تسویه"],
         )
