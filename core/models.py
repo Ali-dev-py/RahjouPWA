@@ -933,3 +933,16 @@ class ViewAllvisitors(models.Model):
         db_table = 'View_AllVisitors'
         
         # This is an auto-generated Django model module.
+
+
+class Visitortocustomer(models.Model):
+    visitortocustomerid = models.AutoField(db_column='VisitorToCustomerID', primary_key=True)
+    gvisitorid = models.CharField(db_column='GVisitorID', max_length=36, blank=True, null=True)
+    gcustomerid = models.CharField(db_column='GCustomerID', unique=True, max_length=36, blank=True, null=True)
+    gvisitortocustomerid = models.CharField(db_column='GVisitorToCustomerID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'VisitorToCustomer'
+
