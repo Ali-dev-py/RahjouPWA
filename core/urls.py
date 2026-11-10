@@ -16,5 +16,13 @@ urlpatterns = [
     path("sale-requests/detail/<str:pk>/", SaleRequestDetailView.as_view(), name="sale_request_detail"),
     path("sale-requests/<str:pk>/pdf/", SaleRequestPDFView.as_view(), name="sale_request_pdf"),
     path("sale-requests/new/", SaleRequestCreateView.as_view(), name="sale_request_create"),
+    path("pre-factors/", PreFactorListView.as_view(), name="pre_factor_list"),
+    path("pre-factors/detail/", PreFactorDetailView.as_view(), name="pre_factor_detail"),
+    path("pre-factors/detail/<str:pk>/", PreFactorDetailView.as_view(), name="pre_factor_detail"),
+    path("pre-factors/<str:pk>/pdf/", PreFactorPDFView.as_view(), name="pre_factor_pdf"),
+    path("factors/", FactorListView.as_view(), name="factor_list"),
+    path("factors/detail/", FactorDetailView.as_view(), name="factor_detail"),
+    path("factors/detail/<str:pk>/", FactorDetailView.as_view(), name="factor_detail"),
+    path("factors/<str:pk>/pdf/", FactorPDFView.as_view(), name="factor_pdf"),
     path("offline/", OfflineView.as_view(), name="offline"),
 ]

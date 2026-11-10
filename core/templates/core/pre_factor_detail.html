@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+{% load i18n_extras %}
+
+{% block title %}جزئیات پیش‌فاکتور {{ master.prefactorno|default:''|persian_digits }} | رهجو{% endblock %}
+{% block body_class %}app-body page-pre-factor-detail has-action-bar{% endblock %}
+
+{% block content %}
+{% include "partials/_app_header.html" with heading="جزئیات پیش‌فاکتور" back_url_name="core:pre_factor_list" %}
+
+<main class="app-main container-fluid px-3">
+    <div class="app-content app-content--narrow mx-auto">
+        {% if pre_factor_found %}
+            <!-- Status and Action Toolbar -->
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <span class="badge sale-request-status d-inline-flex align-items-center gap-1 rounded-pill fw-normal bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+                    <span class="material-symbols-outlined fs-6" aria-hidden="true">verified</span>
+                    {{ status_name }}
+                </span>
+                <a class="btn app-icon-button app-icon-button--surface"
+                    href="{% url 'core:pre_factor_pdf' pk=master.gprefactormasterid %}"
+                    id="btnTopPrintPreFactor"
+                    aria-label="چاپ پیش‌فاکتور"
+                    title="چاپ پیش‌فاکتور">
+                    <span class="material-symbols-outlined" aria-hidden="true">print</span>
+                </a>
+            </div>
+
+            <!-- Pre-Factor Card -->
+            <article class="card invoice-card border-0 position-relative overflow-hidden shadow-sm">
+                <div class="invoice-card__top-edge" aria-hidden="true"></div>
+                <div class="card-body p-4">
+                    
+                    <!-- Header -->
+                    <header class="d-flex justify-content-between align-items-start gap-3 mb-4 border-bottom pb-4">
+                        <div>
+                            <img class="invoice-card__logo rounded-3 mb-2"
+                                 src="{% static 'images/logo.png' %}"
+                                 alt="نشان شرکت رهجو"
+                                 style="max-height: 48px; width: auto;"
+                                 onerror="this.style.display='none'">
+                            <h1 class="h5 fw-bold mb-1">شرکت رهجو</h1>
+                            <p class="text-secondary small mb-0">پیش‌فاکتور فروش کالا و خدمات</p>
+                        </div>
+                        <dl class="invoice-meta text-start mb-0">
+                            <div class="mb-2">
+                                <dt class="small text-secondary fw-normal">شماره پیش‌فاکتور</dt>
+                                <dd class="fw-bold mb-0">{{ master.prefactorno|persian_digits }}</dd>
+                            </div>
+                            <div>
+                                <dt class="small text-secondary fw-normal">تاریخ ثبت</dt>
+                                <dd class="fw-bold mb-0">{{ master.prefactordate|default:master.createddate|persian_digits }}</dd>
+                            </div>
+                        </dl>
+                    </header>
+
+                    <!-- Customer Info -->
+                    <section class="invoice-panel mb-4 bg-light rounded-3 p-3" aria-labelledby="customer-title">
+                        <h2 class="small text-secondary fw-normal mb-2" id="customer-title">مشخصات خریدار:</h2>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <strong class="text-dark fs-6">
+                                {% if customer and customer.custname %}{{ customer.custname }}{% else %}{{ master.requestman|default:"مشتری نامشخص" }}{% endif %}
+                            </strong>
+                            {% if customer and customer.economno or customer and customer.nationalid %}
+                                <span class="text-secondary small">
+                                    شناسه/کد ملی: {{ customer.economno|default:customer.nationalid|persian_digits }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        {% if customer and customer.phone or customer and customer.mobile %}
+                            <div class="small text-secondary mb-1">
+                                <span>تلفن تماس: </span>
+                                <span>{{ customer.mobile|default:customer.phone|persian_digits }}</span>
+                            </div>
+                        {% endif %}
+                        {% if customer and customer.address %}
+                            <p class="text-secondary small mb-0">
+                                <span>نشانی: </span>{{ customer.address }}
+                            </p>
+                        {% endif %}
+                    </section>
+
+                    <!-- Line Items -->
+                    <section class="mb-4" aria-labelledby="items-title">
+                        <h2 class="h6 fw-bold mb-3" id="items-title">اقلام پیش‌فاکتور</h2>
+                        <div class="d-grid gap-2">
+                            {% for item in items %}
+                                <article class="invoice-line rounded-3 p-3 border bg-white">
+                                    <div class="d-flex justify-content-between align-items-start gap-3">
+                                        <div>
+                                            <strong class="d-block text-dark">{{ item.name }}</strong>
+                                            {% if item.code %}
+                                                <small class="text-secondary">کد کالا: {{ item.code|persian_digits }}</small>
+                                            {% endif %}
+                                        </div>
+                                        <strong class="text-start flex-shrink-0 text-primary">
+                                            {{ item.row_total|persian_digits|intcomma:False }} ریال
+                                        </strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center gap-3 text-secondary small mt-2 pt-2 border-top">
+                                        <span>تعداد: {{ item.quantity|persian_digits }} {{ item.unit }}</span>
+                                        <span>فی: {{ item.unit_price|persian_digits|intcomma:False }} ریال</span>
+                                    </div>
+                                    {% if item.discount > 0 %}
+                                        <div class="text-danger small mt-1">
+                                            <span>تخفیف سطر: {{ item.discount|persian_digits|intcomma:False }} ریال</span>
+                                        </div>
+                                    {% endif %}
+                                </article>
+                            {% empty %}
+                                <div class="p-3 text-center text-secondary small bg-light rounded-3">
+                                    هیچ قلم کالایی برای این پیش‌فاکتور ثبت نشده است.
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <!-- Financial Summary -->
+                    <section class="invoice-totals d-grid gap-2 pt-3 border-top" aria-label="جمع پیش‌فاکتور">
+                        <div class="d-flex justify-content-between gap-3 text-secondary">
+                            <span>جمع مبالغ:</span>
+                            <strong>{{ subtotal|persian_digits|intcomma:False }} ریال</strong>
+                        </div>
+                        {% if total_discount > 0 %}
+                            <div class="d-flex justify-content-between gap-3 text-danger">
+                                <span>تخفیف کل:</span>
+                                <strong>- {{ total_discount|persian_digits|intcomma:False }} ریال</strong>
+                            </div>
+                        {% endif %}
+                        <div class="invoice-total d-flex justify-content-between align-items-center gap-3 rounded-3 p-3 mt-2 bg-primary-subtle text-primary">
+                            <strong class="fs-6">مبلغ قابل پرداخت:</strong>
+                            <strong class="fs-5">{{ total_payable|persian_digits|intcomma:False }} ریال</strong>
+                        </div>
+                    </section>
+                </div>
+            </article>
+        {% else %}
+            <!-- Pre-Factor Not Found -->
+            <div class="card border-0 text-center py-5">
+                <div class="card-body">
+                    <span class="material-symbols-outlined fs-1 text-muted mb-3">error_outline</span>
+                    <h2 class="h5 fw-bold">پیش‌فاکتور مورد نظر یافت نشد</h2>
+                    <p class="text-secondary small">ممکن است این پیش‌فاکتور حذف شده باشد یا شناسه آن اشتباه باشد.</p>
+                    <a href="{% url 'core:pre_factor_list' %}" class="btn btn-outline-primary rounded-pill btn-sm mt-2">
+                        بازگشت به فهرست پیش‌فاکتورها
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</main>
+
+{% if pre_factor_found %}
+<div class="app-action-bar fixed-bottom bg-white border-top py-2 shadow-lg" id="download-pdf-bar">
+    <div class="container-fluid app-content app-content--narrow mx-auto">
+        <button class="btn btn-primary app-download-button w-100 d-flex align-items-center justify-content-center gap-2 py-2"
+                type="button"
+                id="btnDownloadPreFactor"
+                data-url="{% url 'core:pre_factor_pdf' pk=master.gprefactormasterid %}"
+                data-filename="پیش‌فاکتور {% if customer %}{{ customer.custname }}{% endif %} شماره {{ master.prefactorno|default:'pre_factor' }}.pdf">
+            <span class="material-symbols-outlined fs-5" id="downloadIcon">download</span>
+            <span class="spinner-border spinner-border-sm d-none" id="downloadSpinner" role="status" aria-hidden="true"></span>
+            <span id="downloadBtnText">دریافت پیش‌فاکتور (PDF)</span>
+        </button>
+    </div>
+</div>
+{% endif %}
+
+<!-- jsPDF & html2canvas Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const downloadBtn = document.getElementById('btnDownloadPreFactor');
+        const topPrintBtn = document.getElementById('btnTopPrintPreFactor');
+        if (!downloadBtn) return;
+
+        const downloadIcon = document.getElementById('downloadIcon');
+        const downloadSpinner = document.getElementById('downloadSpinner');
+        const downloadBtnText = document.getElementById('downloadBtnText');
+
+        async function generateAndDownloadPDF(e) {
+            if (e) e.preventDefault();
+
+            const url = downloadBtn.getAttribute('data-url');
+            const filename = downloadBtn.getAttribute('data-filename') || 'pre_factor.pdf';
+
+            downloadBtn.disabled = true;
+            downloadIcon.classList.add('d-none');
+            downloadSpinner.classList.remove('d-none');
+            downloadBtnText.textContent = 'در حال آماده‌سازی و دانلود...';
+
+            let sandboxWrapper = null;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('خطا در دریافت اطلاعات پیش‌فاکتور از سرور');
+                }
+
+                const htmlText = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+
+                const pdfContainer = doc.getElementById('invoice-pdf-container');
+                const pdfStyles = doc.getElementById('pre-factor-pdf-styles');
+
+                if (!pdfContainer) {
+                    throw new Error('ساختار قالب پیش‌فاکتور یافت نشد');
+                }
+
+                sandboxWrapper = document.createElement('div');
+                sandboxWrapper.style.position = 'fixed';
+                sandboxWrapper.style.top = '0';
+                sandboxWrapper.style.left = '-9999px';
+                sandboxWrapper.style.zIndex = '-1000';
+                sandboxWrapper.style.backgroundColor = '#ffffff';
+
+                if (pdfStyles) {
+                    sandboxWrapper.appendChild(pdfStyles.cloneNode(true));
+                }
+                sandboxWrapper.appendChild(pdfContainer.cloneNode(true));
+                document.body.appendChild(sandboxWrapper);
+
+                if (document.fonts && document.fonts.ready) {
+                    await document.fonts.ready;
+                }
+
+                const targetElement = sandboxWrapper.querySelector('#invoice-pdf-container');
+
+                const canvas = await html2canvas(targetElement, {
+                    scale: 3,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false
+                });
+
+                const imgData = canvas.toDataURL('image/jpeg', 0.98);
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a5',
+                    compress: true
+                });
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+
+                while (heightLeft > 2) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                    heightLeft -= pdfHeight;
+                }
+
+                const pdfBlob = pdf.output('blob');
+                const blobUrl = window.URL.createObjectURL(pdfBlob);
+                const tempLink = document.createElement('a');
+                tempLink.style.display = 'none';
+                tempLink.href = blobUrl;
+                tempLink.setAttribute('download', filename);
+                document.body.appendChild(tempLink);
+                tempLink.click();
+
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(blobUrl);
+                    tempLink.remove();
+                }, 1500);
+
+            } catch (error) {
+                console.error('PDF generation error:', error);
+                alert('خطا در تولید و دانلود پیش‌فاکتور. لطفاً مجدداً تلاش نمایید.');
+            } finally {
+                if (sandboxWrapper && sandboxWrapper.parentNode) {
+                    sandboxWrapper.parentNode.removeChild(sandboxWrapper);
+                }
+                downloadBtn.disabled = false;
+                downloadSpinner.classList.add('d-none');
+                downloadIcon.classList.remove('d-none');
+                downloadBtnText.textContent = 'دریافت پیش‌فاکتور (PDF)';
+            }
+        }
+
+        downloadBtn.addEventListener('click', generateAndDownloadPDF);
+        if (topPrintBtn) {
+            topPrintBtn.addEventListener('click', generateAndDownloadPDF);
+        }
+    });
+</script>
+{% endblock %}

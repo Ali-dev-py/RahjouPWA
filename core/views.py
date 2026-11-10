@@ -15,7 +15,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import DecimalField, F, Sum, Value, Q, Max
 from django.db.models.functions import Coalesce
 from django.shortcuts import redirect, render, get_object_or_404
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.urls import reverse
 from django.http import HttpResponse, Http404
 from django.utils import timezone
@@ -1440,5 +1440,704 @@ class SaleRequestPDFView(PlusLoginRequiredMixin, View):
 
         # 5. Render Server-Side HTML for jsPDF
         return render(request, "core/sale_request_pdf.html", context)
+
+
+def _load_logo_base64():
+    logo_path = finders.find("images/logo.png")
+    if not logo_path:
+        alt_path = os.path.join(settings.BASE_DIR, "static", "images", "logo.png")
+        if os.path.exists(alt_path):
+            logo_path = alt_path
+
+    if logo_path and os.path.exists(logo_path):
+        with open(logo_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode("utf-8")
+    return ""
+
+
+class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/pre_factor_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        query = self.request.GET.get("q", "").strip()
+        status_filter = self.request.GET.get("status", "all").strip()
+
+        # 1. Fetch all available PreFactor statuses from DB (with safe fallback)
+        try:
+            statuses = list(
+                Prefactorstatus.objects.using("plus")
+                .all()
+                .order_by("prefactorstatuscode")
+            )
+            status_map = {
+                s.prefactorstatuscode: s.prefactorstatusname for s in statuses
+            }
+        except DatabaseError:
+            statuses = []
+            status_map = {}
+
+        # 2. Fetch Sale Pre-Factors QuerySet (exclude purchase pre-factors where IsBuy=1)
+        pre_factors_qs = (
+            Prefactormaster.objects.using("plus")
+            .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
+            .order_by("-prefactordate", "-prefactorno")
+        )
+
+        if status_filter != "all" and status_filter.isdigit():
+            pre_factors_qs = pre_factors_qs.filter(
+                prefactorstatuscode=int(status_filter)
+            )
+
+        pre_factors_list = list(pre_factors_qs[:150])
+
+        # 3. Batch Fetch Customer Names (No N+1)
+        customer_ids = list(
+            {
+                variant
+                for pf in pre_factors_list
+                if pf.gcustomerid
+                for variant in (
+                    str(pf.gcustomerid).strip(),
+                    str(pf.gcustomerid).strip().upper(),
+                    str(pf.gcustomerid).strip().lower(),
+                )
+            }
+        )
+        customer_map = {}
+        if customer_ids:
+            customers = Tblcustomer.objects.using("plus").filter(
+                gcustomerid__in=customer_ids
+            )
+            customer_map = {
+                str(c.gcustomerid).strip().lower(): c.custname
+                for c in customers
+                if c.gcustomerid
+            }
+
+        # 4. Construct Final Data List
+        pre_factors = []
+        for pf in pre_factors_list:
+            cust_key = (
+                str(pf.gcustomerid).strip().lower() if pf.gcustomerid else ""
+            )
+            customer_name = (
+                customer_map.get(cust_key)
+                or pf.requestman
+                or "مشتری نامشخص"
+            )
+
+            pf_no = pf.prefactorno or ""
+            if query and query not in pf_no and query not in customer_name:
+                continue
+
+            status_name = status_map.get(pf.prefactorstatuscode, "ثبت شده")
+            style = get_status_style(status_name)
+
+            pre_factors.append(
+                {
+                    "id": pf.gprefactormasterid,
+                    "number": pf_no,
+                    "date": pf.prefactordate or pf.createddate or "-",
+                    "customer_name": customer_name,
+                    "status_code": pf.prefactorstatuscode,
+                    "status_name": status_name,
+                    "chip_class": style["chip_class"],
+                    "dot_class": style["dot_class"],
+                }
+            )
+
+        context["pre_factors"] = pre_factors
+        context["statuses"] = statuses
+        context["current_status"] = status_filter
+        context["query"] = query
+        return context
+
+
+class PreFactorDetailView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/pre_factor_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        pre_factor_id = self.kwargs.get("pk") or self.request.GET.get("id")
+
+        if pre_factor_id:
+            master = (
+                Prefactormaster.objects.using("plus")
+                .filter(gprefactormasterid__iexact=str(pre_factor_id).strip())
+                .first()
+            )
+        else:
+            master = (
+                Prefactormaster.objects.using("plus")
+                .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
+                .order_by("-prefactordate", "-prefactorno")
+                .first()
+            )
+
+        if not master:
+            context["pre_factor_found"] = False
+            return context
+
+        context["pre_factor_found"] = True
+        context["master"] = master
+
+        # 2. Fetch Status
+        status_name = "ثبت شده"
+        if master.prefactorstatuscode is not None:
+            try:
+                status_obj = (
+                    Prefactorstatus.objects.using("plus")
+                    .filter(prefactorstatuscode=master.prefactorstatuscode)
+                    .first()
+                )
+                if status_obj:
+                    status_name = status_obj.prefactorstatusname
+            except DatabaseError:
+                pass
+        context["status_name"] = status_name
+
+        # 3. Fetch Customer Details
+        customer = None
+        if master.gcustomerid:
+            customer = (
+                Tblcustomer.objects.using("plus")
+                .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
+                .first()
+            )
+        context["customer"] = customer
+
+        # 4. Fetch PreFactor Line Items & Products
+        details = list(
+            Prefactordetail.objects.using("plus")
+            .filter(
+                gprefactormasterid__iexact=str(
+                    master.gprefactormasterid
+                ).strip()
+            )
+            .order_by("rowid")
+        )
+
+        kala_ids = list(
+            {
+                variant
+                for d in details
+                if d.gkalaid
+                for variant in (
+                    str(d.gkalaid).strip(),
+                    str(d.gkalaid).strip().upper(),
+                    str(d.gkalaid).strip().lower(),
+                )
+            }
+        )
+        kala_map = {}
+        if kala_ids:
+            kalas = Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids)
+            kala_map = {
+                str(k.gkalaid).strip().lower(): k
+                for k in kalas
+                if k.gkalaid
+            }
+
+        items = []
+        subtotal = 0
+        total_discount = 0
+
+        for d in details:
+            kala_key = str(d.gkalaid).strip().lower() if d.gkalaid else ""
+            kala = kala_map.get(kala_key)
+            qty = float(d.quantity or 0)
+            price = float(d.unitprice or 0)
+            discount = float(d.discount or 0)
+            row_total = (qty * price) - discount
+
+            subtotal += qty * price
+            total_discount += discount
+
+            items.append(
+                {
+                    "name": kala.kalaname
+                    if kala
+                    else (d.descript or "کالای نامشخص"),
+                    "code": kala.kalano if kala else "",
+                    "unit": kala.vahed1
+                    if (kala and kala.vahed1)
+                    else (d.descript or "عدد"),
+                    "quantity": int(qty) if qty.is_integer() else qty,
+                    "unit_price": int(price),
+                    "discount": int(discount),
+                    "row_total": int(row_total),
+                }
+            )
+
+        context["items"] = items
+        context["subtotal"] = int(subtotal)
+        context["total_discount"] = int(total_discount)
+        context["total_payable"] = int(subtotal - total_discount)
+
+        return context
+
+
+class PreFactorPDFView(PlusLoginRequiredMixin, View):
+    def get(self, request, pk=None, *args, **kwargs):
+        pre_factor_id = pk or request.GET.get("id")
+        if not pre_factor_id:
+            raise Http404("پیش‌فاکتور مورد نظر یافت نشد.")
+
+        master = (
+            Prefactormaster.objects.using("plus")
+            .filter(gprefactormasterid__iexact=str(pre_factor_id).strip())
+            .first()
+        )
+        if not master:
+            raise Http404("پیش‌فاکتور مورد نظر یافت نشد.")
+
+        customer = None
+        if master.gcustomerid:
+            customer = (
+                Tblcustomer.objects.using("plus")
+                .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
+                .first()
+            )
+
+        details = list(
+            Prefactordetail.objects.using("plus")
+            .filter(
+                gprefactormasterid__iexact=str(
+                    master.gprefactormasterid
+                ).strip()
+            )
+            .order_by("rowid")
+        )
+
+        kala_ids = list(
+            {
+                variant
+                for d in details
+                if d.gkalaid
+                for variant in (
+                    str(d.gkalaid).strip(),
+                    str(d.gkalaid).strip().upper(),
+                    str(d.gkalaid).strip().lower(),
+                )
+            }
+        )
+        kala_map = {}
+        if kala_ids:
+            kalas = Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids)
+            kala_map = {
+                str(k.gkalaid).strip().lower(): k
+                for k in kalas
+                if k.gkalaid
+            }
+
+        items = []
+        total_quantity = 0
+        subtotal = 0
+        total_discount = 0
+
+        for idx, d in enumerate(details, start=1):
+            kala_key = str(d.gkalaid).strip().lower() if d.gkalaid else ""
+            kala = kala_map.get(kala_key)
+            qty = float(d.quantity or 0)
+            price = float(d.unitprice or 0)
+            discount = float(d.discount or 0)
+            gross = qty * price
+            row_total = gross - discount
+
+            total_quantity += qty
+            subtotal += gross
+            total_discount += discount
+
+            items.append(
+                {
+                    "row_no": idx,
+                    "name": kala.kalaname
+                    if kala
+                    else (d.descript or "کالای نامشخص"),
+                    "quantity": int(qty) if qty.is_integer() else qty,
+                    "unit": kala.vahed1 if (kala and kala.vahed1) else "عدد",
+                    "unit_price": int(price),
+                    "discount": int(discount),
+                    "row_total": int(row_total),
+                }
+            )
+
+        payable = subtotal - total_discount
+        pre_factor_no = master.prefactorno or "pre_factor"
+        cust_name = (
+            customer.custname
+            if (customer and customer.custname)
+            else (master.requestman or "")
+        )
+        filename = f"پیش‌فاکتور {cust_name} شماره {pre_factor_no}.pdf".strip()
+
+        context = {
+            "master": master,
+            "customer": customer,
+            "items": items,
+            "total_quantity": int(total_quantity)
+            if isinstance(total_quantity, float) and total_quantity.is_integer()
+            else total_quantity,
+            "subtotal": int(subtotal),
+            "total_discount": int(total_discount),
+            "payable": int(payable),
+            "logo_base64": _load_logo_base64(),
+            "seller_name": "رهجو پلاس",
+            "seller_phone": "",
+            "seller_address": "",
+            "bank_card": "۶۲۱۹۸۶۱۰۹۲۳۹۹۴۲۶",
+            "bank_sheba": "IR۵۲۰۵۶۰۲۱۳۷۸۰۰۰۵۳۱۱۸۰۰۰۰۱",
+            "bank_owner": "خانم سپیده جیحانی",
+            "bank_name": "بانک سامان",
+            "pdf_filename": filename,
+        }
+
+        return render(request, "core/pre_factor_pdf.html", context)
+
+
+class FactorListView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/factor_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        query = self.request.GET.get("q", "").strip()
+        status_filter = self.request.GET.get("status", "all").strip()
+
+        # 1. Fetch all available SaleFactor statuses from DB (with safe fallback)
+        try:
+            statuses = list(
+                Salefactorstatus.objects.using("plus")
+                .all()
+                .order_by("salefactorstatuscode")
+            )
+            status_map = {
+                s.salefactorstatuscode: s.salefactorstatusname
+                for s in statuses
+            }
+        except DatabaseError:
+            statuses = []
+            status_map = {}
+
+        # 2. Fetch Sale Factors QuerySet
+        factors_qs = (
+            Salefactormaster.objects.using("plus")
+            .all()
+            .order_by("-salefactordate", "-salefactorno")
+        )
+
+        if status_filter != "all" and status_filter.isdigit():
+            factors_qs = factors_qs.filter(
+                salefactorstatuscode=int(status_filter)
+            )
+
+        factors_list = list(factors_qs[:150])
+
+        # 3. Batch Fetch Customer Names (No N+1)
+        customer_ids = list(
+            {
+                variant
+                for sf in factors_list
+                if sf.gcustomerid
+                for variant in (
+                    str(sf.gcustomerid).strip(),
+                    str(sf.gcustomerid).strip().upper(),
+                    str(sf.gcustomerid).strip().lower(),
+                )
+            }
+        )
+        customer_map = {}
+        if customer_ids:
+            customers = Tblcustomer.objects.using("plus").filter(
+                gcustomerid__in=customer_ids
+            )
+            customer_map = {
+                str(c.gcustomerid).strip().lower(): c.custname
+                for c in customers
+                if c.gcustomerid
+            }
+
+        # 4. Construct Final Data List
+        factors = []
+        for sf in factors_list:
+            cust_key = (
+                str(sf.gcustomerid).strip().lower() if sf.gcustomerid else ""
+            )
+            customer_name = (
+                customer_map.get(cust_key)
+                or sf.requestman
+                or "مشتری نامشخص"
+            )
+
+            sf_no = sf.salefactorno or ""
+            if query and query not in sf_no and query not in customer_name:
+                continue
+
+            status_name = status_map.get(sf.salefactorstatuscode, "ثبت شده")
+            style = get_status_style(status_name)
+
+            factors.append(
+                {
+                    "id": sf.gsalefactormasterid,
+                    "number": sf_no,
+                    "date": sf.salefactordate or sf.createddate or "-",
+                    "customer_name": customer_name,
+                    "status_code": sf.salefactorstatuscode,
+                    "status_name": status_name,
+                    "chip_class": style["chip_class"],
+                    "dot_class": style["dot_class"],
+                }
+            )
+
+        context["factors"] = factors
+        context["statuses"] = statuses
+        context["current_status"] = status_filter
+        context["query"] = query
+        return context
+
+
+class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/factor_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        factor_id = self.kwargs.get("pk") or self.request.GET.get("id")
+
+        if factor_id:
+            master = (
+                Salefactormaster.objects.using("plus")
+                .filter(gsalefactormasterid__iexact=str(factor_id).strip())
+                .first()
+            )
+        else:
+            master = (
+                Salefactormaster.objects.using("plus")
+                .order_by("-salefactordate", "-salefactorno")
+                .first()
+            )
+
+        if not master:
+            context["factor_found"] = False
+            return context
+
+        context["factor_found"] = True
+        context["master"] = master
+
+        # 2. Fetch Status
+        status_name = "ثبت شده"
+        if master.salefactorstatuscode is not None:
+            try:
+                status_obj = (
+                    Salefactorstatus.objects.using("plus")
+                    .filter(salefactorstatuscode=master.salefactorstatuscode)
+                    .first()
+                )
+                if status_obj:
+                    status_name = status_obj.salefactorstatusname
+            except DatabaseError:
+                pass
+        context["status_name"] = status_name
+
+        # 3. Fetch Customer Details
+        customer = None
+        if master.gcustomerid:
+            customer = (
+                Tblcustomer.objects.using("plus")
+                .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
+                .first()
+            )
+        context["customer"] = customer
+
+        # 4. Fetch Factor Line Items & Products
+        details = list(
+            Salefactordetail.objects.using("plus")
+            .filter(
+                gsalefactormasterid__iexact=str(
+                    master.gsalefactormasterid
+                ).strip()
+            )
+            .order_by("rowid")
+        )
+
+        kala_ids = list(
+            {
+                variant
+                for d in details
+                if d.gkalaid
+                for variant in (
+                    str(d.gkalaid).strip(),
+                    str(d.gkalaid).strip().upper(),
+                    str(d.gkalaid).strip().lower(),
+                )
+            }
+        )
+        kala_map = {}
+        if kala_ids:
+            kalas = Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids)
+            kala_map = {
+                str(k.gkalaid).strip().lower(): k
+                for k in kalas
+                if k.gkalaid
+            }
+
+        items = []
+        subtotal = 0
+        total_discount = float(getattr(master, "discount", 0) or 0)
+
+        for d in details:
+            kala_key = str(d.gkalaid).strip().lower() if d.gkalaid else ""
+            kala = kala_map.get(kala_key)
+            qty = float(d.quantity or 0)
+            price = float(d.unitprice or 0)
+            discount = float(d.discount or 0)
+            row_total = (qty * price) - discount
+
+            subtotal += qty * price
+            total_discount += discount
+
+            items.append(
+                {
+                    "name": kala.kalaname
+                    if kala
+                    else (d.descript or "کالای نامشخص"),
+                    "code": kala.kalano if kala else "",
+                    "unit": kala.vahed1
+                    if (kala and kala.vahed1)
+                    else (d.descript or "عدد"),
+                    "quantity": int(qty) if qty.is_integer() else qty,
+                    "unit_price": int(price),
+                    "discount": int(discount),
+                    "row_total": int(row_total),
+                }
+            )
+
+        context["items"] = items
+        context["subtotal"] = int(subtotal)
+        context["total_discount"] = int(total_discount)
+        context["total_payable"] = int(subtotal - total_discount)
+
+        return context
+
+
+class FactorPDFView(PlusLoginRequiredMixin, View):
+    def get(self, request, pk=None, *args, **kwargs):
+        factor_id = pk or request.GET.get("id")
+        if not factor_id:
+            raise Http404("فاکتور فروش مورد نظر یافت نشد.")
+
+        master = (
+            Salefactormaster.objects.using("plus")
+            .filter(gsalefactormasterid__iexact=str(factor_id).strip())
+            .first()
+        )
+        if not master:
+            raise Http404("فاکتور فروش مورد نظر یافت نشد.")
+
+        customer = None
+        if master.gcustomerid:
+            customer = (
+                Tblcustomer.objects.using("plus")
+                .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
+                .first()
+            )
+
+        details = list(
+            Salefactordetail.objects.using("plus")
+            .filter(
+                gsalefactormasterid__iexact=str(
+                    master.gsalefactormasterid
+                ).strip()
+            )
+            .order_by("rowid")
+        )
+
+        kala_ids = list(
+            {
+                variant
+                for d in details
+                if d.gkalaid
+                for variant in (
+                    str(d.gkalaid).strip(),
+                    str(d.gkalaid).strip().upper(),
+                    str(d.gkalaid).strip().lower(),
+                )
+            }
+        )
+        kala_map = {}
+        if kala_ids:
+            kalas = Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids)
+            kala_map = {
+                str(k.gkalaid).strip().lower(): k
+                for k in kalas
+                if k.gkalaid
+            }
+
+        items = []
+        total_quantity = 0
+        subtotal = 0
+        total_discount = float(getattr(master, "discount", 0) or 0)
+
+        for idx, d in enumerate(details, start=1):
+            kala_key = str(d.gkalaid).strip().lower() if d.gkalaid else ""
+            kala = kala_map.get(kala_key)
+            qty = float(d.quantity or 0)
+            price = float(d.unitprice or 0)
+            discount = float(d.discount or 0)
+            gross = qty * price
+            row_total = gross - discount
+
+            total_quantity += qty
+            subtotal += gross
+            total_discount += discount
+
+            items.append(
+                {
+                    "row_no": idx,
+                    "name": kala.kalaname
+                    if kala
+                    else (d.descript or "کالای نامشخص"),
+                    "quantity": int(qty) if qty.is_integer() else qty,
+                    "unit": kala.vahed1 if (kala and kala.vahed1) else "عدد",
+                    "unit_price": int(price),
+                    "discount": int(discount),
+                    "row_total": int(row_total),
+                }
+            )
+
+        payable = subtotal - total_discount
+        factor_no = master.salefactorno or "factor"
+        cust_name = (
+            customer.custname
+            if (customer and customer.custname)
+            else (master.requestman or "")
+        )
+        filename = f"فاکتور فروش {cust_name} شماره {factor_no}.pdf".strip()
+
+        context = {
+            "master": master,
+            "customer": customer,
+            "items": items,
+            "total_quantity": int(total_quantity)
+            if isinstance(total_quantity, float) and total_quantity.is_integer()
+            else total_quantity,
+            "subtotal": int(subtotal),
+            "total_discount": int(total_discount),
+            "payable": int(payable),
+            "logo_base64": _load_logo_base64(),
+            "seller_name": "رهجو پلاس",
+            "seller_phone": "",
+            "seller_address": "",
+            "bank_card": "۶۲۱۹۸۶۱۰۹۲۳۹۹۴۲۶",
+            "bank_sheba": "IR۵۲۰۵۶۰۲۱۳۷۸۰۰۰۵۳۱۱۸۰۰۰۰۱",
+            "bank_owner": "خانم سپیده جیحانی",
+            "bank_name": "بانک سامان",
+            "pdf_filename": filename,
+        }
+
+        return render(request, "core/factor_pdf.html", context)
     
     

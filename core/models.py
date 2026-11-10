@@ -616,6 +616,15 @@ class Prefactordetailstatus(models.Model):
         db_table = 'PreFactorDetailStatus'
 
 
+class Prefactorstatus(models.Model):
+    prefactorstatuscode = models.SmallIntegerField(db_column='PreFactorStatusCode', primary_key=True)
+    prefactorstatusname = models.CharField(db_column='PreFactorStatusName', max_length=50, db_collation='Arabic_CI_AS')
+
+    class Meta:
+        managed = False
+        db_table = 'PreFactorStatus'
+
+
 class Prefactortovisitor(models.Model):
     prefactortovisitorid = models.AutoField(db_column='PreFactorToVisitorId', primary_key=True)
     visitorid = models.IntegerField(db_column='VisitorID', blank=True, null=True)
@@ -796,7 +805,7 @@ class Salefactordetail(models.Model):
     gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
     sefareshno = models.CharField(db_column='SefareshNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
     radyabino = models.CharField(db_column='RadyabiNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
-    gsalefactormasterid = models.ForeignKey(Salefactormaster, models.DO_NOTHING, db_column='GSaleFactorMasterID', blank=True, null=True)
+    gsalefactormasterid = models.CharField(db_column='GSaleFactorMasterID', max_length=36, blank=True, null=True)
     gkalaid = models.CharField(db_column='GKalaID', max_length=36, blank=True, null=True)
     gkalasecunitid = models.CharField(db_column='GKalaSecUnitID', max_length=36, blank=True, null=True)
     kalano = models.CharField(db_column='KalaNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
@@ -809,7 +818,7 @@ class Salefactordetail(models.Model):
     currencyprice = models.DecimalField(db_column='CurrencyPrice', max_digits=19, decimal_places=4)
     offpercent = models.DecimalField(db_column='OFFPercent', max_digits=18, decimal_places=2)
     orginalunitprice = models.DecimalField(db_column='OrginalUnitPrice', max_digits=20, decimal_places=6)
-    ginvid = models.ForeignKey('Tblinv', models.DO_NOTHING, db_column='GInvId', blank=True, null=True)
+    ginvid = models.CharField(db_column='GInvId', max_length=36, blank=True, null=True)
     gorderstockid = models.CharField(db_column='GOrderStockID', max_length=36, blank=True, null=True)
     sumcurrencyprice = models.DecimalField(db_column='SumCurrencyPrice', max_digits=19, decimal_places=4)
     brokerid = models.CharField(db_column='BrokerId', max_length=36, blank=True, null=True)
@@ -873,12 +882,21 @@ class Salefactortovisitor(models.Model):
     gsalefactortovisitorid = models.CharField(db_column='GSaleFactorToVisitorId', max_length=36)
     gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
     gvisitorid = models.CharField(db_column='GVisitorID', max_length=36, blank=True, null=True)
-    gsalefactorid = models.ForeignKey(Salefactormaster, models.DO_NOTHING, db_column='GSaleFactorId', blank=True, null=True)
+    gsalefactorid = models.CharField(db_column='GSaleFactorId', max_length=36, blank=True, null=True)
     porsantprice = models.DecimalField(db_column='PorsantPrice', max_digits=18, decimal_places=0)
 
     class Meta:
         managed = False
         db_table = 'SaleFactorToVisitor'
+
+
+class Salefactorstatus(models.Model):
+    salefactorstatuscode = models.SmallIntegerField(db_column='SaleFactorStatusCode', primary_key=True)
+    salefactorstatusname = models.CharField(db_column='SaleFactorStatusName', max_length=50, db_collation='Arabic_CI_AS')
+
+    class Meta:
+        managed = False
+        db_table = 'SaleFactorStatus'
 
 
 class Tblinv(models.Model):
