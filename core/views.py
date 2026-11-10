@@ -303,20 +303,23 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
                     customer_to_visitor_map[cust_key] = vis_key
 
         # Batch map GVisitorID -> Visitor Name via ViewAllvisitors (No N+1)
+        visitor_rows = ViewAllvisitors.objects.using("plus").values(
+            "gvisitorid", "vizitorname", "personname", "active"
+        )
         visitor_name_map = {}
-        if customer_to_visitor_map:
-            visitor_rows = ViewAllvisitors.objects.using("plus").values(
-                "gvisitorid", "vizitorname", "personname"
-            )
-            for v in visitor_rows:
-                raw_vis_gid = v.get("gvisitorid")
-                if raw_vis_gid:
-                    vis_key = str(raw_vis_gid).strip().lower()
-                    v_name = (
-                        v.get("vizitorname") or v.get("personname") or ""
-                    ).strip()
-                    if vis_key and v_name and vis_key not in visitor_name_map:
+        active_visitor_keys = set()
+        for v in visitor_rows:
+            raw_vis_gid = v.get("gvisitorid")
+            if raw_vis_gid:
+                vis_key = str(raw_vis_gid).strip().lower()
+                v_name = (
+                    v.get("vizitorname") or v.get("personname") or ""
+                ).strip()
+                if vis_key and v_name:
+                    if vis_key not in visitor_name_map:
                         visitor_name_map[vis_key] = v_name
+                    if v.get("active") is not False:
+                        active_visitor_keys.add(vis_key)
 
         statuses = [
             {"code": "debtor", "name": "بدهکار"},
@@ -335,6 +338,7 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
         raw_status = self.request.GET.get("status", "all").strip()
         current_status = status_alias_map.get(raw_status, "all")
 
+        assigned_visitor_keys = set()
         for customer in customers:
             if customer.gsubdetailid:
                 cust_gid = str(customer.gsubdetailid).strip().lower()
@@ -353,27 +357,63 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
                 customer.status_name = "تسویه"
 
             resolved_visitor_name = ""
+            resolved_visitor_code = "none"
             if getattr(customer, "gcustomerid", None):
                 cust_id_key = str(customer.gcustomerid).strip().lower()
                 linked_vis_key = customer_to_visitor_map.get(cust_id_key)
-                if linked_vis_key:
-                    resolved_visitor_name = visitor_name_map.get(
-                        linked_vis_key, ""
-                    )
+                if linked_vis_key and linked_vis_key in visitor_name_map:
+                    resolved_visitor_name = visitor_name_map[linked_vis_key]
+                    resolved_visitor_code = linked_vis_key
+                    assigned_visitor_keys.add(linked_vis_key)
 
             customer.has_visitor = bool(resolved_visitor_name)
-            customer.visitor_name = resolved_visitor_name or "نامشخص"
+            customer.visitor_code = resolved_visitor_code
+            customer.visitor_name = resolved_visitor_name or "بدون ویزیتور"
 
-        if current_status == "all":
-            visible_customers_count = len(customers)
-        else:
-            visible_customers_count = sum(
-                1 for c in customers if c.status_code == current_status
+        filterable_visitor_keys = active_visitor_keys | assigned_visitor_keys
+        visitors = sorted(
+            [
+                {"code": vis_key, "name": visitor_name_map[vis_key]}
+                for vis_key in filterable_visitor_keys
+                if vis_key in visitor_name_map
+            ],
+            key=lambda item: item["name"],
+        )
+
+        visitor_alias_map = {
+            "all": "all",
+            "none": "none",
+            "بدون ویزیتور": "none",
+        }
+        for vis_item in visitors:
+            visitor_alias_map[vis_item["code"]] = vis_item["code"]
+            visitor_alias_map[vis_item["name"]] = vis_item["code"]
+
+        raw_visitor = self.request.GET.get("visitor", "all").strip()
+        current_visitor = visitor_alias_map.get(
+            raw_visitor, visitor_alias_map.get(raw_visitor.lower(), "all")
+        )
+
+        for customer in customers:
+            matches_status = (
+                current_status == "all"
+                or customer.status_code == current_status
             )
+            matches_visitor = (
+                current_visitor == "all"
+                or customer.visitor_code == current_visitor
+            )
+            customer.is_initially_visible = matches_status and matches_visitor
+
+        visible_customers_count = sum(
+            1 for c in customers if c.is_initially_visible
+        )
 
         context["customers"] = customers
         context["statuses"] = statuses
         context["current_status"] = current_status
+        context["visitors"] = visitors
+        context["current_visitor"] = current_visitor
         context["visible_customers_count"] = visible_customers_count
         return context
 
