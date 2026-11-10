@@ -102,9 +102,12 @@
                                     </small>
                                 {% endif %}
                             </div>
-                            <span class="status-chip status-chip--approved flex-shrink-0">
-                                <span class="status-dot" aria-hidden="true"></span>
-                                ویزیتور
+                            <span class="status-chip {% if customer.has_visitor %}status-chip--approved{% else %}status-chip--neutral{% endif %} flex-shrink-0"
+                                  style="max-width: 45%;">
+                                {% if customer.has_visitor %}
+                                    <span class="status-dot flex-shrink-0" aria-hidden="true"></span>
+                                {% endif %}
+                                <span class="text-truncate">{{ customer.visitor_name|default:"نامشخص" }}</span>
                             </span>
                         </div>
 

@@ -286,6 +286,38 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
             .order_by("custname")
         )
 
+        # Batch map GCustomerID -> GVisitorID via Visitortocustomer (No N+1)
+        visitor_links = (
+            Visitortocustomer.objects.using("plus")
+            .filter(gcustomerid__isnull=False, gvisitorid__isnull=False)
+            .values("gcustomerid", "gvisitorid")
+        )
+        customer_to_visitor_map = {}
+        for link in visitor_links:
+            raw_cust_gid = link.get("gcustomerid")
+            raw_vis_gid = link.get("gvisitorid")
+            if raw_cust_gid and raw_vis_gid:
+                cust_key = str(raw_cust_gid).strip().lower()
+                vis_key = str(raw_vis_gid).strip().lower()
+                if cust_key and vis_key:
+                    customer_to_visitor_map[cust_key] = vis_key
+
+        # Batch map GVisitorID -> Visitor Name via ViewAllvisitors (No N+1)
+        visitor_name_map = {}
+        if customer_to_visitor_map:
+            visitor_rows = ViewAllvisitors.objects.using("plus").values(
+                "gvisitorid", "vizitorname", "personname"
+            )
+            for v in visitor_rows:
+                raw_vis_gid = v.get("gvisitorid")
+                if raw_vis_gid:
+                    vis_key = str(raw_vis_gid).strip().lower()
+                    v_name = (
+                        v.get("vizitorname") or v.get("personname") or ""
+                    ).strip()
+                    if vis_key and v_name and vis_key not in visitor_name_map:
+                        visitor_name_map[vis_key] = v_name
+
         statuses = [
             {"code": "debtor", "name": "بدهکار"},
             {"code": "creditor", "name": "بستانکار"},
@@ -319,6 +351,18 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
             else:
                 customer.status_code = "settled"
                 customer.status_name = "تسویه"
+
+            resolved_visitor_name = ""
+            if getattr(customer, "gcustomerid", None):
+                cust_id_key = str(customer.gcustomerid).strip().lower()
+                linked_vis_key = customer_to_visitor_map.get(cust_id_key)
+                if linked_vis_key:
+                    resolved_visitor_name = visitor_name_map.get(
+                        linked_vis_key, ""
+                    )
+
+            customer.has_visitor = bool(resolved_visitor_name)
+            customer.visitor_name = resolved_visitor_name or "نامشخص"
 
         if current_status == "all":
             visible_customers_count = len(customers)
