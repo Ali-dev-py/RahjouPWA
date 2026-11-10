@@ -2,7 +2,13 @@
 <header class="app-header fixed-top">
     <div class="container-fluid app-header__inner">
         <div class="d-flex align-items-center gap-2 min-width-0">
-            {% if back_url_name %}
+            {% if back_url %}
+                <a class="btn app-icon-button flex-shrink-0"
+                   href="{{ back_url }}"
+                   aria-label="بازگشت">
+                    <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+                </a>
+            {% elif back_url_name %}
                 <a class="btn app-icon-button flex-shrink-0"
                    href="{% url back_url_name %}"
                    aria-label="بازگشت">
@@ -17,7 +23,7 @@
                 {{ heading }}
             </span>
         </div>
-        {% if not back_url_name %}
+        {% if not back_url and not back_url_name %}
             <a class="app-avatar text-decoration-none"
                href="{% url 'core:logout' %}"
                aria-label="ورود به حساب کاربری">

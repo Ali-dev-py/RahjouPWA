@@ -672,24 +672,41 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
 
         initial_phone = (customer.mobile or customer.phone or "").strip()
         initial_address = (customer.address or "").strip()
+        edit_pk = self._resolve_edit_pk(customer, pk)
+        return_to = request.GET.get("from", "").strip()
+        cancel_url = (
+            reverse("core:customer_detail", kwargs={"pk": edit_pk})
+            if return_to == "detail"
+            else reverse("core:customers")
+        )
 
         return render(
             request,
             self.template_name,
             {
                 "customer": customer,
-                "edit_pk": self._resolve_edit_pk(customer, pk),
+                "edit_pk": edit_pk,
                 "groups": groups,
                 "custname": customer.custname or "",
                 "phone": initial_phone,
                 "address": initial_address,
                 "selected_group_id": selected_group_id,
+                "return_to": return_to,
+                "cancel_url": cancel_url,
             },
         )
 
     def post(self, request, pk, *args, **kwargs):
         customer = self._get_customer(pk)
         edit_pk = self._resolve_edit_pk(customer, pk)
+        return_to = (
+            request.POST.get("return_to") or request.GET.get("from") or ""
+        ).strip()
+        cancel_url = (
+            reverse("core:customer_detail", kwargs={"pk": edit_pk})
+            if return_to == "detail"
+            else reverse("core:customers")
+        )
 
         custname = request.POST.get("custname", "").strip()
         phone = request.POST.get("phone", "").strip()
@@ -729,6 +746,8 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                     "phone": phone,
                     "address": address,
                     "selected_group_id": selected_group_id,
+                    "return_to": return_to,
+                    "cancel_url": cancel_url,
                 },
             )
 
@@ -794,6 +813,9 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                         gcompanyid=group.gcompanyid,
                     )
 
+            if return_to == "detail":
+                final_pk = self._resolve_edit_pk(customer, edit_pk)
+                return redirect("core:customer_detail", pk=final_pk)
             return redirect("core:customers")
 
         except Exception as exc:
@@ -809,8 +831,476 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                     "phone": phone,
                     "address": address,
                     "selected_group_id": selected_group_id,
+                    "return_to": return_to,
+                    "cancel_url": cancel_url,
                 },
             )
+
+
+_DIGIT_TRANSLATION = str.maketrans(
+    "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩",
+    "01234567890123456789",
+)
+
+
+def _normalize_shamsi_date_and_sort_key(raw_date, raw_time=""):
+    """Normalize Shamsi date/time strings and build a deterministic chronological sort tuple."""
+    clean_date = str(raw_date or "").strip().translate(_DIGIT_TRANSLATION)
+    clean_time = str(raw_time or "").strip().translate(_DIGIT_TRANSLATION)
+
+    year, month, day = 0, 0, 0
+    display_date = clean_date or "-"
+
+    if clean_date and clean_date != "-":
+        sep = "/" if "/" in clean_date else ("-" if "-" in clean_date else None)
+        if sep:
+            parts = [p.strip() for p in clean_date.split(sep)]
+            if len(parts) >= 3 and all(p.isdigit() for p in parts[:3]):
+                year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+                display_date = f"{year:04d}/{month:02d}/{day:02d}"
+
+    hour, minute = 0, 0
+    if clean_time and ":" in clean_time:
+        t_parts = [p.strip() for p in clean_time.split(":")]
+        if len(t_parts) >= 2 and t_parts[0].isdigit() and t_parts[1].isdigit():
+            hour, minute = int(t_parts[0]), int(t_parts[1])
+
+    has_valid_date = (year, month, day) != (0, 0, 0)
+    iso_token = (
+        f"{year:04d}{month:02d}{day:02d}_{hour:02d}{minute:02d}"
+        if has_valid_date
+        else ""
+    )
+    return display_date, has_valid_date, (year, month, day, hour, minute), iso_token
+
+
+def _extract_raw_sanad_id(rad):
+    """Extract raw GSanadID string from Tblsanadrad or mock object without lazy FK queries."""
+    if hasattr(rad, "__dict__") and "gsanadid_id" in rad.__dict__:
+        val = rad.__dict__.get("gsanadid_id")
+        return str(val).strip() if val else ""
+    if hasattr(rad, "gsanadid_id"):
+        val = getattr(rad, "gsanadid_id", None)
+        return str(val).strip() if val else ""
+    raw_fk = getattr(rad, "gsanadid", None)
+    if isinstance(raw_fk, str):
+        return raw_fk.strip()
+    if raw_fk is not None and hasattr(raw_fk, "gsanadid"):
+        val = getattr(raw_fk, "gsanadid", None)
+        return str(val).strip() if val else ""
+    return ""
+
+
+def _resolve_rad_date_and_time(rad, sanad=None):
+    """Resolve Shamsi voucher date and time for a Tblsanadrad payment row."""
+    raw_date = ""
+    raw_time = ""
+
+    if sanad is not None:
+        raw_date = (
+            getattr(sanad, "sanaddate", None)
+            or getattr(sanad, "createddate", None)
+            or ""
+        ).strip()
+        raw_time = (getattr(sanad, "sanadtime", None) or "").strip()
+
+    rad_created = getattr(rad, "createddate", None)
+    if not raw_date and rad_created:
+        if hasattr(rad_created, "date"):
+            greg_date = rad_created.date()
+            raw_date = jdatetime.date.fromgregorian(date=greg_date).strftime(
+                "%Y/%m/%d"
+            )
+            if not raw_time and hasattr(rad_created, "strftime"):
+                raw_time = rad_created.strftime("%H:%M")
+        elif hasattr(rad_created, "year") and hasattr(rad_created, "month"):
+            raw_date = jdatetime.date.fromgregorian(date=rad_created).strftime(
+                "%Y/%m/%d"
+            )
+        else:
+            raw_date = str(rad_created).strip()[:10]
+
+    return raw_date, raw_time
+
+
+class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
+    template_name = "core/customer_detail.html"
+
+    def _get_customer(self, pk):
+        clean_pk = str(pk or "").strip()
+        if not clean_pk:
+            raise Http404("مشتری مورد نظر یافت نشد.")
+
+        customer = (
+            Tblcustomer.objects.using("plus")
+            .filter(gcustomerid__iexact=clean_pk)
+            .first()
+        )
+        if not customer and clean_pk.isdigit():
+            customer = (
+                Tblcustomer.objects.using("plus")
+                .filter(customerid=int(clean_pk))
+                .first()
+            )
+        if not customer:
+            raise Http404("مشتری مورد نظر یافت نشد.")
+        return customer
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        pk = self.kwargs.get("pk")
+        customer = self._get_customer(pk)
+
+        raw_pk = (
+            getattr(customer, "gcustomerid", None)
+            or getattr(customer, "customerid", None)
+            or pk
+        )
+        customer_pk = str(raw_pk).strip()
+        clean_cust_gid = str(getattr(customer, "gcustomerid", "") or "").strip()
+        clean_sub_id = str(getattr(customer, "gsubdetailid", "") or "").strip()
+
+        # 1. Customer Group & Assigned Visitor (DatabaseError-safe)
+        group_name = ""
+        try:
+            c2g = None
+            if clean_cust_gid:
+                c2g = (
+                    Customer2Group.objects.using("plus")
+                    .filter(gcustomerid__iexact=clean_cust_gid)
+                    .first()
+                )
+            if not c2g and getattr(customer, "customerid", None):
+                c2g = (
+                    Customer2Group.objects.using("plus")
+                    .filter(customerid=customer.customerid)
+                    .first()
+                )
+            if c2g:
+                grp = None
+                if getattr(c2g, "gcustomergroupid", None):
+                    grp = (
+                        Customergroup.objects.using("plus")
+                        .filter(
+                            gcustomergroupid__iexact=str(
+                                c2g.gcustomergroupid
+                            ).strip()
+                        )
+                        .first()
+                    )
+                if not grp and getattr(c2g, "customergroupid", None):
+                    grp = (
+                        Customergroup.objects.using("plus")
+                        .filter(customergroupid=c2g.customergroupid)
+                        .first()
+                    )
+                if grp and getattr(grp, "groupname", None):
+                    group_name = grp.groupname
+        except DatabaseError:
+            group_name = ""
+
+        visitor_name = "بدون ویزیتور"
+        has_visitor = False
+        if clean_cust_gid:
+            try:
+                vis_link = (
+                    Visitortocustomer.objects.using("plus")
+                    .filter(
+                        gcustomerid__iexact=clean_cust_gid,
+                        gvisitorid__isnull=False,
+                    )
+                    .first()
+                )
+                if vis_link and getattr(vis_link, "gvisitorid", None):
+                    vis_gid = str(vis_link.gvisitorid).strip()
+                    vis_obj = (
+                        ViewAllvisitors.objects.using("plus")
+                        .filter(gvisitorid__iexact=vis_gid)
+                        .first()
+                    )
+                    if vis_obj:
+                        resolved_vname = (
+                            getattr(vis_obj, "vizitorname", None)
+                            or getattr(vis_obj, "personname", None)
+                            or ""
+                        ).strip()
+                        if resolved_vname:
+                            visitor_name = resolved_vname
+                            has_visitor = True
+            except DatabaseError:
+                pass
+
+        # 2. Customer Accounting Balance & Pays from Tblsanadrad (+ Tblsanad dates)
+        hesab = 0
+        pay_rows = []
+        if clean_sub_id:
+            agg = (
+                Tblsanadrad.objects.using("plus")
+                .filter(gsubdetailid__iexact=clean_sub_id)
+                .aggregate(
+                    total_debit=Sum("debit"),
+                    total_credit=Sum("credit"),
+                )
+            )
+            total_debit = Decimal(str(agg.get("total_debit") or 0))
+            total_credit = Decimal(str(agg.get("total_credit") or 0))
+            hesab = int(total_debit - total_credit)
+
+            pay_rows = list(
+                Tblsanadrad.objects.using("plus").filter(
+                    gsubdetailid__iexact=clean_sub_id,
+                    credit__gt=0,
+                )
+            )
+
+        if hesab > 0:
+            status_code = "debtor"
+            status_name = "بدهکار"
+        elif hesab < 0:
+            status_code = "creditor"
+            status_name = "بستانکار"
+        else:
+            status_code = "settled"
+            status_name = "تسویه"
+
+        sanad_id_variants = list(
+            {
+                variant
+                for rad in pay_rows
+                for raw_sid in [_extract_raw_sanad_id(rad)]
+                if raw_sid
+                for variant in (raw_sid, raw_sid.upper(), raw_sid.lower())
+            }
+        )
+        sanad_map = {}
+        if sanad_id_variants:
+            try:
+                sanad_objs = Tblsanad.objects.using("plus").filter(
+                    gsanadid__in=sanad_id_variants
+                )
+                sanad_map = {
+                    str(s.gsanadid).strip().lower(): s
+                    for s in sanad_objs
+                    if getattr(s, "gsanadid", None)
+                }
+            except DatabaseError:
+                sanad_map = {}
+
+        pays = []
+        total_pays_amount = 0
+        for seq_idx, rad in enumerate(pay_rows):
+            raw_sid = _extract_raw_sanad_id(rad)
+            sanad = sanad_map.get(raw_sid.lower()) if raw_sid else None
+            if sanad is None:
+                inline_fk = getattr(rad, "gsanadid", None)
+                if inline_fk is not None and not isinstance(inline_fk, str):
+                    sanad = inline_fk
+
+            raw_date, raw_time = _resolve_rad_date_and_time(rad, sanad)
+            display_date, has_date, sort_tuple, iso_token = (
+                _normalize_shamsi_date_and_sort_key(raw_date, raw_time)
+            )
+            amount = int(Decimal(str(getattr(rad, "credit", 0) or 0)))
+            total_pays_amount += amount
+
+            sanad_no = ""
+            if sanad is not None and getattr(sanad, "sanadno", None):
+                sanad_no = str(sanad.sanadno).strip()
+            elif getattr(rad, "serialid", None):
+                sanad_no = str(rad.serialid).strip()
+
+            desc = (getattr(rad, "description", "") or "").strip()
+            if not desc and sanad is not None:
+                desc = (getattr(sanad, "sanaddesc", "") or "").strip()
+
+            pays.append(
+                {
+                    "kind": "pay",
+                    "kind_label": "پرداختی مشتری",
+                    "id": str(getattr(rad, "gsanadradid", "") or ""),
+                    "number": sanad_no,
+                    "date": display_date,
+                    "time": raw_time,
+                    "has_date": has_date,
+                    "sort_tuple": sort_tuple,
+                    "sort_seq": seq_idx,
+                    "sort_token": iso_token,
+                    "amount": amount,
+                    "description": desc or "ثبت دریافت از مشتری",
+                    "status_name": "بستانکار",
+                    "chip_class": "status-chip--approved",
+                    "dot_class": "status-dot",
+                    "detail_url": "",
+                }
+            )
+
+        # 3. Customer Sale Factors from Salefactormaster + Salefactordetail
+        factor_masters = []
+        if clean_cust_gid:
+            factor_masters = list(
+                Salefactormaster.objects.using("plus").filter(
+                    gcustomerid__iexact=clean_cust_gid
+                )
+            )
+
+        factor_status_map = {}
+        if factor_masters:
+            try:
+                sf_statuses = Salefactorstatus.objects.using("plus").all()
+                factor_status_map = {
+                    s.salefactorstatuscode: s.salefactorstatusname
+                    for s in sf_statuses
+                }
+            except DatabaseError:
+                factor_status_map = {}
+
+        master_guid_variants = list(
+            {
+                variant
+                for sf in factor_masters
+                if getattr(sf, "gsalefactormasterid", None)
+                for raw_gid in [str(sf.gsalefactormasterid).strip()]
+                if raw_gid
+                for variant in (raw_gid, raw_gid.upper(), raw_gid.lower())
+            }
+        )
+        factor_line_totals = {}
+        if master_guid_variants:
+            detail_agg = (
+                Salefactordetail.objects.using("plus")
+                .filter(gsalefactormasterid__in=master_guid_variants)
+                .values("gsalefactormasterid")
+                .annotate(
+                    line_net=Sum(
+                        (F("quantity") * F("unitprice"))
+                        - Coalesce(F("discount"), Value(0)),
+                        output_field=DecimalField(),
+                    )
+                )
+            )
+            for row in detail_agg:
+                raw_mid = row.get("gsalefactormasterid")
+                if raw_mid:
+                    mid_key = str(raw_mid).strip().lower()
+                    factor_line_totals[mid_key] = factor_line_totals.get(
+                        mid_key, Decimal("0")
+                    ) + Decimal(str(row.get("line_net") or 0))
+
+        factors = []
+        total_factors_amount = 0
+        for seq_idx, sf in enumerate(factor_masters):
+            sf_guid = str(getattr(sf, "gsalefactormasterid", "") or "").strip()
+            sf_key = sf_guid.lower()
+            line_net = factor_line_totals.get(sf_key, Decimal("0"))
+            master_discount = Decimal(str(getattr(sf, "discount", 0) or 0))
+            payable_amount = int(line_net - master_discount)
+            total_factors_amount += payable_amount
+
+            raw_fdate = (
+                getattr(sf, "salefactordate", None)
+                or getattr(sf, "createddate", None)
+                or ""
+            ).strip()
+            raw_ftime = (getattr(sf, "salefactortime", None) or "").strip()
+            display_date, has_date, sort_tuple, iso_token = (
+                _normalize_shamsi_date_and_sort_key(raw_fdate, raw_ftime)
+            )
+
+            sf_status_name = factor_status_map.get(
+                getattr(sf, "salefactorstatuscode", None), "ثبت شده"
+            )
+            style = get_status_style(sf_status_name)
+            detail_url = (
+                f"{reverse('core:factor_detail', kwargs={'pk': sf_guid})}?from_customer={quote(customer_pk)}"
+                if sf_guid
+                else ""
+            )
+
+            factors.append(
+                {
+                    "kind": "factor",
+                    "kind_label": "فاکتور فروش",
+                    "id": sf_guid,
+                    "number": str(getattr(sf, "salefactorno", "") or "").strip(),
+                    "date": display_date,
+                    "time": raw_ftime,
+                    "has_date": has_date,
+                    "sort_tuple": sort_tuple,
+                    "sort_seq": seq_idx,
+                    "sort_token": iso_token,
+                    "amount": payable_amount,
+                    "description": (
+                        getattr(sf, "salefactordesc", "") or ""
+                    ).strip(),
+                    "status_name": sf_status_name,
+                    "chip_class": style["chip_class"],
+                    "dot_class": style["dot_class"],
+                    "detail_url": detail_url,
+                }
+            )
+
+        # 4. Merge & Order Chronologically by Date
+        raw_order = (self.request.GET.get("order") or "date_desc").strip().lower()
+        current_order = "date_asc" if raw_order in ("date_asc", "asc", "oldest") else "date_desc"
+
+        raw_type = (self.request.GET.get("type") or "all").strip().lower()
+        current_type = raw_type if raw_type in ("all", "factor", "pay") else "all"
+
+        transactions = pays + factors
+        if current_order == "date_asc":
+            transactions.sort(
+                key=lambda item: (
+                    0 if item["has_date"] else 1,
+                    item["sort_tuple"],
+                    0 if item["kind"] == "factor" else 1,
+                    item["number"],
+                    item["sort_seq"],
+                )
+            )
+        else:
+            transactions.sort(
+                key=lambda item: (
+                    0 if item["has_date"] else 1,
+                    tuple(-v for v in item["sort_tuple"]),
+                    0 if item["kind"] == "factor" else 1,
+                    item["sort_seq"],
+                )
+            )
+
+        for rank_idx, entry in enumerate(transactions):
+            entry["chronological_rank"] = rank_idx
+            entry["is_initially_visible"] = (
+                current_type == "all" or entry["kind"] == current_type
+            )
+
+        visible_transactions_count = sum(
+            1 for item in transactions if item["is_initially_visible"]
+        )
+
+        context.update(
+            {
+                "customer": customer,
+                "customer_pk": customer_pk,
+                "group_name": group_name,
+                "visitor_name": visitor_name,
+                "has_visitor": has_visitor,
+                "hesab": hesab,
+                "status_code": status_code,
+                "status_name": status_name,
+                "transactions": transactions,
+                "pays": pays,
+                "factors": factors,
+                "pays_count": len(pays),
+                "factors_count": len(factors),
+                "total_transactions_count": len(transactions),
+                "visible_transactions_count": visible_transactions_count,
+                "total_pays_amount": total_pays_amount,
+                "total_factors_amount": total_factors_amount,
+                "current_type": current_type,
+                "current_order": current_order,
+            }
+        )
+        return context
 
 
 def get_status_style(status_name):
@@ -1904,6 +2394,12 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+
+        from_customer = (self.request.GET.get("from_customer") or "").strip()
+        if from_customer:
+            context["back_url"] = reverse(
+                "core:customer_detail", kwargs={"pk": from_customer}
+            )
 
         factor_id = self.kwargs.get("pk") or self.request.GET.get("id")
 

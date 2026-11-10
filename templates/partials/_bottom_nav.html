@@ -25,7 +25,7 @@
             <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
             <span>فاکتور فروش</span>
         </a>
-        <a class="app-bottom-nav__link{% if current == 'customers' or current == 'customer_create' or current == 'customer_edit' %} is-active{% endif %}"
+        <a class="app-bottom-nav__link{% if current == 'customers' or current == 'customer_detail' or current == 'customer_create' or current == 'customer_edit' %} is-active{% endif %}"
            href="{% url 'core:customers' %}"
            {% if current == 'customers' %}aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">group</span>
