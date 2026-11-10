@@ -339,12 +339,14 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
         current_status = status_alias_map.get(raw_status, "all")
 
         assigned_visitor_keys = set()
-        for customer in customers:
+        for idx, customer in enumerate(customers):
+            customer.name_rank = idx
             if customer.gsubdetailid:
                 cust_gid = str(customer.gsubdetailid).strip().lower()
                 customer.hesab = balance_map.get(cust_gid, 0)
             else:
                 customer.hesab = 0
+            customer.hesab_raw = str(customer.hesab)
 
             if customer.hesab > 0:
                 customer.status_code = "debtor"
@@ -369,6 +371,40 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
             customer.has_visitor = bool(resolved_visitor_name)
             customer.visitor_code = resolved_visitor_code
             customer.visitor_name = resolved_visitor_name or "بدون ویزیتور"
+
+        ordering_options = [
+            {"code": "name", "name": "بر اساس نام"},
+            {"code": "debt_desc", "name": "بیشترین بدهی"},
+            {"code": "debt_asc", "name": "کمترین بدهی"},
+        ]
+        order_alias_map = {
+            "name": "name",
+            "default": "name",
+            "custname": "name",
+            "بر اساس نام": "name",
+            "debt_desc": "debt_desc",
+            "debt": "debt_desc",
+            "-debt": "debt_desc",
+            "-hesab": "debt_desc",
+            "بیشترین بدهی": "debt_desc",
+            "debt_asc": "debt_asc",
+            "+debt": "debt_asc",
+            "hesab": "debt_asc",
+            "کمترین بدهی": "debt_asc",
+        }
+        raw_order = (
+            self.request.GET.get("order")
+            or self.request.GET.get("sort")
+            or "name"
+        ).strip()
+        current_order = order_alias_map.get(
+            raw_order, order_alias_map.get(raw_order.lower(), "name")
+        )
+
+        if current_order == "debt_desc":
+            customers.sort(key=lambda c: (-c.hesab, c.name_rank))
+        elif current_order == "debt_asc":
+            customers.sort(key=lambda c: (c.hesab, c.name_rank))
 
         filterable_visitor_keys = active_visitor_keys | assigned_visitor_keys
         visitors = sorted(
@@ -414,6 +450,8 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
         context["current_status"] = current_status
         context["visitors"] = visitors
         context["current_visitor"] = current_visitor
+        context["ordering_options"] = ordering_options
+        context["current_order"] = current_order
         context["visible_customers_count"] = visible_customers_count
         return context
 
