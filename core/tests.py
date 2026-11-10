@@ -13,6 +13,7 @@ from django.test import RequestFactory, SimpleTestCase
 from django.urls import NoReverseMatch, reverse
 
 from core.views import (
+    CustomersView,
     DashboardView,
     SaleRequestCreateView,
     SaleRequestDetailView,
@@ -579,3 +580,113 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         missing_req = _attach_authenticated_session(self.factory.get(url))
         with self.assertRaises(Http404):
             SaleRequestPDFView.as_view()(missing_req, pk="MISSING")
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Tblsanadrad")
+    @patch("core.views.Tblcustomer")
+    def test_customers_view_assigns_three_accounting_statuses_and_renders_filters(
+        self,
+        mock_customer,
+        mock_sanadrad,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_sanadrad.objects.using.return_value.filter.return_value.values.return_value.annotate.return_value = [
+            {
+                "gsubdetailid": "sub-debtor",
+                "total_debit": Decimal("500000"),
+                "total_credit": Decimal("100000"),
+            },
+            {
+                "gsubdetailid": "sub-creditor",
+                "total_debit": Decimal("100000"),
+                "total_credit": Decimal("350000"),
+            },
+            {
+                "gsubdetailid": "sub-settled",
+                "total_debit": Decimal("200000"),
+                "total_credit": Decimal("200000"),
+            },
+        ]
+        mock_customer.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                custname="مشتری بدهکار",
+                gsubdetailid="SUB-DEBTOR",
+                mobile="09120000001",
+                phone="",
+            ),
+            SimpleNamespace(
+                custname="مشتری بستانکار",
+                gsubdetailid="SUB-CREDITOR",
+                mobile="09120000002",
+                phone="",
+            ),
+            SimpleNamespace(
+                custname="مشتری تسویه",
+                gsubdetailid="SUB-SETTLED",
+                mobile="09120000003",
+                phone="",
+            ),
+        ]
+
+        url = reverse("core:customers")
+        request = _attach_authenticated_session(self.factory.get(url))
+        request.resolver_match = SimpleNamespace(url_name="customers")
+        response = CustomersView.as_view()(request)
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+        statuses = response.context_data["statuses"]
+        self.assertEqual(
+            [s["name"] for s in statuses],
+            ["بدهکار", "بستانکار", "تسویه"],
+        )
+        customers = response.context_data["customers"]
+        self.assertEqual(
+            [(c.custname, c.status_code, c.status_name) for c in customers],
+            [
+                ("مشتری بدهکار", "debtor", "بدهکار"),
+                ("مشتری بستانکار", "creditor", "بستانکار"),
+                ("مشتری تسویه", "settled", "تسویه"),
+            ],
+        )
+        self.assertEqual(response.context_data["visible_customers_count"], 3)
+
+        html = response.content.decode("utf-8")
+        self.assertIn('data-status-filter="all"', html)
+        self.assertIn('data-status-filter="debtor"', html)
+        self.assertIn('data-status-filter="creditor"', html)
+        self.assertIn('data-status-filter="settled"', html)
+        self.assertIn('data-status="debtor"', html)
+        self.assertIn('data-status="creditor"', html)
+        self.assertIn('data-status="settled"', html)
+
+        # Also verify initial ?status=creditor hides non-creditors on server render
+        mock_customer.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                custname="مشتری بدهکار",
+                gsubdetailid="SUB-DEBTOR",
+                mobile="09120000001",
+                phone="",
+            ),
+            SimpleNamespace(
+                custname="مشتری بستانکار",
+                gsubdetailid="SUB-CREDITOR",
+                mobile="09120000002",
+                phone="",
+            ),
+        ]
+        filtered_req = _attach_authenticated_session(
+            self.factory.get(f"{url}?status=creditor")
+        )
+        filtered_req.resolver_match = SimpleNamespace(url_name="customers")
+        filtered_resp = CustomersView.as_view()(filtered_req)
+        filtered_resp.render()
+        self.assertEqual(
+            filtered_resp.context_data["current_status"], "creditor"
+        )
+        self.assertEqual(
+            filtered_resp.context_data["visible_customers_count"], 1
+        )
