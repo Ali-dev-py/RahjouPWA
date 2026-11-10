@@ -1319,6 +1319,43 @@ def get_status_style(status_name):
         return {"chip_class": "status-chip--rejected", "dot_class": ""}
     else:
         return {"chip_class": "status-chip--pending", "dot_class": "status-dot"}
+
+
+def _normalize_persian_status_text(text):
+    """Normalize Persian/Arabic letters, ZWNJ, and whitespace for exact status comparisons."""
+    if not text:
+        return ""
+    cleaned = (
+        str(text)
+        .strip()
+        .replace("ي", "ی")
+        .replace("ك", "ک")
+        .replace("ة", "ه")
+    )
+    for ch in (" ", "\t", "\n", "\r", "\u200c", "\u200b", "\u200d", "\ufeff"):
+        cleaned = cleaned.replace(ch, "")
+    return cleaned
+
+
+def _is_sabt_shode_status(status_name):
+    """Return True strictly when a Sale Request status represents 'ثبت شده'."""
+    return _normalize_persian_status_text(status_name) == "ثبتشده"
+
+
+def _resolve_sale_request_status(master):
+    """Resolve status label and whether the Sale Request can be edited/deleted."""
+    status_name = "ثبت شده" if getattr(master, "salerequeststatuscode", None) == 1 else "نامشخص"
+    try:
+        status_obj = (
+            Salerequeststatus.objects.using("plus")
+            .filter(salerequeststatuscode=master.salerequeststatuscode)
+            .first()
+        )
+        if status_obj and getattr(status_obj, "salerequeststatusname", None):
+            status_name = status_obj.salerequeststatusname
+    except DatabaseError:
+        pass
+    return status_name, _is_sabt_shode_status(status_name)
     
     
 class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
@@ -1384,8 +1421,14 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
             ):
                 continue
 
-            status_name = status_map.get(sr.salerequeststatuscode, "نامشخص")
+            default_status = (
+                "ثبت شده" if sr.salerequeststatuscode == 1 else "نامشخص"
+            )
+            status_name = status_map.get(
+                sr.salerequeststatuscode, default_status
+            )
             style = get_status_style(status_name)
+            can_modify = _is_sabt_shode_status(status_name)
 
             sale_requests.append(
                 {
@@ -1395,6 +1438,7 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
                     "customer_name": customer_name,
                     "status_code": sr.salerequeststatuscode,
                     "status_name": status_name,
+                    "can_modify": can_modify,
                     "chip_class": style["chip_class"],
                     "dot_class": style["dot_class"],
                 }
@@ -1443,9 +1487,11 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
             .filter(salerequeststatuscode=master.salerequeststatuscode)
             .first()
         )
-        context["status_name"] = (
+        status_name = (
             status_obj.salerequeststatusname if status_obj else "ثبت شده"
         )
+        context["status_name"] = status_name
+        context["can_modify"] = _is_sabt_shode_status(status_name)
 
         # 3. Fetch Customer Details
         customer = None
@@ -1821,6 +1867,557 @@ class SaleRequestCreateView(PlusLoginRequiredMixin, TemplateView):
         except Exception as e:
             messages.error(request, f"خطا در ثبت درخواست فروش: {str(e)}")
             return self.get(request, *args, **kwargs)
+
+
+def _consolidate_sale_request_items(raw_items):
+    """Merge duplicate product rows by summing quantities while preserving order."""
+    merged = {}
+    ordered_keys = []
+    for item in raw_items:
+        p_id = str(item["product_id"]).strip()
+        key = p_id.lower()
+        if key not in merged:
+            merged[key] = {
+                "product_id": p_id,
+                "quantity": item["quantity"],
+                "price": item["price"],
+            }
+            ordered_keys.append(key)
+        else:
+            merged[key]["quantity"] += item["quantity"]
+            merged[key]["price"] = item["price"]
+    return [merged[k] for k in ordered_keys]
+
+
+class SaleRequestEditView(SaleRequestCreateView):
+    template_name = "core/sale_request_create.html"
+
+    def _get_master(self, pk):
+        clean_pk = str(pk or "").strip()
+        if not clean_pk:
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
+
+        master = (
+            Salerequestmaster.objects.using("plus")
+            .filter(gsalerequestmasterid__iexact=clean_pk)
+            .first()
+        )
+        if not master and clean_pk.isdigit():
+            master = (
+                Salerequestmaster.objects.using("plus")
+                .filter(salerequestmasterid=int(clean_pk))
+                .first()
+            )
+        if not master:
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
+        return master
+
+    def _resolve_existing_visitor_guid(self, master):
+        master_guid = str(getattr(master, "gsalerequestmasterid", "") or "").strip()
+        try:
+            if master_guid:
+                srv = (
+                    Salerequesttovisitor.objects.using("plus")
+                    .filter(gsalerequestid__iexact=master_guid)
+                    .first()
+                )
+                if srv and getattr(srv, "gvisitorid", None):
+                    return str(srv.gvisitorid).strip()
+            if getattr(master, "salerequestmasterid", None):
+                srv = (
+                    Salerequesttovisitor.objects.using("plus")
+                    .filter(salerequestid=master.salerequestmasterid)
+                    .first()
+                )
+                if srv and getattr(srv, "gvisitorid", None):
+                    return str(srv.gvisitorid).strip()
+        except DatabaseError:
+            pass
+
+        if getattr(master, "visitorid", None) is not None:
+            try:
+                vis_row = (
+                    ViewAllvisitors.objects.using("plus")
+                    .filter(visitorid=master.visitorid)
+                    .values("gvisitorid")
+                    .first()
+                )
+                if vis_row and vis_row.get("gvisitorid"):
+                    return str(vis_row["gvisitorid"]).strip()
+            except DatabaseError:
+                pass
+        return ""
+
+    def _match_canonical_id(self, candidate_id, choices, id_key):
+        if not candidate_id:
+            return ""
+        target = str(candidate_id).strip().lower()
+        for ch in choices:
+            raw_val = ch.get(id_key) if isinstance(ch, dict) else getattr(ch, id_key, "")
+            if raw_val and str(raw_val).strip().lower() == target:
+                return str(raw_val).strip()
+        return str(candidate_id).strip()
+
+    def _build_edit_context(
+        self,
+        master,
+        return_to="",
+        submitted_data=None,
+    ):
+        context = super().get_context_data()
+        branches_list = list(context["branches"])
+        inventories_list = list(context["inventories"])
+        visitors_list = list(context["visitors"])
+
+        if submitted_data is not None:
+            raw_branch_id = submitted_data.get("branch_id", "")
+            raw_inv_id = submitted_data.get("inv_id", "")
+            raw_visitor_id = submitted_data.get("visitor_id", "")
+            raw_customer_id = submitted_data.get("customer_id", "")
+        else:
+            raw_branch_id = getattr(master, "gbranchid", "") or ""
+            raw_inv_id = getattr(master, "ginvid", "") or ""
+            raw_visitor_id = self._resolve_existing_visitor_guid(master)
+            raw_customer_id = getattr(master, "gcustomerid", "") or ""
+
+        # Ensure existing visitor is selectable even if currently inactive
+        if raw_visitor_id and not any(
+            str(v["id"]).strip().lower() == str(raw_visitor_id).strip().lower()
+            for v in visitors_list
+        ):
+            try:
+                extra_vis = (
+                    ViewAllvisitors.objects.using("plus")
+                    .filter(gvisitorid__iexact=str(raw_visitor_id).strip())
+                    .values("gvisitorid", "vizitorname", "personname", "vizitorcode")
+                    .first()
+                )
+                if extra_vis and extra_vis.get("gvisitorid"):
+                    visitors_list.append(
+                        {
+                            "id": str(extra_vis["gvisitorid"]),
+                            "name": extra_vis.get("vizitorname")
+                            or extra_vis.get("personname")
+                            or "بدون نام",
+                            "code": extra_vis.get("vizitorcode") or "",
+                        }
+                    )
+            except DatabaseError:
+                pass
+
+        selected_branch_id = self._match_canonical_id(
+            raw_branch_id, branches_list, "gbranchid"
+        )
+        selected_inv_id = self._match_canonical_id(
+            raw_inv_id, inventories_list, "ginvid"
+        )
+        selected_visitor_id = self._match_canonical_id(
+            raw_visitor_id, visitors_list, "id"
+        )
+
+        # Initial Customer payload
+        initial_customer = None
+        if raw_customer_id:
+            cust_obj = (
+                Tblcustomer.objects.using("plus")
+                .filter(gcustomerid__iexact=str(raw_customer_id).strip())
+                .first()
+            )
+            if cust_obj:
+                initial_customer = {
+                    "id": str(cust_obj.gcustomerid),
+                    "name": cust_obj.custname or "",
+                    "code": cust_obj.custno or "",
+                    "phone": cust_obj.mobile or cust_obj.phone or "",
+                }
+
+        # Initial Product Line Items payload
+        initial_items = []
+        if submitted_data is not None and "items" in submitted_data:
+            submitted_items = submitted_data["items"]
+            kala_ids = list(
+                {
+                    variant
+                    for it in submitted_items
+                    if it.get("product_id")
+                    for variant in (
+                        str(it["product_id"]).strip(),
+                        str(it["product_id"]).strip().upper(),
+                        str(it["product_id"]).strip().lower(),
+                    )
+                }
+            )
+            kala_map = {}
+            if kala_ids:
+                for k in Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids):
+                    if k.gkalaid:
+                        kala_map[str(k.gkalaid).strip().lower()] = k
+            for it in submitted_items:
+                pid = str(it["product_id"]).strip()
+                kala = kala_map.get(pid.lower())
+                qty_val = float(it["quantity"])
+                initial_items.append(
+                    {
+                        "id": str(kala.gkalaid) if kala else pid,
+                        "name": kala.kalaname if kala else "",
+                        "code": kala.kalano if kala else "",
+                        "unit": (kala.vahed1 if (kala and kala.vahed1) else "عدد"),
+                        "quantity": int(qty_val) if qty_val.is_integer() else qty_val,
+                        "price": int(it["price"]),
+                    }
+                )
+        else:
+            master_guid = str(getattr(master, "gsalerequestmasterid", "") or "").strip()
+            details = list(
+                Salerequestdetail.objects.using("plus")
+                .filter(gsalerequestmasterid__iexact=master_guid)
+                .order_by("rowid")
+            )
+            kala_ids = list(
+                {
+                    variant
+                    for d in details
+                    if d.gkalaid
+                    for variant in (
+                        str(d.gkalaid).strip(),
+                        str(d.gkalaid).strip().upper(),
+                        str(d.gkalaid).strip().lower(),
+                    )
+                }
+            )
+            kala_map = {}
+            if kala_ids:
+                for k in Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids):
+                    if k.gkalaid:
+                        kala_map[str(k.gkalaid).strip().lower()] = k
+
+            for d in details:
+                raw_kid = str(d.gkalaid or "").strip()
+                kala = kala_map.get(raw_kid.lower())
+                qty_val = float(d.quantity or 0)
+                initial_items.append(
+                    {
+                        "id": str(kala.gkalaid) if kala else raw_kid,
+                        "name": kala.kalaname
+                        if kala
+                        else (d.descript or "کالای نامشخص"),
+                        "code": kala.kalano if kala else "",
+                        "unit": kala.vahed1 if (kala and kala.vahed1) else "عدد",
+                        "quantity": int(qty_val) if qty_val.is_integer() else qty_val,
+                        "price": int(d.unitprice or 0),
+                    }
+                )
+
+        back_url = (
+            reverse("core:sale_request_list")
+            if return_to == "list"
+            else reverse(
+                "core:sale_request_detail",
+                kwargs={"pk": master.gsalerequestmasterid},
+            )
+        )
+
+        context.update(
+            {
+                "is_edit": True,
+                "master": master,
+                "branches": branches_list,
+                "inventories": inventories_list,
+                "visitors": visitors_list,
+                "selected_branch_id": selected_branch_id,
+                "selected_inv_id": selected_inv_id,
+                "selected_visitor_id": selected_visitor_id,
+                "initial_customer": initial_customer,
+                "initial_customer_json": json.dumps(
+                    initial_customer, ensure_ascii=False, cls=DjangoJSONEncoder
+                ),
+                "initial_items_json": json.dumps(
+                    initial_items, ensure_ascii=False, cls=DjangoJSONEncoder
+                ),
+                "return_to": return_to,
+                "back_url": back_url,
+            }
+        )
+        return context
+
+    def get(self, request, pk, *args, **kwargs):
+        master = self._get_master(pk)
+        _, can_modify = _resolve_sale_request_status(master)
+        if not can_modify:
+            messages.error(
+                request,
+                "فقط درخواست‌های فروش با وضعیت «ثبت شده» قابل ویرایش هستند.",
+            )
+            return redirect(
+                "core:sale_request_detail", pk=master.gsalerequestmasterid
+            )
+
+        return_to = (request.GET.get("from") or "").strip()
+        context = self._build_edit_context(master, return_to=return_to)
+        return render(request, self.template_name, context)
+
+    def post(self, request, pk, *args, **kwargs):
+        master = self._get_master(pk)
+        _, can_modify = _resolve_sale_request_status(master)
+        if not can_modify:
+            messages.error(
+                request,
+                "فقط درخواست‌های فروش با وضعیت «ثبت شده» قابل ویرایش هستند.",
+            )
+            return redirect(
+                "core:sale_request_detail", pk=master.gsalerequestmasterid
+            )
+
+        return_to = (
+            request.POST.get("return_to") or request.GET.get("from") or ""
+        ).strip()
+        customer_id = request.POST.get("customer_id", "").strip()
+        branch_id = request.POST.get("branch_id", "").strip()
+        inv_id = request.POST.get("inv_id", "").strip()
+        visitor_id = request.POST.get("visitor_id", "").strip()
+        product_ids = request.POST.getlist("product_id[]")
+        quantities = request.POST.getlist("quantity[]")
+        prices = request.POST.getlist("price[]")
+
+        valid_items = []
+        for p_id, qty, prc in zip(product_ids, quantities, prices):
+            p_id = p_id.strip()
+            if not p_id:
+                continue
+            try:
+                dec_qty = Decimal(str(qty))
+                dec_price = Decimal(str(prc))
+                if dec_qty <= 0:
+                    continue
+                valid_items.append(
+                    {
+                        "product_id": p_id,
+                        "quantity": dec_qty,
+                        "price": dec_price,
+                    }
+                )
+            except (InvalidOperation, ValueError):
+                continue
+
+        submitted_snapshot = {
+            "customer_id": customer_id,
+            "branch_id": branch_id,
+            "inv_id": inv_id,
+            "visitor_id": visitor_id,
+            "items": valid_items,
+        }
+
+        validation_error = None
+        if not customer_id:
+            validation_error = "لطفاً مشتری را انتخاب کنید."
+        elif not branch_id:
+            validation_error = "لطفاً شعبه را انتخاب کنید."
+        elif not inv_id:
+            validation_error = "لطفاً انبار را انتخاب کنید."
+        elif not visitor_id:
+            validation_error = "لطفاً ویزیتور را انتخاب کنید."
+        elif not valid_items:
+            validation_error = "حداقل باید یک کالا با تعداد معتبر انتخاب شود."
+
+        if validation_error:
+            messages.error(request, validation_error)
+            context = self._build_edit_context(
+                master,
+                return_to=return_to,
+                submitted_data=submitted_snapshot,
+            )
+            return render(request, self.template_name, context)
+
+        merged_items = _consolidate_sale_request_items(valid_items)
+
+        try:
+            with transaction.atomic(using="plus"):
+                today_jalali = jdatetime.date.today()
+                jalali_date_str = today_jalali.strftime("%Y/%m/%d")
+                current_time_str = datetime.now().strftime("%H:%M:%S")
+                current_user_gucode = request.session.get("user_id")
+
+                visitor_data = (
+                    ViewAllvisitors.objects.using("plus")
+                    .filter(gvisitorid__iexact=visitor_id)
+                    .values("visitorid", "poorsant")
+                    .first()
+                )
+                visitor_int_id = (
+                    visitor_data.get("visitorid") if visitor_data else None
+                )
+                visitor_poorsant = (
+                    visitor_data.get("poorsant")
+                    if (
+                        visitor_data
+                        and visitor_data.get("poorsant") is not None
+                    )
+                    else Decimal("0.00")
+                )
+
+                master_guid = str(master.gsalerequestmasterid).strip()
+                master_int_id = getattr(master, "salerequestmasterid", None)
+
+                # A. Update Master Record
+                master.gcustomerid = customer_id
+                master.gbranchid = branch_id
+                master.ginvid = inv_id
+                master.visitorid = visitor_int_id
+                master.glastupdatedby = current_user_gucode
+                master.lastupdateddate = jalali_date_str
+                master.lastupdatedtime = current_time_str
+                master.save(
+                    using="plus",
+                    update_fields=[
+                        "gcustomerid",
+                        "gbranchid",
+                        "ginvid",
+                        "visitorid",
+                        "glastupdatedby",
+                        "lastupdateddate",
+                        "lastupdatedtime",
+                    ],
+                )
+
+                # B. Update or Create SaleRequestToVisitor
+                srv_q = Q(gsalerequestid__iexact=master_guid)
+                if master_int_id is not None:
+                    srv_q |= Q(salerequestid=master_int_id)
+
+                updated_srv_count = (
+                    Salerequesttovisitor.objects.using("plus")
+                    .filter(srv_q)
+                    .update(
+                        gvisitorid=visitor_id,
+                        visitorid=visitor_int_id,
+                        porsant=visitor_poorsant,
+                    )
+                )
+                if not updated_srv_count:
+                    Salerequesttovisitor.objects.using("plus").create(
+                        gsalerequesttovisitorid=str(uuid.uuid4()).upper(),
+                        gsalerequestid=master_guid,
+                        salerequestid=master_int_id,
+                        gvisitorid=visitor_id,
+                        visitorid=visitor_int_id,
+                        porsant=visitor_poorsant,
+                    )
+
+                # C. Replace SaleRequestDetail Line Items
+                detail_q = Q(gsalerequestmasterid__iexact=master_guid)
+                if master_int_id is not None:
+                    detail_q |= Q(salerequestmasterid=master_int_id)
+                Salerequestdetail.objects.using("plus").filter(detail_q).delete()
+
+                detail_instances = []
+                for index, item in enumerate(merged_items, start=1):
+                    detail_instances.append(
+                        Salerequestdetail(
+                            salerequestmasterid=master_int_id,
+                            gsalerequestmasterid=master_guid,
+                            gsalerequestdetailid=str(uuid.uuid4()).upper(),
+                            uniqueid=str(uuid.uuid4()).upper(),
+                            gkalaid=item["product_id"],
+                            quantity=item["quantity"],
+                            unitprice=item["price"],
+                            salerequestdetailstatuscode=1,
+                            canchangeaward=False,
+                            currencyrate=Decimal("1.0000"),
+                            currencyprice=item["price"],
+                            rowid=index,
+                            kalamojodi=Decimal("0"),
+                        )
+                    )
+
+                Salerequestdetail.objects.using("plus").bulk_create(
+                    detail_instances
+                )
+
+            messages.success(
+                request,
+                f"درخواست فروش شماره {master.salerequestno} با موفقیت ویرایش شد.",
+            )
+            if return_to == "list":
+                return redirect("core:sale_request_list")
+            return redirect(
+                "core:sale_request_detail", pk=master.gsalerequestmasterid
+            )
+
+        except Exception as exc:
+            messages.error(request, f"خطا در ویرایش درخواست فروش: {str(exc)}")
+            context = self._build_edit_context(
+                master,
+                return_to=return_to,
+                submitted_data=submitted_snapshot,
+            )
+            return render(request, self.template_name, context)
+
+
+class SaleRequestDeleteView(PlusLoginRequiredMixin, View):
+    def _get_master(self, pk):
+        clean_pk = str(pk or "").strip()
+        if not clean_pk:
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
+
+        master = (
+            Salerequestmaster.objects.using("plus")
+            .filter(gsalerequestmasterid__iexact=clean_pk)
+            .first()
+        )
+        if not master and clean_pk.isdigit():
+            master = (
+                Salerequestmaster.objects.using("plus")
+                .filter(salerequestmasterid=int(clean_pk))
+                .first()
+            )
+        if not master:
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
+        return master
+
+    def get(self, request, pk, *args, **kwargs):
+        return redirect("core:sale_request_detail", pk=pk)
+
+    def post(self, request, pk, *args, **kwargs):
+        master = self._get_master(pk)
+        _, can_modify = _resolve_sale_request_status(master)
+        if not can_modify:
+            messages.error(
+                request,
+                "فقط درخواست‌های فروش با وضعیت «ثبت شده» قابل حذف هستند.",
+            )
+            return redirect(
+                "core:sale_request_detail", pk=master.gsalerequestmasterid
+            )
+
+        req_no = master.salerequestno or ""
+        master_guid = str(master.gsalerequestmasterid).strip()
+        master_int_id = getattr(master, "salerequestmasterid", None)
+
+        try:
+            with transaction.atomic(using="plus"):
+                detail_q = Q(gsalerequestmasterid__iexact=master_guid)
+                if master_int_id is not None:
+                    detail_q |= Q(salerequestmasterid=master_int_id)
+                Salerequestdetail.objects.using("plus").filter(detail_q).delete()
+
+                srv_q = Q(gsalerequestid__iexact=master_guid)
+                if master_int_id is not None:
+                    srv_q |= Q(salerequestid=master_int_id)
+                Salerequesttovisitor.objects.using("plus").filter(srv_q).delete()
+
+                master.delete(using="plus")
+
+            messages.success(
+                request,
+                f"درخواست فروش شماره {req_no} با موفقیت حذف شد.",
+            )
+            return redirect("core:sale_request_list")
+
+        except Exception as exc:
+            messages.error(request, f"خطا در حذف درخواست فروش: {str(exc)}")
+            return redirect(
+                "core:sale_request_detail", pk=master.gsalerequestmasterid
+            )
 
 
 class OfflineView(PlusLoginRequiredMixin, TemplateView):

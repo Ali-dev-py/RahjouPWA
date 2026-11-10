@@ -7,7 +7,7 @@
             <span class="material-symbols-outlined" aria-hidden="true">home</span>
             <span>خانه</span>
         </a>
-        <a class="app-bottom-nav__link{% if current == 'sale_request_list' or current == 'sale_request_detail' or current == 'sale_request_create' %} is-active{% endif %}"
+        <a class="app-bottom-nav__link{% if current == 'sale_request_list' or current == 'sale_request_detail' or current == 'sale_request_create' or current == 'sale_request_edit' %} is-active{% endif %}"
            href="{% url 'core:sale_request_list' %}"
            {% if current == 'sale_request_list' %}aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">description</span>
