@@ -341,6 +341,10 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
         assigned_visitor_keys = set()
         for idx, customer in enumerate(customers):
             customer.name_rank = idx
+            raw_edit_pk = getattr(customer, "gcustomerid", None) or getattr(
+                customer, "customerid", ""
+            )
+            customer.edit_pk = str(raw_edit_pk).strip()
             if customer.gsubdetailid:
                 cust_gid = str(customer.gsubdetailid).strip().lower()
                 customer.hesab = balance_map.get(cust_gid, 0)
@@ -592,6 +596,215 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
                 {
                     "groups": groups,
                     "errors": [f"خطا در ثبت اطلاعات: {str(exc)}"],
+                    "custname": custname,
+                    "phone": phone,
+                    "address": address,
+                    "selected_group_id": selected_group_id,
+                },
+            )
+
+
+class CustomerEditView(PlusLoginRequiredMixin, View):
+    template_name = "core/customer_edit.html"
+
+    def _get_customer(self, pk):
+        clean_pk = str(pk or "").strip()
+        if not clean_pk:
+            raise Http404("مشتری مورد نظر یافت نشد.")
+
+        customer = (
+            Tblcustomer.objects.using("plus")
+            .filter(gcustomerid__iexact=clean_pk)
+            .first()
+        )
+        if not customer and clean_pk.isdigit():
+            customer = (
+                Tblcustomer.objects.using("plus")
+                .filter(customerid=int(clean_pk))
+                .first()
+            )
+        if not customer:
+            raise Http404("مشتری مورد نظر یافت نشد.")
+        return customer
+
+    def _get_customer_group_link(self, customer):
+        c2g = None
+        if getattr(customer, "gcustomerid", None):
+            c2g = (
+                Customer2Group.objects.using("plus")
+                .filter(gcustomerid__iexact=str(customer.gcustomerid).strip())
+                .first()
+            )
+        if not c2g and getattr(customer, "customerid", None):
+            c2g = (
+                Customer2Group.objects.using("plus")
+                .filter(customerid=customer.customerid)
+                .first()
+            )
+        return c2g
+
+    def _resolve_edit_pk(self, customer, fallback_pk):
+        raw = (
+            getattr(customer, "gcustomerid", None)
+            or getattr(customer, "customerid", None)
+            or fallback_pk
+        )
+        return str(raw).strip()
+
+    def get(self, request, pk, *args, **kwargs):
+        customer = self._get_customer(pk)
+        groups = list(
+            Customergroup.objects.using("plus").all().order_by("groupname")
+        )
+        c2g = self._get_customer_group_link(customer)
+
+        selected_group_id = ""
+        if c2g:
+            raw_group_gid = (c2g.gcustomergroupid or "").strip().lower()
+            for grp in groups:
+                grp_gid = (grp.gcustomergroupid or "").strip().lower()
+                if (raw_group_gid and grp_gid == raw_group_gid) or (
+                    c2g.customergroupid
+                    and grp.customergroupid == c2g.customergroupid
+                ):
+                    selected_group_id = grp.gcustomergroupid
+                    break
+
+        initial_phone = (customer.mobile or customer.phone or "").strip()
+        initial_address = (customer.address or "").strip()
+
+        return render(
+            request,
+            self.template_name,
+            {
+                "customer": customer,
+                "edit_pk": self._resolve_edit_pk(customer, pk),
+                "groups": groups,
+                "custname": customer.custname or "",
+                "phone": initial_phone,
+                "address": initial_address,
+                "selected_group_id": selected_group_id,
+            },
+        )
+
+    def post(self, request, pk, *args, **kwargs):
+        customer = self._get_customer(pk)
+        edit_pk = self._resolve_edit_pk(customer, pk)
+
+        custname = request.POST.get("custname", "").strip()
+        phone = request.POST.get("phone", "").strip()
+        address = request.POST.get("address", "").strip()
+        selected_group_id = request.POST.get("customer_group", "").strip()
+
+        groups = list(
+            Customergroup.objects.using("plus").all().order_by("groupname")
+        )
+
+        errors = []
+        if not custname:
+            errors.append("نام مشتری الزامی است.")
+        if not selected_group_id:
+            errors.append("انتخاب گروه مشتری الزامی است.")
+
+        group = None
+        if selected_group_id:
+            group = (
+                Customergroup.objects.using("plus")
+                .filter(gcustomergroupid__iexact=selected_group_id)
+                .first()
+            )
+            if not group:
+                errors.append("گروه مشتری انتخاب‌شده نامعتبر است.")
+
+        if errors:
+            return render(
+                request,
+                self.template_name,
+                {
+                    "customer": customer,
+                    "edit_pk": edit_pk,
+                    "groups": groups,
+                    "errors": errors,
+                    "custname": custname,
+                    "phone": phone,
+                    "address": address,
+                    "selected_group_id": selected_group_id,
+                },
+            )
+
+        try:
+            plus_user = getattr(request, "plus_user", None)
+            updated_by = getattr(plus_user, "uname", "") if plus_user else ""
+            shamsi_date = jdatetime.date.today().strftime("%Y/%m/%d")
+
+            with transaction.atomic(using="plus"):
+                update_fields = [
+                    "custname",
+                    "customername",
+                    "phone",
+                    "mobile",
+                    "address",
+                    "lastupdatedby",
+                    "lastupdateddate",
+                ]
+                customer.custname = custname
+                customer.customername = custname
+                customer.phone = phone
+                customer.mobile = phone
+                customer.address = address
+                customer.lastupdatedby = updated_by
+                customer.lastupdateddate = shamsi_date
+
+                if not getattr(customer, "gcustomerid", None):
+                    customer.gcustomerid = str(uuid.uuid4()).upper()
+                    update_fields.append("gcustomerid")
+
+                customer.save(using="plus", update_fields=update_fields)
+
+                c2g = self._get_customer_group_link(customer)
+                if c2g:
+                    c2g.customergroupid = group.customergroupid
+                    c2g.gcustomergroupid = group.gcustomergroupid
+                    if getattr(customer, "customerid", None):
+                        c2g.customerid = customer.customerid
+                    if (
+                        getattr(customer, "gcustomerid", None)
+                        and not c2g.gcustomerid
+                    ):
+                        c2g.gcustomerid = customer.gcustomerid
+                    if group.gcompanyid:
+                        c2g.gcompanyid = group.gcompanyid
+                    c2g.save(
+                        using="plus",
+                        update_fields=[
+                            "customergroupid",
+                            "gcustomergroupid",
+                            "customerid",
+                            "gcustomerid",
+                            "gcompanyid",
+                        ],
+                    )
+                else:
+                    Customer2Group.objects.using("plus").create(
+                        customergroupid=group.customergroupid,
+                        customerid=getattr(customer, "customerid", None),
+                        gcustomerid=customer.gcustomerid,
+                        gcustomergroupid=group.gcustomergroupid,
+                        gcustomer2groupid=str(uuid.uuid4()).upper(),
+                        gcompanyid=group.gcompanyid,
+                    )
+
+            return redirect("core:customers")
+
+        except Exception as exc:
+            return render(
+                request,
+                self.template_name,
+                {
+                    "customer": customer,
+                    "edit_pk": edit_pk,
+                    "groups": groups,
+                    "errors": [f"خطا در ویرایش اطلاعات: {str(exc)}"],
                     "custname": custname,
                     "phone": phone,
                     "address": address,

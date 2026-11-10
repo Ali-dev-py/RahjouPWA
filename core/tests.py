@@ -13,6 +13,7 @@ from django.test import RequestFactory, SimpleTestCase
 from django.urls import NoReverseMatch, reverse
 
 from core.views import (
+    CustomerEditView,
     CustomersView,
     DashboardView,
     SaleRequestCreateView,
@@ -61,6 +62,10 @@ class RouteAndPWASmokeTests(SimpleTestCase):
             reverse("core:sale_request_create"),
             "/sale-requests/new/",
         )
+        self.assertEqual(
+            reverse("core:customer_edit", kwargs={"pk": "CUST-GUID-1"}),
+            "/customers/CUST-GUID-1/edit/",
+        )
 
     def test_legacy_factor_route_names_are_removed(self) -> None:
         for legacy_name in (
@@ -94,6 +99,7 @@ class RouteAndPWASmokeTests(SimpleTestCase):
             reverse("core:sale_request_detail", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_pdf", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_create"),
+            reverse("core:customer_edit", kwargs={"pk": "CUST-1"}),
         ]
         for url in protected_urls:
             with self.subTest(url=url):
@@ -850,3 +856,187 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             [c.custname for c in debt_asc_resp.context_data["customers"]],
             ["مشتری بستانکار", "مشتری تسویه", "مشتری بدهکار"],
         )
+        self.assertIn(
+            reverse("core:customer_edit", kwargs={"pk": "CUST-GUID-1"}),
+            html,
+        )
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Customer2Group")
+    @patch("core.views.Customergroup")
+    @patch("core.views.Tblcustomer")
+    def test_customer_edit_get_prefills_form_and_404_when_missing(
+        self,
+        mock_customer,
+        mock_group,
+        mock_c2g,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            customerid=42,
+            gcustomerid="CUST-GUID-42",
+            custno="142",
+            custname="فروشگاه امید",
+            phone="",
+            mobile="09123456789",
+            address="تهران، خیابان ولیعصر",
+        )
+        mock_group.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                customergroupid=1,
+                gcustomergroupid="GRP-GUID-1",
+                groupname="عمده‌فروش",
+                gcompanyid="COMP-1",
+            ),
+            SimpleNamespace(
+                customergroupid=2,
+                gcustomergroupid="GRP-GUID-2",
+                groupname="خرده‌فروش",
+                gcompanyid="COMP-1",
+            ),
+        ]
+        # Case-insensitive GUID match on group link
+        mock_c2g.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            customergroupid=2,
+            gcustomergroupid="grp-guid-2",
+        )
+
+        url = reverse("core:customer_edit", kwargs={"pk": "CUST-GUID-42"})
+        request = _attach_authenticated_session(self.factory.get(url))
+        request.resolver_match = SimpleNamespace(url_name="customer_edit")
+        response = CustomerEditView.as_view()(request, pk="CUST-GUID-42")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn("ویرایش اطلاعات مشتری", html)
+        self.assertIn('value="فروشگاه امید"', html)
+        self.assertIn('value="09123456789"', html)
+        self.assertIn("تهران، خیابان ولیعصر", html)
+        self.assertRegex(
+            html,
+            r'<option value="GRP-GUID-2"\s+selected>',
+        )
+
+        # Missing customer raises Http404
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = (
+            None
+        )
+        missing_req = _attach_authenticated_session(self.factory.get(url))
+        with self.assertRaises(Http404):
+            CustomerEditView.as_view()(missing_req, pk="MISSING-GUID")
+
+    @patch("core.views.transaction.atomic")
+    @patch("core.views.TuaUser")
+    @patch("core.views.Customer2Group")
+    @patch("core.views.Customergroup")
+    @patch("core.views.Tblcustomer")
+    def test_customer_edit_post_validates_and_updates_customer_and_group(
+        self,
+        mock_customer,
+        mock_group,
+        mock_c2g,
+        mock_user,
+        mock_atomic,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_atomic.return_value.__enter__.return_value = None
+        mock_atomic.return_value.__exit__.return_value = False
+
+        customer_obj = MagicMock(
+            customerid=42,
+            gcustomerid="CUST-GUID-42",
+            custno="142",
+            custname="فروشگاه قدیم",
+            customername="فروشگاه قدیم",
+            phone="02100000000",
+            mobile="09120000000",
+            address="نشانی قدیم",
+        )
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = (
+            customer_obj
+        )
+        groups = [
+            SimpleNamespace(
+                customergroupid=1,
+                gcustomergroupid="GRP-GUID-1",
+                groupname="عمده‌فروش",
+                gcompanyid="COMP-1",
+            ),
+            SimpleNamespace(
+                customergroupid=2,
+                gcustomergroupid="GRP-GUID-2",
+                groupname="خرده‌فروش",
+                gcompanyid="COMP-1",
+            ),
+        ]
+        mock_group.objects.using.return_value.all.return_value.order_by.return_value = (
+            groups
+        )
+
+        url = reverse("core:customer_edit", kwargs={"pk": "CUST-GUID-42"})
+
+        # 1. Validation error when custname is empty
+        bad_req = _attach_authenticated_session(
+            self.factory.post(
+                url,
+                {
+                    "custname": "   ",
+                    "customer_group": "GRP-GUID-1",
+                    "phone": "09121112233",
+                    "address": "نشانی جدید",
+                },
+            )
+        )
+        bad_req.resolver_match = SimpleNamespace(url_name="customer_edit")
+        bad_resp = CustomerEditView.as_view()(bad_req, pk="CUST-GUID-42")
+        self.assertEqual(bad_resp.status_code, 200)
+        self.assertIn("نام مشتری الزامی است.", bad_resp.content.decode("utf-8"))
+        customer_obj.save.assert_not_called()
+
+        # 2. Valid POST updates customer + existing Customer2Group and redirects
+        mock_group.objects.using.return_value.filter.return_value.first.return_value = (
+            groups[0]
+        )
+        c2g_obj = MagicMock(
+            customer2groupid=10,
+            customergroupid=2,
+            customerid=42,
+            gcustomerid="CUST-GUID-42",
+            gcustomergroupid="GRP-GUID-2",
+            gcompanyid="COMP-1",
+        )
+        mock_c2g.objects.using.return_value.filter.return_value.first.return_value = (
+            c2g_obj
+        )
+
+        good_req = _attach_authenticated_session(
+            self.factory.post(
+                url,
+                {
+                    "custname": "فروشگاه امید نوین",
+                    "customer_group": "GRP-GUID-1",
+                    "phone": "09129998877",
+                    "address": "تهران، میدان ونک",
+                },
+            )
+        )
+        good_req.resolver_match = SimpleNamespace(url_name="customer_edit")
+        good_resp = CustomerEditView.as_view()(good_req, pk="CUST-GUID-42")
+
+        self.assertEqual(good_resp.status_code, 302)
+        self.assertEqual(good_resp["Location"], reverse("core:customers"))
+        self.assertEqual(customer_obj.custname, "فروشگاه امید نوین")
+        self.assertEqual(customer_obj.customername, "فروشگاه امید نوین")
+        self.assertEqual(customer_obj.phone, "09129998877")
+        self.assertEqual(customer_obj.mobile, "09129998877")
+        self.assertEqual(customer_obj.address, "تهران، میدان ونک")
+        self.assertEqual(customer_obj.lastupdatedby, "علی")
+        customer_obj.save.assert_called_once()
+        self.assertEqual(c2g_obj.customergroupid, 1)
+        self.assertEqual(c2g_obj.gcustomergroupid, "GRP-GUID-1")
+        c2g_obj.save.assert_called_once()
