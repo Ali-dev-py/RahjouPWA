@@ -24,7 +24,9 @@ from core.views import (
     PreFactorListView,
     PreFactorPDFView,
     SaleRequestCreateView,
+    SaleRequestDeleteView,
     SaleRequestDetailView,
+    SaleRequestEditView,
     SaleRequestListView,
     SaleRequestPDFView,
 )
@@ -64,6 +66,14 @@ class RouteAndPWASmokeTests(SimpleTestCase):
         self.assertEqual(
             reverse("core:sale_request_pdf", kwargs={"pk": "SR-GUID-1"}),
             "/sale-requests/SR-GUID-1/pdf/",
+        )
+        self.assertEqual(
+            reverse("core:sale_request_edit", kwargs={"pk": "SR-GUID-1"}),
+            "/sale-requests/SR-GUID-1/edit/",
+        )
+        self.assertEqual(
+            reverse("core:sale_request_delete", kwargs={"pk": "SR-GUID-1"}),
+            "/sale-requests/SR-GUID-1/delete/",
         )
         self.assertEqual(
             reverse("core:sale_request_create"),
@@ -129,6 +139,8 @@ class RouteAndPWASmokeTests(SimpleTestCase):
             reverse("core:sale_request_list"),
             reverse("core:sale_request_detail"),
             reverse("core:sale_request_detail", kwargs={"pk": "SR-1"}),
+            reverse("core:sale_request_edit", kwargs={"pk": "SR-1"}),
+            reverse("core:sale_request_delete", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_pdf", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_create"),
             reverse("core:pre_factor_list"),
@@ -1593,3 +1605,241 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         )
         with self.assertRaises(Http404):
             CustomerDetailView.as_view()(req, pk="MISSING-CUST")
+
+    @patch("core.views.transaction.atomic")
+    @patch("core.views.TuaUser")
+    @patch("core.views.Salerequestdetail")
+    @patch("core.views.Salerequesttovisitor")
+    @patch("core.views.Salerequeststatus")
+    @patch("core.views.Salerequestmaster")
+    @patch("core.views.Statementprice")
+    @patch("core.views.Tblkala")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Tblinv")
+    @patch("core.views.Branches")
+    @patch("core.views.Tblcustomer")
+    def test_sale_request_edit_allowed_only_when_sabt_shode(
+        self,
+        mock_customer,
+        mock_branches,
+        mock_inv,
+        mock_visitors,
+        mock_kala,
+        mock_price,
+        mock_master,
+        mock_status,
+        mock_srv,
+        mock_detail,
+        mock_user,
+        mock_atomic,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        master_obj = SimpleNamespace(
+            salerequestmasterid=15,
+            gsalerequestmasterid="SR-GUID-15",
+            salerequestno="000015",
+            salerequeststatuscode=1,
+            gcustomerid="CUST-1",
+            gbranchid="BR-1",
+            ginvid="INV-1",
+            visitorid=5,
+            save=MagicMock(),
+        )
+        mock_master.objects.using.return_value.filter.return_value.first.return_value = (
+            master_obj
+        )
+
+        # 1. Non-'ثبت شده' status blocks GET and POST edit
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            salerequeststatuscode=2, salerequeststatusname="تایید شده"
+        )
+        edit_url = reverse(
+            "core:sale_request_edit", kwargs={"pk": "SR-GUID-15"}
+        )
+        blocked_get = _attach_authenticated_session(self.factory.get(edit_url))
+        blocked_resp = SaleRequestEditView.as_view()(
+            blocked_get, pk="SR-GUID-15"
+        )
+        self.assertEqual(blocked_resp.status_code, 302)
+        self.assertEqual(
+            blocked_resp["Location"],
+            reverse("core:sale_request_detail", kwargs={"pk": "SR-GUID-15"}),
+        )
+
+        # 2. 'ثبت شده' status allows GET and pre-populates form
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            salerequeststatuscode=1, salerequeststatusname="ثبت شده"
+        )
+        mock_customer.objects.using.return_value.values.return_value.order_by.return_value = [
+            {
+                "gcustomerid": "CUST-1",
+                "custname": "فروشگاه البرز",
+                "custno": "10",
+                "mobile": "09121112233",
+                "phone": "",
+            }
+        ]
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            gcustomerid="CUST-1",
+            custname="فروشگاه البرز",
+            custno="10",
+            mobile="09121112233",
+            phone="",
+        )
+        mock_branches.objects.using.return_value.values.return_value.order_by.return_value = [
+            {"gbranchid": "BR-1", "branchname": "شعبه مرکزی", "branchcode": "1"}
+        ]
+        mock_inv.objects.using.return_value.values.return_value.order_by.return_value = [
+            {"ginvid": "INV-1", "invname": "انبار اصلی", "invcode": "1"}
+        ]
+        mock_visitors.objects.using.return_value.filter.return_value.values.return_value.order_by.return_value = [
+            {
+                "gvisitorid": "VIS-1",
+                "vizitorname": "حسن کریمی",
+                "personname": "",
+                "vizitorcode": "V1",
+            }
+        ]
+        mock_srv.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            gvisitorid="vis-1"
+        )
+        mock_price.objects.using.return_value.filter.return_value.values.return_value.order_by.return_value = []
+        mock_kala.objects.using.return_value.values.return_value.order_by.return_value = [
+            {
+                "gkalaid": "KALA-1",
+                "kalaname": "محصول الف",
+                "kalano": "K1",
+                "vahed1": "عدد",
+                "selprice": Decimal("300000"),
+            }
+        ]
+        mock_detail.objects.using.return_value.filter.return_value.order_by.return_value = [
+            SimpleNamespace(
+                gkalaid="kala-1",
+                quantity=Decimal("3"),
+                unitprice=Decimal("300000"),
+                descript="",
+            )
+        ]
+        mock_kala.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(
+                gkalaid="KALA-1",
+                kalaname="محصول الف",
+                kalano="K1",
+                vahed1="عدد",
+            )
+        ]
+
+        ok_get = _attach_authenticated_session(self.factory.get(edit_url))
+        ok_get.resolver_match = SimpleNamespace(url_name="sale_request_edit")
+        get_resp = SaleRequestEditView.as_view()(ok_get, pk="SR-GUID-15")
+        self.assertEqual(get_resp.status_code, 200)
+        html = get_resp.content.decode("utf-8")
+        self.assertIn("ویرایش درخواست فروش", html)
+        self.assertIn("ذخیره تغییرات درخواست", html)
+        self.assertIn("فروشگاه البرز", html)
+
+        # 3. Valid POST updates master, visitor link, and replaces details
+        mock_detail.side_effect = lambda **kw: SimpleNamespace(**kw)
+        mock_visitors.objects.using.return_value.filter.return_value.values.return_value.first.return_value = {
+            "visitorid": 8,
+            "poorsant": Decimal("2.50"),
+        }
+        mock_srv.objects.using.return_value.filter.return_value.update.return_value = 1
+
+        post_req = _attach_authenticated_session(
+            self.factory.post(
+                edit_url,
+                {
+                    "customer_id": "CUST-2",
+                    "branch_id": "BR-2",
+                    "inv_id": "INV-2",
+                    "visitor_id": "VIS-2",
+                    "product_id[]": ["KALA-1", "KALA-1"],
+                    "quantity[]": ["2", "3"],
+                    "price[]": ["300000", "300000"],
+                },
+            )
+        )
+        post_resp = SaleRequestEditView.as_view()(post_req, pk="SR-GUID-15")
+        self.assertEqual(post_resp.status_code, 302)
+        self.assertEqual(
+            post_resp["Location"],
+            reverse("core:sale_request_detail", kwargs={"pk": "SR-GUID-15"}),
+        )
+        self.assertEqual(master_obj.gcustomerid, "CUST-2")
+        self.assertEqual(master_obj.gbranchid, "BR-2")
+        self.assertEqual(master_obj.ginvid, "INV-2")
+        self.assertEqual(master_obj.visitorid, 8)
+        master_obj.save.assert_called_once()
+        mock_detail.objects.using.return_value.filter.return_value.delete.assert_called_once()
+        created_details = (
+            mock_detail.objects.using.return_value.bulk_create.call_args[0][0]
+        )
+        # Duplicate KALA-1 rows merged into 1 row with quantity 2 + 3 = 5
+        self.assertEqual(len(created_details), 1)
+        self.assertEqual(created_details[0].quantity, Decimal("5"))
+
+    @patch("core.views.transaction.atomic")
+    @patch("core.views.TuaUser")
+    @patch("core.views.Salerequesttovisitor")
+    @patch("core.views.Salerequestdetail")
+    @patch("core.views.Salerequeststatus")
+    @patch("core.views.Salerequestmaster")
+    def test_sale_request_delete_allowed_only_when_sabt_shode(
+        self,
+        mock_master,
+        mock_status,
+        mock_detail,
+        mock_srv,
+        mock_user,
+        mock_atomic,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        master_obj = MagicMock(
+            salerequestmasterid=22,
+            gsalerequestmasterid="SR-GUID-22",
+            salerequestno="000022",
+            salerequeststatuscode=2,
+        )
+        mock_master.objects.using.return_value.filter.return_value.first.return_value = (
+            master_obj
+        )
+
+        delete_url = reverse(
+            "core:sale_request_delete", kwargs={"pk": "SR-GUID-22"}
+        )
+
+        # 1. Non-'ثبت شده' status blocks deletion
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            salerequeststatuscode=2, salerequeststatusname="تایید شده"
+        )
+        blocked_post = _attach_authenticated_session(
+            self.factory.post(delete_url)
+        )
+        blocked_resp = SaleRequestDeleteView.as_view()(
+            blocked_post, pk="SR-GUID-22"
+        )
+        self.assertEqual(blocked_resp.status_code, 302)
+        self.assertEqual(
+            blocked_resp["Location"],
+            reverse("core:sale_request_detail", kwargs={"pk": "SR-GUID-22"}),
+        )
+        master_obj.delete.assert_not_called()
+
+        # 2. 'ثبت شده' status deletes details, visitor link, and master
+        master_obj.salerequeststatuscode = 1
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            salerequeststatuscode=1, salerequeststatusname="ثبت شده"
+        )
+        ok_post = _attach_authenticated_session(self.factory.post(delete_url))
+        ok_resp = SaleRequestDeleteView.as_view()(ok_post, pk="SR-GUID-22")
+        self.assertEqual(ok_resp.status_code, 302)
+        self.assertEqual(ok_resp["Location"], reverse("core:sale_request_list"))
+        mock_detail.objects.using.return_value.filter.return_value.delete.assert_called_once()
+        mock_srv.objects.using.return_value.filter.return_value.delete.assert_called_once()
+        master_obj.delete.assert_called_once_with(using="plus")

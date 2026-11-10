@@ -2,7 +2,7 @@
 {% load humanize %}
 {% load i18n_extras %}
 
-{% block title %}درخواست فروش جدید | رهجو{% endblock %}
+{% block title %}{% if is_edit %}ویرایش درخواست {{ master.salerequestno|persian_digits }} | رهجو{% else %}درخواست فروش جدید | رهجو{% endif %}{% endblock %}
 {% block body_class %}app-body page-sale-request-create has-action-bar{% endblock %}
 
 {% block extra_css %}
@@ -45,7 +45,11 @@
 {% endblock %}
 
 {% block content %}
-{% include "partials/_app_header.html" with heading="درخواست فروش جدید" back_url_name="core:sale_request_list" %}
+{% if is_edit %}
+    {% include "partials/_app_header.html" with heading="ویرایش درخواست فروش" back_url=back_url back_url_name="core:sale_request_list" %}
+{% else %}
+    {% include "partials/_app_header.html" with heading="درخواست فروش جدید" back_url_name="core:sale_request_list" %}
+{% endif %}
 
 <main class="app-main container-fluid px-3">
     <!-- Messages Display -->
@@ -60,16 +64,29 @@
         </div>
     {% endif %}
 
-    <form id="saleRequestForm" class="app-content app-content--narrow mx-auto" action="{% url 'core:sale_request_create' %}" method="post">
+    <form id="saleRequestForm"
+          class="app-content app-content--narrow mx-auto"
+          action="{% if is_edit %}{% url 'core:sale_request_edit' pk=master.gsalerequestmasterid %}{% else %}{% url 'core:sale_request_create' %}{% endif %}"
+          method="post">
         {% csrf_token %}
+        {% if return_to %}
+            <input type="hidden" name="return_to" value="{{ return_to }}">
+        {% endif %}
 
         <!-- Order Settings: Branch, Inventory & Visitor -->
         <section class="card editor-card border-0 mb-4" aria-labelledby="order-settings-title">
             <div class="card-body p-3">
-                <h2 class="h5 fw-bold d-flex align-items-center gap-2 mb-3" id="order-settings-title">
-                    <span class="material-symbols-outlined text-primary" aria-hidden="true">tune</span>
-                    اطلاعات پایه درخواست
-                </h2>
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                    <h2 class="h5 fw-bold d-flex align-items-center gap-2 mb-0" id="order-settings-title">
+                        <span class="material-symbols-outlined text-primary" aria-hidden="true">tune</span>
+                        اطلاعات پایه درخواست
+                    </h2>
+                    {% if is_edit and master.salerequestno %}
+                        <span class="badge bg-primary-subtle text-primary rounded-pill fw-normal px-3 py-1">
+                            شماره {{ master.salerequestno|persian_digits }}
+                        </span>
+                    {% endif %}
+                </div>
                 <div class="row g-3">
                     <div class="col-12 col-md-4">
                         <label for="branchSelect" class="form-label small text-secondary fw-semibold">
@@ -78,7 +95,7 @@
                         <select name="branch_id" id="branchSelect" class="form-select" required>
                             <option value="">-- شعبه --</option>
                             {% for b in branches %}
-                                <option value="{{ b.gbranchid }}">
+                                <option value="{{ b.gbranchid }}" {% if selected_branch_id == b.gbranchid %}selected{% endif %}>
                                     {{ b.branchname }}
                                 </option>
                             {% endfor %}
@@ -92,7 +109,7 @@
                         <select name="inv_id" id="invSelect" class="form-select" required>
                             <option value="">-- انبار --</option>
                             {% for inv in inventories %}
-                                <option value="{{ inv.ginvid }}">
+                                <option value="{{ inv.ginvid }}" {% if selected_inv_id == inv.ginvid %}selected{% endif %}>
                                     {{ inv.invname }}
                                 </option>
                             {% endfor %}
@@ -106,7 +123,7 @@
                         <select name="visitor_id" id="visitorSelect" class="form-select" required>
                             <option value="">-- بازاریاب --</option>
                             {% for v in visitors %}
-                                <option value="{{ v.id }}">
+                                <option value="{{ v.id }}" {% if selected_visitor_id == v.id %}selected{% endif %}>
                                     {{ v.name }}
                                 </option>
                             {% endfor %}
@@ -127,7 +144,7 @@
                 </div>
 
                 <!-- 1. Customer Search Box -->
-                <div id="customerSearchWrapper" class="position-relative">
+                <div id="customerSearchWrapper" class="position-relative{% if initial_customer %} d-none{% endif %}">
                     <div class="input-group app-search app-search--flat">
                         <span class="input-group-text border-0 bg-transparent">
                             <span class="material-symbols-outlined" aria-hidden="true">search</span>
@@ -144,18 +161,18 @@
                 </div>
 
                 <!-- 2. Selected Customer Info Card -->
-                <div id="selectedCustomerContainer" class="card bg-light border-0 rounded-3 p-3 d-none">
+                <div id="selectedCustomerContainer" class="card bg-light border-0 rounded-3 p-3{% if not initial_customer %} d-none{% endif %}">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="d-flex align-items-center gap-3 min-width-0">
                             <div class="rounded-circle bg-primary-subtle text-primary p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
                                 <span class="material-symbols-outlined fs-4">account_circle</span>
                             </div>
                             <div class="min-width-0">
-                                <h3 class="h6 fw-bold mb-1 text-dark text-truncate" id="displayCustomerName">---</h3>
+                                <h3 class="h6 fw-bold mb-1 text-dark text-truncate" id="displayCustomerName">{% if initial_customer %}{{ initial_customer.name }}{% else %}---{% endif %}</h3>
                                 <div class="d-flex flex-wrap gap-2 text-secondary small">
-                                    <span id="displayCustomerCode">کد: -</span>
+                                    <span id="displayCustomerCode">کد: {% if initial_customer %}{{ initial_customer.code|default:'-'|persian_digits }}{% else %}-{% endif %}</span>
                                     <span>•</span>
-                                    <span id="displayCustomerPhone">تلفن: -</span>
+                                    <span id="displayCustomerPhone">تلفن: {% if initial_customer %}{{ initial_customer.phone|default:'-'|persian_digits }}{% else %}-{% endif %}</span>
                                 </div>
                             </div>
                         </div>
@@ -164,7 +181,7 @@
                             تغییر مشتری
                         </button>
                     </div>
-                    <input type="hidden" name="customer_id" id="selectedCustomerId" value="">
+                    <input type="hidden" name="customer_id" id="selectedCustomerId" value="{% if initial_customer %}{{ initial_customer.id }}{% endif %}">
                 </div>
             </div>
         </section>
@@ -287,7 +304,7 @@
                 type="submit"
                 form="saleRequestForm">
             <span class="material-symbols-outlined fs-5">check</span>
-            <span>ثبت نهایی درخواست</span>
+            <span>{% if is_edit %}ذخیره تغییرات درخواست{% else %}ثبت نهایی درخواست{% endif %}</span>
         </button>
     </div>
 </div>
@@ -295,6 +312,8 @@
 <!-- Raw In-Memory JSON Data -->
 {{ customers_json|json_script:"customers-data" }}
 {{ products_json|json_script:"products-data" }}
+{% if initial_customer_json %}{{ initial_customer_json|json_script:"initial-customer-data" }}{% endif %}
+{% if initial_items_json %}{{ initial_items_json|json_script:"initial-items-data" }}{% endif %}
 
 <!-- JavaScript Logic -->
 <script>
@@ -302,9 +321,13 @@
         // 1. Data Parsing
         const customersDataEl = document.getElementById('customers-data');
         const productsDataEl = document.getElementById('products-data');
+        const initialCustomerDataEl = document.getElementById('initial-customer-data');
+        const initialItemsDataEl = document.getElementById('initial-items-data');
 
         const allCustomers = customersDataEl ? JSON.parse(JSON.parse(customersDataEl.textContent)) : [];
         const allProducts = productsDataEl ? JSON.parse(JSON.parse(productsDataEl.textContent)) : [];
+        const initialCustomer = initialCustomerDataEl ? JSON.parse(JSON.parse(initialCustomerDataEl.textContent)) : null;
+        const initialItems = initialItemsDataEl ? JSON.parse(JSON.parse(initialItemsDataEl.textContent)) : [];
 
         // Helpers
         function toPersianDigits(value) {
@@ -451,7 +474,7 @@
             }
         }
 
-        function createLineItemRow(autoFocus = true) {
+        function createLineItemRow(autoFocus = true, initialItem = null) {
             const clone = lineItemTemplate.content.cloneNode(true);
             const fieldset = clone.querySelector('fieldset');
 
@@ -462,6 +485,14 @@
             const itemUnitLabel = fieldset.querySelector('.item-unit-label');
             const itemQuantityInput = fieldset.querySelector('.item-quantity-input');
             const btnDeleteRow = fieldset.querySelector('.btn-delete-row');
+
+            if (initialItem) {
+                itemProductIdInput.value = initialItem.id || '';
+                itemSearchInput.value = initialItem.name || '';
+                itemPriceInput.value = initialItem.price || 0;
+                itemUnitLabel.textContent = initialItem.unit || 'عدد';
+                itemQuantityInput.value = initialItem.quantity || 1;
+            }
 
             // Autocomplete Search
             itemSearchInput.addEventListener('input', function () {
@@ -581,8 +612,20 @@
             }
         });
 
-        // Initialize 1 row
-        createLineItemRow(false);
+        // Pre-populate customer and line items in Edit mode (or initialize 1 blank row)
+        if (initialCustomer && initialCustomer.id) {
+            selectCustomer(initialCustomer);
+        }
+
+        if (Array.isArray(initialItems) && initialItems.length > 0) {
+            initialItems.forEach(item => {
+                createLineItemRow(false, item);
+            });
+            recalculateTotal();
+            ensureTrailingRow();
+        } else {
+            createLineItemRow(false);
+        }
 
         // Close dropdowns on outside click
         document.addEventListener('click', function (e) {

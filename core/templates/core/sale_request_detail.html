@@ -11,6 +11,17 @@
 
 <main class="app-main container-fluid px-3">
     <div class="app-content app-content--narrow mx-auto">
+        {% if messages %}
+            <div class="mb-3">
+                {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show rounded-3 py-2 px-3 small" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="بستن"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         {% if sale_request_found %}
             <!-- Status and Action Toolbar -->
             <div class="d-flex align-items-center justify-content-between mb-3">
@@ -18,13 +29,33 @@
                     <span class="material-symbols-outlined fs-6" aria-hidden="true">verified</span>
                     {{ status_name }}
                 </span>
-                <a class="btn app-icon-button app-icon-button--surface"
-                    href="{% url 'core:sale_request_pdf' pk=master.gsalerequestmasterid %}"
-                    id="btnTopPrintSaleRequest"
-                    aria-label="چاپ درخواست فروش"
-                    title="چاپ درخواست فروش">
-                    <span class="material-symbols-outlined" aria-hidden="true">print</span>
-                </a>
+                <div class="d-flex align-items-center gap-2">
+                    {% if can_modify %}
+                        <a class="btn app-icon-button app-icon-button--surface text-primary"
+                           href="{% url 'core:sale_request_edit' pk=master.gsalerequestmasterid %}"
+                           id="btnEditSaleRequest"
+                           aria-label="ویرایش درخواست فروش"
+                           title="ویرایش درخواست فروش">
+                            <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+                        </a>
+                        <button class="btn app-icon-button app-icon-button--surface text-danger"
+                                type="button"
+                                id="btnDeleteSaleRequest"
+                                data-bs-toggle="modal"
+                                data-bs-target="#deleteSaleRequestModal"
+                                aria-label="حذف درخواست فروش"
+                                title="حذف درخواست فروش">
+                            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                        </button>
+                    {% endif %}
+                    <a class="btn app-icon-button app-icon-button--surface"
+                        href="{% url 'core:sale_request_pdf' pk=master.gsalerequestmasterid %}"
+                        id="btnTopPrintSaleRequest"
+                        aria-label="چاپ درخواست فروش"
+                        title="چاپ درخواست فروش">
+                        <span class="material-symbols-outlined" aria-hidden="true">print</span>
+                    </a>
+                </div>
             </div>
 
             <!-- Sale Request Card -->
@@ -60,21 +91,21 @@
                         <h2 class="small text-secondary fw-normal mb-2" id="customer-title">مشخصات خریدار:</h2>
                         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                             <strong class="text-dark fs-6">
-                                {{ customer.custname|default:master.requestman|default:"مشتری نامشخص" }}
+                                {% if customer and customer.custname %}{{ customer.custname }}{% else %}{{ master.requestman|default:"مشتری نامشخص" }}{% endif %}
                             </strong>
-                            {% if customer.economno or customer.nationalid %}
+                            {% if customer and customer.economno or customer and customer.nationalid %}
                                 <span class="text-secondary small">
                                     شناسه/کد ملی: {{ customer.economno|default:customer.nationalid|persian_digits }}
                                 </span>
                             {% endif %}
                         </div>
-                        {% if customer.phone or customer.mobile %}
+                        {% if customer and customer.phone or customer and customer.mobile %}
                             <div class="small text-secondary mb-1">
                                 <span>تلفن تماس: </span>
                                 <span>{{ customer.mobile|default:customer.phone|persian_digits }}</span>
                             </div>
                         {% endif %}
-                        {% if customer.address %}
+                        {% if customer and customer.address %}
                             <p class="text-secondary small mb-0">
                                 <span>نشانی: </span>{{ customer.address }}
                             </p>
@@ -158,13 +189,46 @@
                 type="button"
                 id="btnDownloadSaleRequest"
                 data-url="{% url 'core:sale_request_pdf' pk=master.gsalerequestmasterid %}"
-                data-filename="درخواست فروش {{ customer.custname }} شماره {{ master.salerequestno|default:'sale_request' }}.pdf">
+                data-filename="درخواست فروش {% if customer %}{{ customer.custname }}{% endif %} شماره {{ master.salerequestno|default:'sale_request' }}.pdf">
             <span class="material-symbols-outlined fs-5" id="downloadIcon">download</span>
             <span class="spinner-border spinner-border-sm d-none" id="downloadSpinner" role="status" aria-hidden="true"></span>
             <span id="downloadBtnText">دریافت درخواست فروش (PDF)</span>
         </button>
     </div>
 </div>
+
+{% if can_modify %}
+<!-- Delete Sale Request Confirmation Modal -->
+<div class="modal fade" id="deleteSaleRequestModal" tabindex="-1" aria-labelledby="deleteSaleRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h2 class="modal-title h6 fw-bold text-danger d-flex align-items-center gap-2" id="deleteSaleRequestModalLabel">
+                    <span class="material-symbols-outlined fs-5" aria-hidden="true">warning</span>
+                    حذف درخواست فروش
+                </h2>
+                <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="بستن"></button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="mb-1 text-dark small">
+                    آیا از حذف درخواست فروش شماره <strong>{{ master.salerequestno|persian_digits }}</strong> اطمینان دارید؟
+                </p>
+                <p class="text-secondary small mb-0">این عملیات قابل بازگشت نیست.</p>
+            </div>
+            <div class="modal-footer border-0 pt-0 gap-2">
+                <button type="button" class="btn btn-light rounded-pill px-4 btn-sm" data-bs-dismiss="modal">انصراف</button>
+                <form method="post" action="{% url 'core:sale_request_delete' pk=master.gsalerequestmasterid %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger rounded-pill px-4 btn-sm d-inline-flex align-items-center gap-1">
+                        <span class="material-symbols-outlined fs-6" aria-hidden="true">delete</span>
+                        <span>حذف درخواست</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endif %}
 
 <!-- jsPDF & html2canvas Libraries -->
