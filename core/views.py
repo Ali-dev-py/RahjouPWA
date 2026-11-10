@@ -289,6 +289,23 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
             .order_by("custname")
         )
 
+        statuses = [
+            {"code": "debtor", "name": "بدهکار"},
+            {"code": "creditor", "name": "بستانکار"},
+            {"code": "settled", "name": "تسویه"},
+        ]
+        status_alias_map = {
+            "all": "all",
+            "debtor": "debtor",
+            "creditor": "creditor",
+            "settled": "settled",
+            "بدهکار": "debtor",
+            "بستانکار": "creditor",
+            "تسویه": "settled",
+        }
+        raw_status = self.request.GET.get("status", "all").strip()
+        current_status = status_alias_map.get(raw_status, "all")
+
         for customer in customers:
             if customer.gsubdetailid:
                 cust_gid = str(customer.gsubdetailid).strip().lower()
@@ -296,7 +313,27 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
             else:
                 customer.hesab = 0
 
+            if customer.hesab > 0:
+                customer.status_code = "debtor"
+                customer.status_name = "بدهکار"
+            elif customer.hesab < 0:
+                customer.status_code = "creditor"
+                customer.status_name = "بستانکار"
+            else:
+                customer.status_code = "settled"
+                customer.status_name = "تسویه"
+
+        if current_status == "all":
+            visible_customers_count = len(customers)
+        else:
+            visible_customers_count = sum(
+                1 for c in customers if c.status_code == current_status
+            )
+
         context["customers"] = customers
+        context["statuses"] = statuses
+        context["current_status"] = current_status
+        context["visible_customers_count"] = visible_customers_count
         return context
 
 
