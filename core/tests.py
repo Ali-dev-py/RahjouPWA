@@ -582,18 +582,22 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             SaleRequestPDFView.as_view()(missing_req, pk="MISSING")
 
     @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Visitortocustomer")
     @patch("core.views.Tblsanadrad")
     @patch("core.views.Tblcustomer")
-    def test_customers_view_assigns_three_accounting_statuses_and_renders_filters(
+    def test_customers_view_assigns_statuses_and_visitor_names(
         self,
         mock_customer,
         mock_sanadrad,
+        mock_v2c,
+        mock_visitors,
         mock_user,
     ) -> None:
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
             self.user
         )
-        mock_sanadrad.objects.using.return_value.filter.return_value.values.return_value.annotate.return_value = [
+        mock_sanadrad.objects.using.return_value.values.return_value.annotate.return_value = [
             {
                 "gsubdetailid": "sub-debtor",
                 "total_debit": Decimal("500000"),
@@ -610,20 +614,39 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
                 "total_credit": Decimal("200000"),
             },
         ]
+        mock_v2c.objects.using.return_value.filter.return_value.values.return_value = [
+            {"gcustomerid": "cust-guid-1", "gvisitorid": "vis-guid-1"},
+            {"gcustomerid": "CUST-GUID-2", "gvisitorid": "VIS-GUID-2"},
+        ]
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "VIS-GUID-1",
+                "vizitorname": "رضا محمدی",
+                "personname": "",
+            },
+            {
+                "gvisitorid": "vis-guid-2",
+                "vizitorname": "",
+                "personname": "سارا احمدی",
+            },
+        ]
         mock_customer.objects.using.return_value.all.return_value.order_by.return_value = [
             SimpleNamespace(
+                gcustomerid="CUST-GUID-1",
                 custname="مشتری بدهکار",
                 gsubdetailid="SUB-DEBTOR",
                 mobile="09120000001",
                 phone="",
             ),
             SimpleNamespace(
+                gcustomerid="cust-guid-2",
                 custname="مشتری بستانکار",
                 gsubdetailid="SUB-CREDITOR",
                 mobile="09120000002",
                 phone="",
             ),
             SimpleNamespace(
+                gcustomerid="CUST-GUID-3",
                 custname="مشتری تسویه",
                 gsubdetailid="SUB-SETTLED",
                 mobile="09120000003",
@@ -645,16 +668,22 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         )
         customers = response.context_data["customers"]
         self.assertEqual(
-            [(c.custname, c.status_code, c.status_name) for c in customers],
             [
-                ("مشتری بدهکار", "debtor", "بدهکار"),
-                ("مشتری بستانکار", "creditor", "بستانکار"),
-                ("مشتری تسویه", "settled", "تسویه"),
+                (c.custname, c.status_code, c.status_name, c.visitor_name)
+                for c in customers
+            ],
+            [
+                ("مشتری بدهکار", "debtor", "بدهکار", "رضا محمدی"),
+                ("مشتری بستانکار", "creditor", "بستانکار", "سارا احمدی"),
+                ("مشتری تسویه", "settled", "تسویه", "نامشخص"),
             ],
         )
         self.assertEqual(response.context_data["visible_customers_count"], 3)
 
         html = response.content.decode("utf-8")
+        self.assertIn("رضا محمدی", html)
+        self.assertIn("سارا احمدی", html)
+        self.assertIn("نامشخص", html)
         self.assertIn('data-status-filter="all"', html)
         self.assertIn('data-status-filter="debtor"', html)
         self.assertIn('data-status-filter="creditor"', html)
@@ -666,12 +695,14 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         # Also verify initial ?status=creditor hides non-creditors on server render
         mock_customer.objects.using.return_value.all.return_value.order_by.return_value = [
             SimpleNamespace(
+                gcustomerid="CUST-GUID-1",
                 custname="مشتری بدهکار",
                 gsubdetailid="SUB-DEBTOR",
                 mobile="09120000001",
                 phone="",
             ),
             SimpleNamespace(
+                gcustomerid="CUST-GUID-2",
                 custname="مشتری بستانکار",
                 gsubdetailid="SUB-CREDITOR",
                 mobile="09120000002",
