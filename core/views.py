@@ -261,13 +261,10 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        sanad_qs = Tblsanadrad.objects.using("plus").filter(
-            gsubdetailid__isnull=False,
-            createddate__gte=datetime(2026, 3, 21)
-        )
-        
+        # Query Tblsanadrad directly without the sanad_qs filter conditions
         balances = (
-            sanad_qs.values("gsubdetailid")
+            Tblsanadrad.objects.using("plus")
+            .values("gsubdetailid")
             .annotate(
                 total_debit=Sum("debit"),
                 total_credit=Sum("credit"),
