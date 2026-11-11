@@ -955,3 +955,69 @@ class Visitortocustomer(models.Model):
         managed = False
         db_table = 'VisitorToCustomer'
 
+
+class Tbldetailgroup(models.Model):
+    detailid = models.IntegerField(db_column='DetailID')
+    detailname = models.CharField(db_column='DetailName', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    minsubdetailcode = models.CharField(db_column='MinSubDetailCode', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    maxsubdetailcode = models.CharField(db_column='MaxSubDetailCode', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    description = models.CharField(db_column='Description', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    grouptypecode = models.IntegerField(db_column='GroupTypeCode', blank=True, null=True)
+    gdetailid = models.CharField(db_column='GDetailID', primary_key=True, max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    gcode = models.BigIntegerField(db_column='GCode', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tblDetailGroup'
+
+
+class Tblsubdetailgroup(models.Model):
+    detailid = models.IntegerField(db_column='DetailID', blank=True, null=True)
+    subdetailid = models.IntegerField(db_column='SubDetailID')
+    subdetailname = models.CharField(db_column='SubDetailName', max_length=100, db_collation='Arabic_CI_AS', blank=True, null=True)
+    description = models.CharField(db_column='Description', max_length=1000, db_collation='Arabic_CI_AS', blank=True, null=True)
+    status = models.CharField(db_column='Status', max_length=1, db_collation='Arabic_CI_AS', blank=True, null=True)
+    subdetailcode = models.CharField(db_column='SubDetailCode', unique=True, max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    costkindid = models.IntegerField(db_column='CostKindID', blank=True, null=True)
+    gdetailid = models.ForeignKey('Tbldetailgroup', models.DO_NOTHING, db_column='GDetailID')
+    gsubdetailid = models.CharField(db_column='GSubDetailID', max_length=36, primary_key=True)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    gcostkindid = models.CharField(db_column='GCostKindID', max_length=36, blank=True, null=True)
+    gcode = models.BigIntegerField(db_column='GCode', blank=True, null=True)
+    lastticdate = models.DateTimeField(db_column='LastTicDate', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tblSubDetailGroup'
+
+
+class Province(models.Model):
+    provinceid = models.AutoField(db_column='ProvinceID', primary_key=True)
+    provincename = models.CharField(db_column='ProvinceName', max_length=50, db_collation='Arabic_CI_AS')
+    provincenamelatin = models.CharField(db_column='ProvinceNameLatin', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    gprovinceid = models.CharField(db_column='GProvinceID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    provincecode = models.IntegerField(db_column='ProvinceCode')
+
+    class Meta:
+        managed = False
+        db_table = 'Province'
+
+
+
+class Cities(models.Model):
+    citiesid = models.AutoField(db_column='CitiesID', primary_key=True)
+    citynamefarsi = models.CharField(db_column='CityNameFarsi', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    citynamelatin = models.CharField(db_column='CityNameLatin', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    citytelcode = models.CharField(db_column='CityTelCode', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    gcountryid = models.CharField(db_column='GCountryID', max_length=36, blank=True, null=True)
+    gprovinceid = models.CharField(db_column='GProvinceID', max_length=36, blank=True, null=True)
+    gcitiesid = models.CharField(db_column='GCitiesID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    citiescode = models.IntegerField(db_column='CitiesCode')
+
+    class Meta:
+        managed = False
+        db_table = 'Cities'
+
