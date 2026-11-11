@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% load i18n_extras %}
 
 {% block title %}فاکتورهای فروش | رهجو{% endblock %}
@@ -22,7 +23,7 @@
                            name="q"
                            value="{{ query|default:'' }}"
                            aria-label="جستجوی فاکتور فروش"
-                           placeholder="جستجوی فاکتور فروش (شماره، نام مشتری...)">
+                           placeholder="جستجوی فاکتور فروش (شماره، نام مشتری، ویزیتور...)">
                     {% if query %}
                         <a href="?status={{ current_status }}" class="btn border-0 text-secondary d-flex align-items-center" aria-label="پاک کردن جستجو">
                             <span class="material-symbols-outlined fs-5">close</span>
@@ -75,6 +76,10 @@
                                     <a class="stretched-link text-reset text-decoration-none"
                                        href="{% url 'core:factor_detail' pk=factor.id %}">{{ factor.customer_name }}</a>
                                 </h2>
+                                <small class="text-secondary d-flex align-items-center gap-1 mt-1 text-truncate">
+                                    <span class="material-symbols-outlined app-symbol-sm flex-shrink-0" aria-hidden="true">badge</span>
+                                    <span class="text-truncate">ویزیتور: {{ factor.visitor_name }}</span>
+                                </small>
                             </div>
                             <span class="status-chip {{ factor.chip_class }} flex-shrink-0">
                                 {% if factor.dot_class %}
@@ -83,14 +88,18 @@
                                 {{ factor.status_name }}
                             </span>
                         </div>
-                        <div class="d-flex justify-content-between align-items-end gap-3">
+                        <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top">
                             <span class="small text-secondary d-flex align-items-center gap-1">
                                 <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
                                 {{ factor.date|persian_digits }}
                             </span>
-                            <span class="d-flex align-items-center gap-2">
-                                <span class="sale-request-card__download material-symbols-outlined text-secondary" aria-hidden="true">visibility</span>
-                            </span>
+                            <div class="text-start">
+                                <small class="text-secondary d-block mb-1">مبلغ کل</small>
+                                <strong class="sale-request-card__amount d-inline-block fs-6 text-primary">
+                                    {{ factor.total_amount|persian_digits|intcomma:False }}
+                                </strong>
+                                <small class="text-secondary">ریال</small>
+                            </div>
                         </div>
                     </div>
                 </article>

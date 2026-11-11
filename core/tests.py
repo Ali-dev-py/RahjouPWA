@@ -292,6 +292,8 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn(reverse("core:sale_request_create"), html)
 
     @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salerequesttovisitor")
     @patch("core.views.Salerequeststatus")
     @patch("core.views.Salerequestmaster")
     @patch("core.views.Tblcustomer")
@@ -300,11 +302,15 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         mock_customer,
         mock_master,
         mock_status,
+        mock_srv,
+        mock_visitors,
         mock_user,
     ) -> None:
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
             self.user
         )
+        mock_visitors.objects.using.return_value.values.return_value = []
+        mock_srv.objects.using.return_value.filter.return_value.values.return_value = []
         mock_status.objects.using.return_value.all.return_value.order_by.return_value = [
             SimpleNamespace(
                 salerequeststatuscode=1, salerequeststatusname="ثبت شده"
@@ -348,6 +354,8 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn("sale-request-card", html)
 
     @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salerequesttovisitor")
     @patch("core.views.Salerequestmaster")
     @patch("core.views.Salerequeststatus")
     @patch("core.views.Tblcustomer")
@@ -360,11 +368,30 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         mock_customer,
         mock_status,
         mock_master,
+        mock_srv,
+        mock_visitors,
         mock_user,
     ) -> None:
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
             self.user
         )
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "VIS-300",
+                "visitorid": 300,
+                "gsubdetailid": None,
+                "vizitorname": "نیما علوی",
+                "personname": "",
+            }
+        ]
+        mock_srv.objects.using.return_value.filter.return_value.values.return_value = [
+            {
+                "gsalerequestid": "SR-GUID-300",
+                "salerequestid": None,
+                "gvisitorid": "VIS-300",
+                "visitorid": 300,
+            }
+        ]
 
         # Case 1: Found
         master_obj = SimpleNamespace(
@@ -417,8 +444,10 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertTrue(response.context_data["sale_request_found"])
         self.assertNotIn("factor_found", response.context_data)
         self.assertEqual(response.context_data["total_payable"], 290000)
+        self.assertEqual(response.context_data["visitor_name"], "نیما علوی")
 
         html = response.content.decode("utf-8")
+        self.assertIn("نیما علوی", html)
         self.assertIn("btnDownloadSaleRequest", html)
         self.assertIn("btnTopPrintSaleRequest", html)
         self.assertIn("sale-request-pdf-styles", html)
@@ -1099,14 +1128,20 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         c2g_obj.save.assert_called_once()
 
     @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Prefactortovisitor")
+    @patch("core.views.Prefactordetail")
     @patch("core.views.Tblcustomer")
     @patch("core.views.Prefactormaster")
-    @patch("core.views.Prefactorstatus")
+    @patch("core.views.Prefactordetailstatus")
     def test_pre_factor_list_view_and_bottom_nav(
         self,
         mock_pf_status,
         mock_pf_master,
         mock_customer,
+        mock_pf_detail,
+        mock_pf_visitor,
+        mock_visitors,
         mock_user,
     ) -> None:
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
@@ -1114,22 +1149,49 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         )
         mock_pf_status.objects.using.return_value.all.return_value.order_by.return_value = [
             SimpleNamespace(
-                prefactorstatuscode=1, prefactorstatusname="ثبت اولیه"
+                prefactordetailstatuscode=1,
+                prefactordetailstatusname="ثبت اولیه",
             ),
             SimpleNamespace(
-                prefactorstatuscode=2, prefactorstatusname="تایید شده"
+                prefactordetailstatuscode=2,
+                prefactordetailstatusname="تایید شده",
             ),
         ]
         mock_pf_master.objects.using.return_value.filter.return_value.order_by.return_value = [
             SimpleNamespace(
+                prefactormasterid=100,
                 gprefactormasterid="PF-GUID-100",
                 prefactorno="000501",
                 prefactordate="1405/02/01",
                 createddate="1405/02/01",
                 gcustomerid="CUST-GUID-1",
                 requestman="",
-                prefactorstatuscode=2,
+                prefactorstatuscode=None,
             )
+        ]
+        mock_pf_detail.objects.using.return_value.filter.return_value.values.return_value.annotate.return_value = [
+            {
+                "gprefactormasterid": "pf-guid-100",
+                "line_net": Decimal("1850000"),
+                "detail_status": 2,
+            }
+        ]
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "VIS-GUID-1",
+                "visitorid": 10,
+                "gsubdetailid": None,
+                "vizitorname": "رضا بازاریاب",
+                "personname": "",
+            }
+        ]
+        mock_pf_visitor.objects.using.return_value.filter.return_value.values.return_value = [
+            {
+                "gprefactorid": "pf-guid-100",
+                "prefactorid": 100,
+                "gvisitorid": "vis-guid-1",
+                "visitorid": 10,
+            }
         ]
         mock_customer.objects.using.return_value.filter.return_value = [
             SimpleNamespace(gcustomerid="cust-guid-1", custname="شرکت سپهر")
@@ -1144,15 +1206,21 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context_data["pre_factors"]), 1)
-        self.assertEqual(
-            response.context_data["pre_factors"][0]["customer_name"],
-            "شرکت سپهر",
-        )
+        pf_item = response.context_data["pre_factors"][0]
+        self.assertEqual(pf_item["customer_name"], "شرکت سپهر")
+        self.assertEqual(pf_item["visitor_name"], "رضا بازاریاب")
+        self.assertEqual(pf_item["total_amount"], 1850000)
+        self.assertEqual(pf_item["status_name"], "تایید شده")
         html = response.content.decode("utf-8")
         self.assertIn(
             reverse("core:pre_factor_detail", kwargs={"pk": "PF-GUID-100"}),
             html,
         )
+        self.assertIn("رضا بازاریاب", html)
+        self.assertIn("۱,۸۵۰,۰۰۰", html)
+        self.assertIn("ثبت اولیه", html)
+        self.assertIn("تایید شده", html)
+        self.assertNotIn(">visibility<", html)
         # Verify bottom navbar contains all 5 navigation links
         for nav_route in (
             "core:dashboard",
@@ -1164,10 +1232,12 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             self.assertIn(reverse(nav_route), html)
 
     @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Prefactortovisitor")
     @patch("core.views.Tblkala")
     @patch("core.views.Prefactordetail")
     @patch("core.views.Tblcustomer")
-    @patch("core.views.Prefactorstatus")
+    @patch("core.views.Prefactordetailstatus")
     @patch("core.views.Prefactormaster")
     def test_pre_factor_detail_and_pdf_views(
         self,
@@ -1176,12 +1246,15 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         mock_customer,
         mock_pf_detail,
         mock_kala,
+        mock_pf_visitor,
+        mock_visitors,
         mock_user,
     ) -> None:
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
             self.user
         )
         master_obj = SimpleNamespace(
+            prefactormasterid=200,
             gprefactormasterid="PF-GUID-200",
             prefactorno="000502",
             prefactordate="1405/02/05",
@@ -1189,14 +1262,31 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             createdtime="10:30:00",
             gcustomerid="CUST-GUID-2",
             requestman="",
-            prefactorstatuscode=2,
+            prefactorstatuscode=None,
         )
         mock_pf_master.objects.using.return_value.filter.return_value.first.return_value = (
             master_obj
         )
         mock_pf_status.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
-            prefactorstatuscode=2, prefactorstatusname="تایید شده"
+            prefactordetailstatuscode=2, prefactordetailstatusname="تایید شده"
         )
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "VIS-GUID-2",
+                "visitorid": 12,
+                "gsubdetailid": None,
+                "vizitorname": "سارا حسینی",
+                "personname": "",
+            }
+        ]
+        mock_pf_visitor.objects.using.return_value.filter.return_value.values.return_value = [
+            {
+                "gprefactorid": "PF-GUID-200",
+                "prefactorid": 200,
+                "gvisitorid": "VIS-GUID-2",
+                "visitorid": 12,
+            }
+        ]
         mock_customer.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
             custname="فروشگاه ستاره",
             economno="123456",
@@ -1211,6 +1301,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
                 quantity=Decimal("3"),
                 unitprice=Decimal("200000"),
                 discount=Decimal("50000"),
+                prefactordetailstatuscode=2,
                 descript="",
             )
         ]
@@ -1239,12 +1330,17 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
         self.assertEqual(detail_resp.status_code, 200)
         self.assertTrue(detail_resp.context_data["pre_factor_found"])
+        self.assertEqual(detail_resp.context_data["status_name"], "تایید شده")
+        self.assertEqual(detail_resp.context_data["visitor_name"], "سارا حسینی")
         self.assertEqual(detail_resp.context_data["subtotal"], 600000)
         self.assertEqual(detail_resp.context_data["total_discount"], 50000)
         self.assertEqual(detail_resp.context_data["total_payable"], 550000)
+        detail_html = detail_resp.content.decode("utf-8")
+        self.assertIn("سارا حسینی", detail_html)
+        self.assertIn("تایید شده", detail_html)
         self.assertIn(
             reverse("core:pre_factor_pdf", kwargs={"pk": "PF-GUID-200"}),
-            detail_resp.content.decode("utf-8"),
+            detail_html,
         )
 
         # PDF view
@@ -1262,6 +1358,9 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             PreFactorPDFView.as_view()(pdf_req, pk="MISSING-PF")
 
     @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salefactortovisitor")
+    @patch("core.views.Salefactordetail")
     @patch("core.views.Tblcustomer")
     @patch("core.views.Salefactormaster")
     @patch("core.views.Salefactorstatus")
@@ -1270,6 +1369,9 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         mock_sf_status,
         mock_sf_master,
         mock_customer,
+        mock_sf_detail,
+        mock_sf_visitor,
+        mock_visitors,
         mock_user,
     ) -> None:
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
@@ -1282,15 +1384,34 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         ]
         mock_sf_master.objects.using.return_value.all.return_value.order_by.return_value = [
             SimpleNamespace(
+                salefactormasterid=901,
                 gsalefactormasterid="FAC-GUID-100",
                 salefactorno="000901",
                 salefactordate="1405/02/10",
                 createddate="1405/02/10",
                 gcustomerid="CUST-GUID-9",
+                gvisitorid="VIS-GUID-9",
+                discount=Decimal("100000"),
                 requestman="",
                 salefactorstatuscode=1,
             )
         ]
+        mock_sf_detail.objects.using.return_value.filter.return_value.values.return_value.annotate.return_value = [
+            {
+                "gsalefactormasterid": "fac-guid-100",
+                "line_net": Decimal("2500000"),
+            }
+        ]
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "vis-guid-9",
+                "visitorid": 19,
+                "gsubdetailid": None,
+                "vizitorname": "مهدی کریمی",
+                "personname": "",
+            }
+        ]
+        mock_sf_visitor.objects.using.return_value.filter.return_value.values.return_value = []
         mock_customer.objects.using.return_value.filter.return_value = [
             SimpleNamespace(gcustomerid="cust-guid-9", custname="بازرگانی نوین")
         ]
@@ -1304,17 +1425,22 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context_data["factors"]), 1)
-        self.assertEqual(
-            response.context_data["factors"][0]["customer_name"],
-            "بازرگانی نوین",
-        )
+        fac_item = response.context_data["factors"][0]
+        self.assertEqual(fac_item["customer_name"], "بازرگانی نوین")
+        self.assertEqual(fac_item["visitor_name"], "مهدی کریمی")
+        self.assertEqual(fac_item["total_amount"], 2400000)
         html = response.content.decode("utf-8")
         self.assertIn(
             reverse("core:factor_detail", kwargs={"pk": "FAC-GUID-100"}),
             html,
         )
+        self.assertIn("مهدی کریمی", html)
+        self.assertIn("۲,۴۰۰,۰۰۰", html)
+        self.assertNotIn(">visibility<", html)
 
     @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salefactortovisitor")
     @patch("core.views.Tblkala")
     @patch("core.views.Salefactordetail")
     @patch("core.views.Tblcustomer")
@@ -1327,11 +1453,30 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         mock_customer,
         mock_sf_detail,
         mock_kala,
+        mock_sf_visitor,
+        mock_visitors,
         mock_user,
     ) -> None:
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
             self.user
         )
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "VIS-200",
+                "visitorid": 20,
+                "gsubdetailid": None,
+                "vizitorname": "حامد رضایی",
+                "personname": "",
+            }
+        ]
+        mock_sf_visitor.objects.using.return_value.filter.return_value.values.return_value = [
+            {
+                "gsalefactorid": "FAC-GUID-200",
+                "salefactorid": None,
+                "gvisitorid": "VIS-200",
+                "visitorid": 20,
+            }
+        ]
         master_obj = SimpleNamespace(
             gsalefactormasterid="FAC-GUID-200",
             salefactorno="000902",
@@ -1387,13 +1532,16 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
         self.assertEqual(detail_resp.status_code, 200)
         self.assertTrue(detail_resp.context_data["factor_found"])
+        self.assertEqual(detail_resp.context_data["visitor_name"], "حامد رضایی")
         self.assertEqual(detail_resp.context_data["subtotal"], 1000000)
         # 50,000 line discount + 25,000 master discount = 75,000
         self.assertEqual(detail_resp.context_data["total_discount"], 75000)
         self.assertEqual(detail_resp.context_data["total_payable"], 925000)
+        detail_html = detail_resp.content.decode("utf-8")
+        self.assertIn("حامد رضایی", detail_html)
         self.assertIn(
             reverse("core:factor_pdf", kwargs={"pk": "FAC-GUID-200"}),
-            detail_resp.content.decode("utf-8"),
+            detail_html,
         )
 
         # PDF view
@@ -1843,3 +1991,99 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         mock_detail.objects.using.return_value.filter.return_value.delete.assert_called_once()
         mock_srv.objects.using.return_value.filter.return_value.delete.assert_called_once()
         master_obj.delete.assert_called_once_with(using="plus")
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salerequesttovisitor")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Salerequestmaster")
+    @patch("core.views.Salerequeststatus")
+    def test_sale_request_list_visitor_name_and_no_eye_icon(
+        self,
+        mock_sr_status,
+        mock_sr_master,
+        mock_customer,
+        mock_srv,
+        mock_visitors,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_sr_status.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                salerequeststatuscode=1, salerequeststatusname="ثبت شده"
+            )
+        ]
+        mock_sr_master.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                salerequestmasterid=51,
+                gsalerequestmasterid="SR-GUID-51",
+                salerequestno="000051",
+                salerequestdate="1405/02/20",
+                createddate="1405/02/20",
+                gcustomerid="CUST-GUID-51",
+                requestman="",
+                visitorid=None,
+                salerequeststatuscode=1,
+            ),
+            SimpleNamespace(
+                salerequestmasterid=52,
+                gsalerequestmasterid="SR-GUID-52",
+                salerequestno="000052",
+                salerequestdate="1405/02/19",
+                createddate="1405/02/19",
+                gcustomerid="CUST-GUID-51",
+                requestman="",
+                visitorid=77,
+                salerequeststatuscode=1,
+            ),
+        ]
+        mock_customer.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(
+                gcustomerid="cust-guid-51", custname="بازرگانی آفتاب"
+            )
+        ]
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "vis-guid-51",
+                "visitorid": 51,
+                "gsubdetailid": None,
+                "vizitorname": "امیر محمدی",
+                "personname": "",
+            },
+            {
+                "gvisitorid": "vis-guid-77",
+                "visitorid": 77,
+                "gsubdetailid": None,
+                "vizitorname": "زهرا نوری",
+                "personname": "",
+            },
+        ]
+        mock_srv.objects.using.return_value.filter.return_value.values.return_value = [
+            {
+                "gsalerequestid": "sr-guid-51",
+                "salerequestid": 51,
+                "gvisitorid": "vis-guid-51",
+                "visitorid": 51,
+            }
+        ]
+
+        req = _attach_authenticated_session(
+            self.factory.get(reverse("core:sale_request_list"))
+        )
+        req.resolver_match = SimpleNamespace(url_name="sale_request_list")
+        resp = SaleRequestListView.as_view()(req)
+        resp.render()
+
+        self.assertEqual(resp.status_code, 200)
+        items = resp.context_data["sale_requests"]
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["visitor_name"], "امیر محمدی")
+        self.assertEqual(items[1]["visitor_name"], "زهرا نوری")
+
+        html = resp.content.decode("utf-8")
+        self.assertIn("امیر محمدی", html)
+        self.assertIn("زهرا نوری", html)
+        self.assertNotIn(">visibility<", html)
+
