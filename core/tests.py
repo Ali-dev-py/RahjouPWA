@@ -13,6 +13,7 @@ from django.test import RequestFactory, SimpleTestCase
 from django.urls import NoReverseMatch, reverse
 
 from core.views import (
+    CustomerCreateView,
     CustomerDetailView,
     CustomerEditView,
     CustomersView,
@@ -2086,4 +2087,163 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn("امیر محمدی", html)
         self.assertIn("زهرا نوری", html)
         self.assertNotIn(">visibility<", html)
+
+    @patch("core.views.transaction.atomic")
+    @patch("core.views.TuaUser")
+    @patch("core.views.Visitortocustomer")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Customer2Group")
+    @patch("core.views.Customergroup")
+    @patch("core.views.Tblcustomer")
+    def test_customer_create_view_clones_desktop_defaults_and_links_visitor(
+        self,
+        mock_customer,
+        mock_group,
+        mock_c2g,
+        mock_visitors,
+        mock_v2c,
+        mock_user,
+        mock_atomic,
+    ) -> None:
+        user_with_comp = SimpleNamespace(
+            gucode="USER-GUID-001",
+            uname="علی",
+            uid="ali",
+            uactive=True,
+            gcompanyid="COMP-FALLBACK-GUID",
+        )
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            user_with_comp
+        )
+        mock_atomic.return_value.__enter__.return_value = None
+        mock_atomic.return_value.__exit__.return_value = False
+
+        # Group has gcompanyid=None (common in Rahjou Plus), while desktop customer has real GCompanyID
+        groups = [
+            SimpleNamespace(
+                customergroupid=3,
+                gcustomergroupid="GRP-GUID-3",
+                groupname="مشتریان تهرانی",
+                gcompanyid=None,
+            )
+        ]
+        mock_group.objects.using.return_value.all.return_value.order_by.return_value = (
+            groups
+        )
+        mock_group.objects.using.return_value.filter.return_value.first.return_value = (
+            groups[0]
+        )
+
+        ref_desktop_customer = SimpleNamespace(
+            customerid=10,
+            custno="125",
+            gcustomerid="REF-CUST-GUID-10",
+            gsubdetailid="REF-SUBDETAIL-GUID-10",
+            gcompanyid="DESKTOP-COMPANY-GUID",
+            status="1",
+            salestatus=1,
+            custtypecode=1,
+            customertypecode=2,
+            customertaxtype=3,
+            gprovinceid="PROV-REAL-GUID",
+            gcityid="CITY-REAL-GUID",
+            visitpriod=7,
+            callstatus=0,
+            ranking=1,
+            usercount=0,
+            sentstatuscode=0,
+            createdby="11111111-2222-3333-4444-555555555555",
+        )
+        mock_customer.objects.using.return_value.filter.return_value.order_by.return_value.first.return_value = (
+            ref_desktop_customer
+        )
+        mock_customer.objects.using.return_value.exclude.return_value.exclude.return_value.values_list.return_value = [
+            "120",
+            "125",
+            "1950",
+        ]
+        mock_customer.objects.using.return_value.create.side_effect = (
+            lambda **kw: SimpleNamespace(customerid=126, **kw)
+        )
+
+        mock_visitors.objects.using.return_value.filter.return_value.values.return_value.order_by.return_value = [
+            {
+                "gvisitorid": "VIS-GUID-7",
+                "vizitorname": "امین بازاریاب",
+                "personname": "",
+                "vizitorcode": "V7",
+            }
+        ]
+        mock_visitors.objects.using.return_value.filter.return_value.values.return_value.first.return_value = {
+            "gvisitorid": "VIS-GUID-7"
+        }
+
+        # 1. GET renders form with next_custno_preview (126), groups, and visitors
+        get_req = _attach_authenticated_session(
+            self.factory.get(reverse("core:customer_create"))
+        )
+        get_req.resolver_match = SimpleNamespace(url_name="customer_create")
+        get_resp = CustomerCreateView.as_view()(get_req)
+        self.assertEqual(get_resp.status_code, 200)
+        get_html = get_resp.content.decode("utf-8")
+        self.assertIn("مشتریان تهرانی", get_html)
+        self.assertIn("امین بازاریاب", get_html)
+        self.assertIn("۱۲۶", get_html)
+
+        # 2. POST creates desktop-compatible Tblcustomer + Customer2Group + Visitortocustomer
+        post_req = _attach_authenticated_session(
+            self.factory.post(
+                reverse("core:customer_create"),
+                {
+                    "custname": "پارس الکتریک",
+                    "prename": "شرکت",
+                    "companyname": "پارس الکتریک سهامی خاص",
+                    "customer_group": "GRP-GUID-3",
+                    "visitor_id": "VIS-GUID-7",
+                    "customertypecode": "2",
+                    "mobile": "09123334455",
+                    "phone": "02188990011",
+                    "nationalid": "۱۰۱۰۲۳۴۵۶۷۸",
+                    "economno": "۴۱۱۳۴۵۶۷۸۹۰۱",
+                    "credit": "۵۰,۰۰۰,۰۰۰",
+                    "address": "تهران، خیابان ولیعصر",
+                    "custdesc": "مشتری ویژه",
+                },
+            )
+        )
+        post_resp = CustomerCreateView.as_view()(post_req)
+        self.assertEqual(post_resp.status_code, 302)
+        self.assertEqual(post_resp["Location"], reverse("core:customers"))
+
+        created_kwargs = (
+            mock_customer.objects.using.return_value.create.call_args[1]
+        )
+        self.assertEqual(created_kwargs["custno"], "126")
+        self.assertEqual(created_kwargs["custname"], "پارس الکتریک")
+        self.assertEqual(created_kwargs["customername"], "شرکت پارس الکتریک")
+        self.assertEqual(created_kwargs["mobile"], "09123334455")
+        self.assertEqual(created_kwargs["phone"], "02188990011")
+        self.assertEqual(created_kwargs["nationalid"], "10102345678")
+        self.assertEqual(created_kwargs["economno"], "411345678901")
+        self.assertEqual(created_kwargs["credit"], Decimal("50000000"))
+        self.assertEqual(created_kwargs["gcompanyid"], "DESKTOP-COMPANY-GUID")
+        self.assertEqual(created_kwargs["custtypecode"], 1)
+        self.assertEqual(created_kwargs["customertypecode"], 2)
+        self.assertEqual(created_kwargs["gprovinceid"], "PROV-REAL-GUID")
+        self.assertEqual(created_kwargs["gcityid"], "CITY-REAL-GUID")
+        self.assertEqual(created_kwargs["createdby"], "USER-GUID-001")
+        self.assertEqual(created_kwargs["uid"], "ali")
+        self.assertFalse(created_kwargs["callwithemailsend"])
+        self.assertIsNone(created_kwargs["deletedby"])
+        self.assertIsNone(created_kwargs["deleteddate"])
+
+        c2g_kwargs = mock_c2g.objects.using.return_value.create.call_args[1]
+        self.assertEqual(c2g_kwargs["customerid"], 126)
+        self.assertEqual(c2g_kwargs["gcompanyid"], "DESKTOP-COMPANY-GUID")
+
+        v2c_kwargs = mock_v2c.objects.using.return_value.create.call_args[1]
+        self.assertEqual(v2c_kwargs["gvisitorid"], "VIS-GUID-7")
+        self.assertEqual(v2c_kwargs["gcustomerid"], created_kwargs["gcustomerid"])
+        self.assertEqual(v2c_kwargs["gcompanyid"], "DESKTOP-COMPANY-GUID")
+
 
