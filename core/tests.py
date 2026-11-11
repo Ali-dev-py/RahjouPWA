@@ -2090,35 +2090,39 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
     @patch("core.views.transaction.atomic")
     @patch("core.views.TuaUser")
+    @patch("core.views.Cities")
+    @patch("core.views.Province")
+    @patch("core.views.Tblsubdetailgroup")
     @patch("core.views.Visitortocustomer")
     @patch("core.views.ViewAllvisitors")
     @patch("core.views.Customer2Group")
     @patch("core.views.Customergroup")
     @patch("core.views.Tblcustomer")
-    def test_customer_create_view_clones_desktop_defaults_and_links_visitor(
+    def test_customer_create_view_creates_subdetailgroup_first_customer_and_visitor_link(
         self,
         mock_customer,
         mock_group,
         mock_c2g,
         mock_visitors,
         mock_v2c,
+        mock_subdetailgroup,
+        mock_province,
+        mock_cities,
         mock_user,
         mock_atomic,
     ) -> None:
-        user_with_comp = SimpleNamespace(
+        user_obj = SimpleNamespace(
             gucode="USER-GUID-001",
             uname="علی",
             uid="ali",
             uactive=True,
-            gcompanyid="COMP-FALLBACK-GUID",
         )
         mock_user.objects.using.return_value.filter.return_value.first.return_value = (
-            user_with_comp
+            user_obj
         )
         mock_atomic.return_value.__enter__.return_value = None
         mock_atomic.return_value.__exit__.return_value = False
 
-        # Group has gcompanyid=None (common in Rahjou Plus), while desktop customer has real GCompanyID
         groups = [
             SimpleNamespace(
                 customergroupid=3,
@@ -2134,36 +2138,84 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             groups[0]
         )
 
-        ref_desktop_customer = SimpleNamespace(
-            customerid=10,
-            custno="125",
-            gcustomerid="REF-CUST-GUID-10",
-            gsubdetailid="REF-SUBDETAIL-GUID-10",
-            gcompanyid="DESKTOP-COMPANY-GUID",
-            status="1",
-            salestatus=1,
-            custtypecode=1,
-            customertypecode=2,
-            customertaxtype=3,
-            gprovinceid="PROV-REAL-GUID",
-            gcityid="CITY-REAL-GUID",
-            visitpriod=7,
-            callstatus=0,
-            ranking=1,
-            usercount=0,
-            sentstatuscode=0,
-            createdby="11111111-2222-3333-4444-555555555555",
-        )
-        mock_customer.objects.using.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            ref_desktop_customer
-        )
+        # Provinces & Cities (including تهران default + اصفهان)
+        mock_province.objects.using.return_value.exclude.return_value.exclude.return_value.values.return_value.order_by.return_value = [
+            {"gprovinceid": "PROV-ESF-GUID", "provincename": "اصفهان"},
+            {"gprovinceid": "PROV-TEH-GUID", "provincename": "تهران"},
+        ]
+        mock_cities.objects.using.return_value.exclude.return_value.exclude.return_value.values.return_value.order_by.return_value = [
+            {
+                "gcitiesid": "CITY-ESF-GUID",
+                "citynamefarsi": "اصفهان",
+                "citynamelatin": "Isfahan",
+                "gprovinceid": "PROV-ESF-GUID",
+            },
+            {
+                "gcitiesid": "CITY-KASHAN-GUID",
+                "citynamefarsi": "کاشان",
+                "citynamelatin": "Kashan",
+                "gprovinceid": "PROV-ESF-GUID",
+            },
+            {
+                "gcitiesid": "CITY-TEH-GUID",
+                "citynamefarsi": "تهران",
+                "citynamelatin": "Tehran",
+                "gprovinceid": "PROV-TEH-GUID",
+            },
+            {
+                "gcitiesid": "CITY-DAMAVAND-GUID",
+                "citynamefarsi": "دماوند",
+                "citynamelatin": "Damavand",
+                "gprovinceid": "PROV-TEH-GUID",
+            },
+        ]
+
         mock_customer.objects.using.return_value.exclude.return_value.exclude.return_value.values_list.return_value = [
             "120",
             "125",
             "1950",
         ]
+
+        mock_subdetailgroup.objects.using.return_value.exclude.return_value.exclude.return_value.values_list.return_value = [
+            "120",
+            "500",
+        ]
+        mock_subdetailgroup.objects.using.return_value.aggregate.return_value = {
+            "max_id": 41
+        }
+        mock_v2c.objects.using.return_value.aggregate.return_value = {
+            "max_id": 9
+        }
+
+        execution_order = []
+
+        def _record_subdetail_create(**kw):
+            execution_order.append("Tblsubdetailgroup")
+            return SimpleNamespace(**kw)
+
+        def _record_customer_create(**kw):
+            execution_order.append("Tblcustomer")
+            return SimpleNamespace(customerid=126, **kw)
+
+        def _record_c2g_create(**kw):
+            execution_order.append("Customer2Group")
+            return SimpleNamespace(**kw)
+
+        def _record_v2c_create(**kw):
+            execution_order.append("Visitortocustomer")
+            return SimpleNamespace(**kw)
+
+        mock_subdetailgroup.objects.using.return_value.create.side_effect = (
+            _record_subdetail_create
+        )
         mock_customer.objects.using.return_value.create.side_effect = (
-            lambda **kw: SimpleNamespace(customerid=126, **kw)
+            _record_customer_create
+        )
+        mock_c2g.objects.using.return_value.create.side_effect = (
+            _record_c2g_create
+        )
+        mock_v2c.objects.using.return_value.create.side_effect = (
+            _record_v2c_create
         )
 
         mock_visitors.objects.using.return_value.filter.return_value.values.return_value.order_by.return_value = [
@@ -2178,7 +2230,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             "gvisitorid": "VIS-GUID-7"
         }
 
-        # 1. GET renders form with next_custno_preview (126), groups, and visitors
+        # 1. GET renders form WITHOUT tax section, with searchable Province/City defaulted to تهران
         get_req = _attach_authenticated_session(
             self.factory.get(reverse("core:customer_create"))
         )
@@ -2186,28 +2238,60 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         get_resp = CustomerCreateView.as_view()(get_req)
         self.assertEqual(get_resp.status_code, 200)
         get_html = get_resp.content.decode("utf-8")
+
         self.assertIn("مشتریان تهرانی", get_html)
         self.assertIn("امین بازاریاب", get_html)
         self.assertIn("۱۲۶", get_html)
+        self.assertIn('id="province_search"', get_html)
+        self.assertIn('id="city_search"', get_html)
+        self.assertRegex(
+            get_html,
+            r'<option value="PROV-TEH-GUID"\s+selected>',
+        )
+        self.assertRegex(
+            get_html,
+            r'<option value="CITY-TEH-GUID"[^>]*\s+selected>',
+        )
+        # Tax & supplementary section must be completely removed
+        self.assertNotIn("اطلاعات تکمیلی و مالیاتی", get_html)
+        self.assertNotIn('name="economno"', get_html)
+        self.assertNotIn('name="nationalid"', get_html)
+        self.assertNotIn('name="registno"', get_html)
+        self.assertNotIn('name="customertypecode"', get_html)
 
-        # 2. POST creates desktop-compatible Tblcustomer + Customer2Group + Visitortocustomer
+        # 2. POST with mismatched province/city rejects before writing anything
+        bad_post_req = _attach_authenticated_session(
+            self.factory.post(
+                reverse("core:customer_create"),
+                {
+                    "custname": "پارس الکتریک",
+                    "customer_group": "GRP-GUID-3",
+                    "gprovinceid": "PROV-TEH-GUID",
+                    "gcityid": "CITY-KASHAN-GUID",  # belongs to PROV-ESF-GUID
+                },
+            )
+        )
+        bad_resp = CustomerCreateView.as_view()(bad_post_req)
+        self.assertEqual(bad_resp.status_code, 200)
+        self.assertIn(
+            "شهر انتخاب‌شده با استان انتخابی مطابقت ندارد.",
+            bad_resp.content.decode("utf-8"),
+        )
+        self.assertEqual(execution_order, [])
+
+        # 3. Valid POST creates Tblsubdetailgroup FIRST, then Tblcustomer, Customer2Group, Visitortocustomer
         post_req = _attach_authenticated_session(
             self.factory.post(
                 reverse("core:customer_create"),
                 {
                     "custname": "پارس الکتریک",
-                    "prename": "شرکت",
-                    "companyname": "پارس الکتریک سهامی خاص",
                     "customer_group": "GRP-GUID-3",
                     "visitor_id": "VIS-GUID-7",
-                    "customertypecode": "2",
+                    "gprovinceid": "PROV-ESF-GUID",
+                    "gcityid": "CITY-KASHAN-GUID",
                     "mobile": "09123334455",
-                    "phone": "02188990011",
-                    "nationalid": "۱۰۱۰۲۳۴۵۶۷۸",
-                    "economno": "۴۱۱۳۴۵۶۷۸۹۰۱",
-                    "credit": "۵۰,۰۰۰,۰۰۰",
-                    "address": "تهران، خیابان ولیعصر",
-                    "custdesc": "مشتری ویژه",
+                    "phone": "03155443322",
+                    "address": "کاشان، بلوار امیرکبیر",
                 },
             )
         )
@@ -2215,35 +2299,76 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertEqual(post_resp.status_code, 302)
         self.assertEqual(post_resp["Location"], reverse("core:customers"))
 
+        # Verify strict execution order
+        self.assertEqual(
+            execution_order,
+            [
+                "Tblsubdetailgroup",
+                "Tblcustomer",
+                "Customer2Group",
+                "Visitortocustomer",
+            ],
+        )
+
+        # Verify Step 1: Tblsubdetailgroup fields
+        sd_kwargs = (
+            mock_subdetailgroup.objects.using.return_value.create.call_args[1]
+        )
+        self.assertIsNone(sd_kwargs["detailid"])
+        self.assertEqual(sd_kwargs["subdetailid"], 42)
+        self.assertEqual(sd_kwargs["subdetailname"], "پارس الکتریک")
+        self.assertEqual(sd_kwargs["description"], "تعریف مشتری")
+        self.assertEqual(sd_kwargs["status"], "1")
+        self.assertEqual(sd_kwargs["subdetailcode"], "126")
+        self.assertEqual(
+            sd_kwargs["gdetailid_id"],
+            "29DC434A-28AC-4602-B3BC-3972C76CC266",
+        )
+        self.assertEqual(
+            sd_kwargs["gcompanyid"],
+            "3BBE4300-11CF-42B9-919F-87642C174264",
+        )
+        self.assertEqual(len(sd_kwargs["gsubdetailid"]), 36)
+
+        # Verify Step 2: Tblcustomer fields
         created_kwargs = (
             mock_customer.objects.using.return_value.create.call_args[1]
         )
         self.assertEqual(created_kwargs["custno"], "126")
         self.assertEqual(created_kwargs["custname"], "پارس الکتریک")
-        self.assertEqual(created_kwargs["customername"], "شرکت پارس الکتریک")
+        self.assertEqual(created_kwargs["customername"], "پارس الکتریک")
         self.assertEqual(created_kwargs["mobile"], "09123334455")
-        self.assertEqual(created_kwargs["phone"], "02188990011")
-        self.assertEqual(created_kwargs["nationalid"], "10102345678")
-        self.assertEqual(created_kwargs["economno"], "411345678901")
-        self.assertEqual(created_kwargs["credit"], Decimal("50000000"))
-        self.assertEqual(created_kwargs["gcompanyid"], "DESKTOP-COMPANY-GUID")
-        self.assertEqual(created_kwargs["custtypecode"], 1)
+        self.assertEqual(created_kwargs["phone"], "03155443322")
+        self.assertEqual(created_kwargs["address"], "کاشان، بلوار امیرکبیر")
+        self.assertEqual(created_kwargs["gsubdetailid"], sd_kwargs["gsubdetailid"])
+        self.assertEqual(
+            created_kwargs["gcompanyid"],
+            "3BBE4300-11CF-42B9-919F-87642C174264",
+        )
+        self.assertEqual(created_kwargs["custtypecode"], 2)
         self.assertEqual(created_kwargs["customertypecode"], 2)
-        self.assertEqual(created_kwargs["gprovinceid"], "PROV-REAL-GUID")
-        self.assertEqual(created_kwargs["gcityid"], "CITY-REAL-GUID")
-        self.assertEqual(created_kwargs["createdby"], "USER-GUID-001")
-        self.assertEqual(created_kwargs["uid"], "ali")
-        self.assertFalse(created_kwargs["callwithemailsend"])
-        self.assertIsNone(created_kwargs["deletedby"])
-        self.assertIsNone(created_kwargs["deleteddate"])
+        self.assertEqual(created_kwargs["gprovinceid"], "PROV-ESF-GUID")
+        self.assertEqual(created_kwargs["gcityid"], "CITY-KASHAN-GUID")
+        self.assertEqual(created_kwargs["createdby"], "علی")
 
+        # Verify Step 3: Customer2Group fields
         c2g_kwargs = mock_c2g.objects.using.return_value.create.call_args[1]
         self.assertEqual(c2g_kwargs["customerid"], 126)
-        self.assertEqual(c2g_kwargs["gcompanyid"], "DESKTOP-COMPANY-GUID")
+        self.assertEqual(c2g_kwargs["gcustomerid"], created_kwargs["gcustomerid"])
+        self.assertEqual(
+            c2g_kwargs["gcompanyid"],
+            "3BBE4300-11CF-42B9-919F-87642C174264",
+        )
 
+        # Verify Step 4: Visitortocustomer fields
         v2c_kwargs = mock_v2c.objects.using.return_value.create.call_args[1]
+        self.assertEqual(v2c_kwargs["visitortocustomerid"], 10)
+        self.assertEqual(len(v2c_kwargs["gvisitortocustomerid"]), 36)
         self.assertEqual(v2c_kwargs["gvisitorid"], "VIS-GUID-7")
         self.assertEqual(v2c_kwargs["gcustomerid"], created_kwargs["gcustomerid"])
-        self.assertEqual(v2c_kwargs["gcompanyid"], "DESKTOP-COMPANY-GUID")
+        self.assertEqual(
+            v2c_kwargs["gcompanyid"],
+            "3BBE4300-11CF-42B9-919F-87642C174264",
+        )
 
 

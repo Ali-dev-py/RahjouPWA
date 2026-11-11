@@ -945,10 +945,10 @@ class ViewAllvisitors(models.Model):
 
 
 class Visitortocustomer(models.Model):
-    visitortocustomerid = models.AutoField(db_column='VisitorToCustomerID', primary_key=True)
+    visitortocustomerid = models.IntegerField(db_column='VisitorToCustomerID')
     gvisitorid = models.CharField(db_column='GVisitorID', max_length=36, blank=True, null=True)
     gcustomerid = models.CharField(db_column='GCustomerID', unique=True, max_length=36, blank=True, null=True)
-    gvisitortocustomerid = models.CharField(db_column='GVisitorToCustomerID', max_length=36)
+    gvisitortocustomerid = models.CharField(db_column='GVisitorToCustomerID', primary_key=True, max_length=36)
     gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
 
     class Meta:
