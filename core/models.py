@@ -616,15 +616,6 @@ class Prefactordetailstatus(models.Model):
         db_table = 'PreFactorDetailStatus'
 
 
-class Prefactorstatus(models.Model):
-    prefactorstatuscode = models.SmallIntegerField(db_column='PreFactorStatusCode', primary_key=True)
-    prefactorstatusname = models.CharField(db_column='PreFactorStatusName', max_length=50, db_collation='Arabic_CI_AS')
-
-    class Meta:
-        managed = False
-        db_table = 'PreFactorStatus'
-
-
 class Prefactortovisitor(models.Model):
     prefactortovisitorid = models.AutoField(db_column='PreFactorToVisitorId', primary_key=True)
     visitorid = models.IntegerField(db_column='VisitorID', blank=True, null=True)

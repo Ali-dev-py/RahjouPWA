@@ -1356,6 +1356,304 @@ def _resolve_sale_request_status(master):
     except DatabaseError:
         pass
     return status_name, _is_sabt_shode_status(status_name)
+
+
+def _guid_case_variants(values):
+    """Return deduplicated stripped/upper/lower GUID strings for SQLite & SQL Server __in."""
+    variants = set()
+    for val in values:
+        if not val:
+            continue
+        cleaned = str(val).strip()
+        if cleaned:
+            variants.add(cleaned)
+            variants.add(cleaned.upper())
+            variants.add(cleaned.lower())
+    return list(variants)
+
+
+def _load_visitor_lookup_maps():
+    """Batch-load visitor display names indexed by GVisitorID, VisitorID, and GSubDetailID."""
+    by_guid = {}
+    by_int = {}
+    by_subdetail = {}
+    try:
+        rows = ViewAllvisitors.objects.using("plus").values(
+            "gvisitorid", "visitorid", "gsubdetailid", "vizitorname", "personname"
+        )
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = (row.get("vizitorname") or row.get("personname") or "").strip()
+            if not name:
+                continue
+            gvid = str(row.get("gvisitorid") or "").strip().lower()
+            if gvid and gvid not in by_guid:
+                by_guid[gvid] = name
+            vid = row.get("visitorid")
+            if vid is not None and vid not in by_int:
+                by_int[vid] = name
+            gsub = str(row.get("gsubdetailid") or "").strip().lower()
+            if gsub and gsub not in by_subdetail:
+                by_subdetail[gsub] = name
+    except DatabaseError:
+        pass
+    return by_guid, by_int, by_subdetail
+
+
+def _resolve_visitor_from_link(gvisitorid, visitorid, by_guid, by_int):
+    """Resolve visitor name from a junction row's GUID or integer ID."""
+    if gvisitorid:
+        key = str(gvisitorid).strip().lower()
+        if key in by_guid:
+            return by_guid[key]
+    if visitorid is not None and visitorid in by_int:
+        return by_int[visitorid]
+    return ""
+
+
+def _resolve_sale_request_visitors(masters, visitor_maps=None):
+    """Batch-resolve visitor names for Salerequestmaster records (no N+1)."""
+    masters = list(masters)
+    if not masters:
+        return {}
+
+    by_guid, by_int, by_subdetail = visitor_maps or _load_visitor_lookup_maps()
+    if not (by_guid or by_int or by_subdetail):
+        return {}
+
+    guid_variants = _guid_case_variants(
+        getattr(m, "gsalerequestmasterid", None) for m in masters
+    )
+    int_ids = [
+        getattr(m, "salerequestmasterid", None)
+        for m in masters
+        if getattr(m, "salerequestmasterid", None) is not None
+    ]
+
+    link_by_guid = {}
+    link_by_int = {}
+    try:
+        srv_q = Q()
+        if guid_variants:
+            srv_q |= Q(gsalerequestid__in=guid_variants)
+        if int_ids:
+            srv_q |= Q(salerequestid__in=int_ids)
+        if srv_q:
+            links = Salerequesttovisitor.objects.using("plus").filter(srv_q).values(
+                "gsalerequestid", "salerequestid", "gvisitorid", "visitorid"
+            )
+            for row in links:
+                if not isinstance(row, dict):
+                    continue
+                vname = _resolve_visitor_from_link(
+                    row.get("gvisitorid"), row.get("visitorid"), by_guid, by_int
+                )
+                if not vname:
+                    continue
+                gsrid = str(row.get("gsalerequestid") or "").strip().lower()
+                if gsrid and gsrid not in link_by_guid:
+                    link_by_guid[gsrid] = vname
+                srid = row.get("salerequestid")
+                if srid is not None and srid not in link_by_int:
+                    link_by_int[srid] = vname
+    except DatabaseError:
+        pass
+
+    resolved = {}
+    for m in masters:
+        m_guid = str(getattr(m, "gsalerequestmasterid", "") or "").strip().lower()
+        m_int = getattr(m, "salerequestmasterid", None)
+        vname = link_by_guid.get(m_guid) or (
+            link_by_int.get(m_int) if m_int is not None else ""
+        )
+        if not vname:
+            m_vid = getattr(m, "visitorid", None)
+            if m_vid is not None:
+                vname = by_int.get(m_vid, "")
+        if not vname:
+            gsub5 = str(getattr(m, "gsubdetailid5", "") or "").strip().lower()
+            if gsub5:
+                vname = by_subdetail.get(gsub5, "")
+        if m_guid and vname:
+            resolved[m_guid] = vname
+    return resolved
+
+
+def _resolve_pre_factor_visitors(masters):
+    """Batch-resolve visitor names for Prefactormaster records (no N+1)."""
+    masters = list(masters)
+    if not masters:
+        return {}
+
+    visitor_maps = _load_visitor_lookup_maps()
+    by_guid, by_int, by_subdetail = visitor_maps
+    if not (by_guid or by_int or by_subdetail):
+        return {}
+
+    guid_variants = _guid_case_variants(
+        getattr(m, "gprefactormasterid", None) for m in masters
+    )
+    int_ids = [
+        getattr(m, "prefactormasterid", None)
+        for m in masters
+        if getattr(m, "prefactormasterid", None) is not None
+    ]
+
+    link_by_guid = {}
+    link_by_int = {}
+    try:
+        pfv_q = Q()
+        if guid_variants:
+            pfv_q |= Q(gprefactorid__in=guid_variants)
+        if int_ids:
+            pfv_q |= Q(prefactorid__in=int_ids)
+        if pfv_q:
+            links = Prefactortovisitor.objects.using("plus").filter(pfv_q).values(
+                "gprefactorid", "prefactorid", "gvisitorid", "visitorid"
+            )
+            for row in links:
+                if not isinstance(row, dict):
+                    continue
+                vname = _resolve_visitor_from_link(
+                    row.get("gvisitorid"), row.get("visitorid"), by_guid, by_int
+                )
+                if not vname:
+                    continue
+                gpfid = str(row.get("gprefactorid") or "").strip().lower()
+                if gpfid and gpfid not in link_by_guid:
+                    link_by_guid[gpfid] = vname
+                pfid = row.get("prefactorid")
+                if pfid is not None and pfid not in link_by_int:
+                    link_by_int[pfid] = vname
+    except DatabaseError:
+        pass
+
+    # Optional fallback via linked Sale Request GUIDs when PreFactorToVisitor is empty
+    sr_link_by_guid = {}
+    unresolved_sr_guids = [
+        getattr(m, "gsalerequestmasterid", None) or getattr(m, "gsalerequestid", None)
+        for m in masters
+        if (
+            str(getattr(m, "gprefactormasterid", "") or "").strip().lower()
+            not in link_by_guid
+        )
+    ]
+    sr_variants = _guid_case_variants(unresolved_sr_guids)
+    if sr_variants:
+        try:
+            sr_links = (
+                Salerequesttovisitor.objects.using("plus")
+                .filter(gsalerequestid__in=sr_variants)
+                .values("gsalerequestid", "gvisitorid", "visitorid")
+            )
+            for row in sr_links:
+                if not isinstance(row, dict):
+                    continue
+                vname = _resolve_visitor_from_link(
+                    row.get("gvisitorid"), row.get("visitorid"), by_guid, by_int
+                )
+                gsrid = str(row.get("gsalerequestid") or "").strip().lower()
+                if gsrid and vname and gsrid not in sr_link_by_guid:
+                    sr_link_by_guid[gsrid] = vname
+        except DatabaseError:
+            pass
+
+    resolved = {}
+    for m in masters:
+        m_guid = str(getattr(m, "gprefactormasterid", "") or "").strip().lower()
+        m_int = getattr(m, "prefactormasterid", None)
+        vname = link_by_guid.get(m_guid) or (
+            link_by_int.get(m_int) if m_int is not None else ""
+        )
+        if not vname:
+            gsub5 = str(getattr(m, "gsubdetailid5", "") or "").strip().lower()
+            if gsub5:
+                vname = by_subdetail.get(gsub5, "")
+        if not vname:
+            sr_guid = (
+                str(
+                    getattr(m, "gsalerequestmasterid", None)
+                    or getattr(m, "gsalerequestid", None)
+                    or ""
+                )
+                .strip()
+                .lower()
+            )
+            if sr_guid:
+                vname = sr_link_by_guid.get(sr_guid, "")
+        if m_guid and vname:
+            resolved[m_guid] = vname
+    return resolved
+
+
+def _resolve_factor_visitors(masters):
+    """Batch-resolve visitor names for Salefactormaster records (no N+1)."""
+    masters = list(masters)
+    if not masters:
+        return {}
+
+    by_guid, by_int, by_subdetail = _load_visitor_lookup_maps()
+    if not (by_guid or by_int or by_subdetail):
+        return {}
+
+    guid_variants = _guid_case_variants(
+        getattr(m, "gsalefactormasterid", None) for m in masters
+    )
+    int_ids = [
+        getattr(m, "salefactormasterid", None)
+        for m in masters
+        if getattr(m, "salefactormasterid", None) is not None
+    ]
+
+    link_by_guid = {}
+    link_by_int = {}
+    try:
+        sfv_q = Q()
+        if guid_variants:
+            sfv_q |= Q(gsalefactorid__in=guid_variants)
+        if int_ids:
+            sfv_q |= Q(salefactorid__in=int_ids)
+        if sfv_q:
+            links = Salefactortovisitor.objects.using("plus").filter(sfv_q).values(
+                "gsalefactorid", "salefactorid", "gvisitorid", "visitorid"
+            )
+            for row in links:
+                if not isinstance(row, dict):
+                    continue
+                vname = _resolve_visitor_from_link(
+                    row.get("gvisitorid"), row.get("visitorid"), by_guid, by_int
+                )
+                if not vname:
+                    continue
+                gsfid = str(row.get("gsalefactorid") or "").strip().lower()
+                if gsfid and gsfid not in link_by_guid:
+                    link_by_guid[gsfid] = vname
+                sfid = row.get("salefactorid")
+                if sfid is not None and sfid not in link_by_int:
+                    link_by_int[sfid] = vname
+    except DatabaseError:
+        pass
+
+    resolved = {}
+    for m in masters:
+        m_guid = str(getattr(m, "gsalefactormasterid", "") or "").strip().lower()
+        m_int = getattr(m, "salefactormasterid", None)
+        vname = ""
+        direct_gvid = str(getattr(m, "gvisitorid", "") or "").strip().lower()
+        if direct_gvid:
+            vname = by_guid.get(direct_gvid, "")
+        if not vname:
+            vname = link_by_guid.get(m_guid) or (
+                link_by_int.get(m_int) if m_int is not None else ""
+            )
+        if not vname:
+            gsub5 = str(getattr(m, "gsubdetailid5", "") or "").strip().lower()
+            if gsub5:
+                vname = by_subdetail.get(gsub5, "")
+        if m_guid and vname:
+            resolved[m_guid] = vname
+    return resolved
     
     
 class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
@@ -1393,31 +1691,49 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
         # Limit to top 150 records for optimal performance
         sale_requests_list = list(sale_requests_qs[:150])
 
-        # 3. Batch Fetch Customer Names (prevents N+1 query issue)
-        customer_ids = [
+        # 3. Batch Fetch Customer Names & Visitor Names (prevents N+1 query issue)
+        customer_ids = _guid_case_variants(
             sr.gcustomerid for sr in sale_requests_list if sr.gcustomerid
-        ]
+        )
         customer_map = {}
         if customer_ids:
             customers = Tblcustomer.objects.using("plus").filter(
                 gcustomerid__in=customer_ids
             )
-            customer_map = {c.gcustomerid: c.custname for c in customers}
+            customer_map = {
+                str(c.gcustomerid).strip().lower(): c.custname
+                for c in customers
+                if getattr(c, "gcustomerid", None)
+            }
+
+        visitor_map = _resolve_sale_request_visitors(sale_requests_list)
 
         # 4. Construct Final Data List
         sale_requests = []
         for sr in sale_requests_list:
+            cust_key = (
+                str(sr.gcustomerid).strip().lower() if sr.gcustomerid else ""
+            )
             customer_name = (
-                customer_map.get(sr.gcustomerid)
+                customer_map.get(cust_key)
                 or sr.requestman
                 or "مشتری نامشخص"
             )
+            sr_key = (
+                str(sr.gsalerequestmasterid).strip().lower()
+                if getattr(sr, "gsalerequestmasterid", None)
+                else ""
+            )
+            resolved_visitor = visitor_map.get(sr_key, "")
+            visitor_name = resolved_visitor or "بدون ویزیتور"
 
-            # Search by keyword (Sale Request No or Customer Name)
+            sr_no = sr.salerequestno or ""
+            # Search by keyword (Sale Request No, Customer Name, or Visitor Name)
             if (
                 query
-                and query not in sr.salerequestno
+                and query not in sr_no
                 and query not in customer_name
+                and query not in visitor_name
             ):
                 continue
 
@@ -1433,9 +1749,11 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
             sale_requests.append(
                 {
                     "id": sr.gsalerequestmasterid,
-                    "number": sr.salerequestno,
+                    "number": sr_no,
                     "date": sr.salerequestdate or sr.createddate or "-",
                     "customer_name": customer_name,
+                    "visitor_name": visitor_name,
+                    "has_visitor": bool(resolved_visitor),
                     "status_code": sr.salerequeststatuscode,
                     "status_name": status_name,
                     "can_modify": can_modify,
@@ -1493,7 +1811,7 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
         context["status_name"] = status_name
         context["can_modify"] = _is_sabt_shode_status(status_name)
 
-        # 3. Fetch Customer Details
+        # 3. Fetch Customer & Visitor Details
         customer = None
         if master.gcustomerid:
             customer = (
@@ -1502,6 +1820,17 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
                 .first()
             )
         context["customer"] = customer
+
+        sr_key = (
+            str(master.gsalerequestmasterid).strip().lower()
+            if getattr(master, "gsalerequestmasterid", None)
+            else ""
+        )
+        resolved_visitor = _resolve_sale_request_visitors([master]).get(
+            sr_key, ""
+        )
+        context["visitor_name"] = resolved_visitor or "بدون ویزیتور"
+        context["has_visitor"] = bool(resolved_visitor)
 
         # 4. Fetch Sale Request Line Items & Products
         details = (
@@ -2551,15 +2880,16 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
         query = self.request.GET.get("q", "").strip()
         status_filter = self.request.GET.get("status", "all").strip()
 
-        # 1. Fetch all available PreFactor statuses from DB (with safe fallback)
+        # 1. Fetch all available PreFactor statuses from PreFactorDetailStatus
         try:
             statuses = list(
-                Prefactorstatus.objects.using("plus")
+                Prefactordetailstatus.objects.using("plus")
                 .all()
-                .order_by("prefactorstatuscode")
+                .order_by("prefactordetailstatuscode")
             )
             status_map = {
-                s.prefactorstatuscode: s.prefactorstatusname for s in statuses
+                s.prefactordetailstatuscode: s.prefactordetailstatusname
+                for s in statuses
             }
         except DatabaseError:
             statuses = []
@@ -2572,25 +2902,27 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
             .order_by("-prefactordate", "-prefactorno")
         )
 
-        if status_filter != "all" and status_filter.isdigit():
-            pre_factors_qs = pre_factors_qs.filter(
-                prefactorstatuscode=int(status_filter)
-            )
+        if status_filter != "all" and status_filter.lstrip("-").isdigit():
+            selected_code = int(status_filter)
+            status_q = Q(prefactorstatuscode=selected_code)
+            try:
+                detail_master_ids = _guid_case_variants(
+                    Prefactordetail.objects.using("plus")
+                    .filter(prefactordetailstatuscode=selected_code)
+                    .values_list("gprefactormasterid", flat=True)
+                    .distinct()
+                )
+                if detail_master_ids:
+                    status_q |= Q(gprefactormasterid__in=detail_master_ids)
+            except DatabaseError:
+                pass
+            pre_factors_qs = pre_factors_qs.filter(status_q)
 
         pre_factors_list = list(pre_factors_qs[:150])
 
-        # 3. Batch Fetch Customer Names (No N+1)
-        customer_ids = list(
-            {
-                variant
-                for pf in pre_factors_list
-                if pf.gcustomerid
-                for variant in (
-                    str(pf.gcustomerid).strip(),
-                    str(pf.gcustomerid).strip().upper(),
-                    str(pf.gcustomerid).strip().lower(),
-                )
-            }
+        # 3. Batch Fetch Customer Names, Visitor Names & Totals/Detail Statuses (No N+1)
+        customer_ids = _guid_case_variants(
+            pf.gcustomerid for pf in pre_factors_list if pf.gcustomerid
         )
         customer_map = {}
         if customer_ids:
@@ -2603,6 +2935,44 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
                 if c.gcustomerid
             }
 
+        visitor_map = _resolve_pre_factor_visitors(pre_factors_list)
+
+        pf_totals_map = {}
+        pf_detail_status_map = {}
+        pf_master_guids = _guid_case_variants(
+            pf.gprefactormasterid
+            for pf in pre_factors_list
+            if getattr(pf, "gprefactormasterid", None)
+        )
+        if pf_master_guids:
+            try:
+                pf_agg_rows = (
+                    Prefactordetail.objects.using("plus")
+                    .filter(gprefactormasterid__in=pf_master_guids)
+                    .values("gprefactormasterid")
+                    .annotate(
+                        line_net=Sum(
+                            (F("quantity") * F("unitprice"))
+                            - Coalesce(F("discount"), Value(0)),
+                            output_field=DecimalField(),
+                        ),
+                        detail_status=Max("prefactordetailstatuscode"),
+                    )
+                )
+                for row in pf_agg_rows:
+                    if not isinstance(row, dict):
+                        continue
+                    key = str(row.get("gprefactormasterid") or "").strip().lower()
+                    if not key:
+                        continue
+                    pf_totals_map[key] = pf_totals_map.get(key, Decimal("0")) + Decimal(
+                        str(row.get("line_net") or 0)
+                    )
+                    if row.get("detail_status") is not None and key not in pf_detail_status_map:
+                        pf_detail_status_map[key] = row["detail_status"]
+            except DatabaseError:
+                pass
+
         # 4. Construct Final Data List
         pre_factors = []
         for pf in pre_factors_list:
@@ -2614,12 +2984,36 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
                 or pf.requestman
                 or "مشتری نامشخص"
             )
+            pf_key = (
+                str(pf.gprefactormasterid).strip().lower()
+                if getattr(pf, "gprefactormasterid", None)
+                else ""
+            )
+            resolved_visitor = visitor_map.get(pf_key, "")
+            visitor_name = resolved_visitor or "بدون ویزیتور"
+            total_amount = int(pf_totals_map.get(pf_key, Decimal("0")))
 
             pf_no = pf.prefactorno or ""
-            if query and query not in pf_no and query not in customer_name:
+            if (
+                query
+                and query not in pf_no
+                and query not in customer_name
+                and query not in visitor_name
+            ):
                 continue
 
-            status_name = status_map.get(pf.prefactorstatuscode, "ثبت شده")
+            master_code = getattr(pf, "prefactorstatuscode", None)
+            detail_code = pf_detail_status_map.get(pf_key)
+            if master_code is not None and master_code in status_map:
+                effective_status_code = master_code
+            elif detail_code is not None and detail_code in status_map:
+                effective_status_code = detail_code
+            else:
+                effective_status_code = (
+                    master_code if master_code is not None else detail_code
+                )
+
+            status_name = status_map.get(effective_status_code, "ثبت شده")
             style = get_status_style(status_name)
 
             pre_factors.append(
@@ -2628,7 +3022,10 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
                     "number": pf_no,
                     "date": pf.prefactordate or pf.createddate or "-",
                     "customer_name": customer_name,
-                    "status_code": pf.prefactorstatuscode,
+                    "visitor_name": visitor_name,
+                    "has_visitor": bool(resolved_visitor),
+                    "total_amount": total_amount,
+                    "status_code": effective_status_code,
                     "status_name": status_name,
                     "chip_class": style["chip_class"],
                     "dot_class": style["dot_class"],
@@ -2671,22 +3068,7 @@ class PreFactorDetailView(PlusLoginRequiredMixin, TemplateView):
         context["pre_factor_found"] = True
         context["master"] = master
 
-        # 2. Fetch Status
-        status_name = "ثبت شده"
-        if master.prefactorstatuscode is not None:
-            try:
-                status_obj = (
-                    Prefactorstatus.objects.using("plus")
-                    .filter(prefactorstatuscode=master.prefactorstatuscode)
-                    .first()
-                )
-                if status_obj:
-                    status_name = status_obj.prefactorstatusname
-            except DatabaseError:
-                pass
-        context["status_name"] = status_name
-
-        # 3. Fetch Customer Details
+        # 2. Fetch Customer & Visitor Details
         customer = None
         if master.gcustomerid:
             customer = (
@@ -2696,7 +3078,18 @@ class PreFactorDetailView(PlusLoginRequiredMixin, TemplateView):
             )
         context["customer"] = customer
 
-        # 4. Fetch PreFactor Line Items & Products
+        pf_key = (
+            str(master.gprefactormasterid).strip().lower()
+            if getattr(master, "gprefactormasterid", None)
+            else ""
+        )
+        resolved_visitor = _resolve_pre_factor_visitors([master]).get(
+            pf_key, ""
+        )
+        context["visitor_name"] = resolved_visitor or "بدون ویزیتور"
+        context["has_visitor"] = bool(resolved_visitor)
+
+        # 3. Fetch PreFactor Line Items & Products
         details = list(
             Prefactordetail.objects.using("plus")
             .filter(
@@ -2706,6 +3099,32 @@ class PreFactorDetailView(PlusLoginRequiredMixin, TemplateView):
             )
             .order_by("rowid")
         )
+
+        # 4. Fetch Status from PreFactorDetailStatus (master code or first detail row code)
+        status_name = "ثبت شده"
+        candidate_codes = []
+        if getattr(master, "prefactorstatuscode", None) is not None:
+            candidate_codes.append(master.prefactorstatuscode)
+        for d in details:
+            d_code = getattr(d, "prefactordetailstatuscode", None)
+            if d_code is not None and d_code not in candidate_codes:
+                candidate_codes.append(d_code)
+
+        for code in candidate_codes:
+            try:
+                status_obj = (
+                    Prefactordetailstatus.objects.using("plus")
+                    .filter(prefactordetailstatuscode=code)
+                    .first()
+                )
+                if status_obj and getattr(
+                    status_obj, "prefactordetailstatusname", None
+                ):
+                    status_name = status_obj.prefactordetailstatusname
+                    break
+            except DatabaseError:
+                break
+        context["status_name"] = status_name
 
         kala_ids = list(
             {
@@ -2923,18 +3342,9 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
 
         factors_list = list(factors_qs[:150])
 
-        # 3. Batch Fetch Customer Names (No N+1)
-        customer_ids = list(
-            {
-                variant
-                for sf in factors_list
-                if sf.gcustomerid
-                for variant in (
-                    str(sf.gcustomerid).strip(),
-                    str(sf.gcustomerid).strip().upper(),
-                    str(sf.gcustomerid).strip().lower(),
-                )
-            }
+        # 3. Batch Fetch Customer Names, Visitor Names & Totals (No N+1)
+        customer_ids = _guid_case_variants(
+            sf.gcustomerid for sf in factors_list if sf.gcustomerid
         )
         customer_map = {}
         if customer_ids:
@@ -2947,6 +3357,40 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
                 if c.gcustomerid
             }
 
+        visitor_map = _resolve_factor_visitors(factors_list)
+
+        sf_totals_map = {}
+        sf_master_guids = _guid_case_variants(
+            sf.gsalefactormasterid
+            for sf in factors_list
+            if getattr(sf, "gsalefactormasterid", None)
+        )
+        if sf_master_guids:
+            try:
+                sf_agg_rows = (
+                    Salefactordetail.objects.using("plus")
+                    .filter(gsalefactormasterid__in=sf_master_guids)
+                    .values("gsalefactormasterid")
+                    .annotate(
+                        line_net=Sum(
+                            (F("quantity") * F("unitprice"))
+                            - Coalesce(F("discount"), Value(0)),
+                            output_field=DecimalField(),
+                        )
+                    )
+                )
+                for row in sf_agg_rows:
+                    if not isinstance(row, dict):
+                        continue
+                    key = str(row.get("gsalefactormasterid") or "").strip().lower()
+                    if not key:
+                        continue
+                    sf_totals_map[key] = sf_totals_map.get(key, Decimal("0")) + Decimal(
+                        str(row.get("line_net") or 0)
+                    )
+            except DatabaseError:
+                pass
+
         # 4. Construct Final Data List
         factors = []
         for sf in factors_list:
@@ -2958,9 +3402,25 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
                 or sf.requestman
                 or "مشتری نامشخص"
             )
+            sf_key = (
+                str(sf.gsalefactormasterid).strip().lower()
+                if getattr(sf, "gsalefactormasterid", None)
+                else ""
+            )
+            resolved_visitor = visitor_map.get(sf_key, "")
+            visitor_name = resolved_visitor or "بدون ویزیتور"
+
+            line_net = sf_totals_map.get(sf_key, Decimal("0"))
+            master_discount = Decimal(str(getattr(sf, "discount", 0) or 0))
+            total_amount = int(line_net - master_discount)
 
             sf_no = sf.salefactorno or ""
-            if query and query not in sf_no and query not in customer_name:
+            if (
+                query
+                and query not in sf_no
+                and query not in customer_name
+                and query not in visitor_name
+            ):
                 continue
 
             status_name = status_map.get(sf.salefactorstatuscode, "ثبت شده")
@@ -2972,6 +3432,9 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
                     "number": sf_no,
                     "date": sf.salefactordate or sf.createddate or "-",
                     "customer_name": customer_name,
+                    "visitor_name": visitor_name,
+                    "has_visitor": bool(resolved_visitor),
+                    "total_amount": total_amount,
                     "status_code": sf.salefactorstatuscode,
                     "status_name": status_name,
                     "chip_class": style["chip_class"],
@@ -3035,7 +3498,7 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
                 pass
         context["status_name"] = status_name
 
-        # 3. Fetch Customer Details
+        # 3. Fetch Customer & Visitor Details
         customer = None
         if master.gcustomerid:
             customer = (
@@ -3044,6 +3507,15 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
                 .first()
             )
         context["customer"] = customer
+
+        sf_key = (
+            str(master.gsalefactormasterid).strip().lower()
+            if getattr(master, "gsalefactormasterid", None)
+            else ""
+        )
+        resolved_visitor = _resolve_factor_visitors([master]).get(sf_key, "")
+        context["visitor_name"] = resolved_visitor or "بدون ویزیتور"
+        context["has_visitor"] = bool(resolved_visitor)
 
         # 4. Fetch Factor Line Items & Products
         details = list(

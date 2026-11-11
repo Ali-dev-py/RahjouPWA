@@ -79,9 +79,13 @@
                                 <dt class="small text-secondary fw-normal">شماره درخواست</dt>
                                 <dd class="fw-bold mb-0">{{ master.salerequestno|persian_digits }}</dd>
                             </div>
-                            <div>
+                            <div class="mb-2">
                                 <dt class="small text-secondary fw-normal">تاریخ ثبت</dt>
                                 <dd class="fw-bold mb-0">{{ master.salerequestdate|default:master.createddate|persian_digits }}</dd>
+                            </div>
+                            <div>
+                                <dt class="small text-secondary fw-normal">ویزیتور</dt>
+                                <dd class="fw-bold mb-0">{{ visitor_name|default:"بدون ویزیتور" }}</dd>
                             </div>
                         </dl>
                     </header>
