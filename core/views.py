@@ -491,15 +491,24 @@ def _normalize_persian_text(raw_value):
     return " ".join(text.split())
 
 
+def _clean_guid_str(raw_value):
+    if raw_value is None:
+        return ""
+    return str(raw_value).strip().strip("{}")
+
+
 def _load_provinces_and_cities_for_form():
-    """Load Province and Cities lookup lists from 'plus' via Django ORM models."""
+    """Load Province and Cities lookup lists from 'plus' via Django ORM models.
+
+    Note: GProvinceID and GCitiesID are SQL Server `uniqueidentifier` columns,
+    so never compare them to '' in SQL (e.g. `.exclude(gprovinceid="")`), which
+    raises SQL Server error 8169; filter empty strings in Python instead.
+    """
     provinces = []
     cities = []
     try:
         prov_qs = (
             Province.objects.using("plus")
-            .exclude(gprovinceid__isnull=True)
-            .exclude(gprovinceid="")
             .values("gprovinceid", "provincename")
             .order_by("provincename")
         )
@@ -507,7 +516,7 @@ def _load_provinces_and_cities_for_form():
         for row in prov_qs:
             if not isinstance(row, dict):
                 continue
-            gid = str(row.get("gprovinceid") or "").strip()
+            gid = _clean_guid_str(row.get("gprovinceid"))
             name = str(row.get("provincename") or "").strip()
             key = gid.lower()
             if not gid or not name or key in seen_provinces:
@@ -520,8 +529,6 @@ def _load_provinces_and_cities_for_form():
     try:
         city_qs = (
             Cities.objects.using("plus")
-            .exclude(gcitiesid__isnull=True)
-            .exclude(gcitiesid="")
             .values("gcitiesid", "citynamefarsi", "citynamelatin", "gprovinceid")
             .order_by("citynamefarsi")
         )
@@ -529,11 +536,11 @@ def _load_provinces_and_cities_for_form():
         for row in city_qs:
             if not isinstance(row, dict):
                 continue
-            gid = str(row.get("gcitiesid") or "").strip()
+            gid = _clean_guid_str(row.get("gcitiesid"))
             name = str(
                 row.get("citynamefarsi") or row.get("citynamelatin") or ""
             ).strip()
-            prov_gid = str(row.get("gprovinceid") or "").strip()
+            prov_gid = _clean_guid_str(row.get("gprovinceid"))
             key = gid.lower()
             if not gid or not name or key in seen_cities:
                 continue
@@ -899,11 +906,14 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
 
         group = None
         if selected_group_id:
-            group = (
-                Customergroup.objects.using("plus")
-                .filter(gcustomergroupid__iexact=selected_group_id)
-                .first()
-            )
+            try:
+                group = (
+                    Customergroup.objects.using("plus")
+                    .filter(gcustomergroupid__iexact=selected_group_id)
+                    .first()
+                )
+            except (DatabaseError, DatabaseOperationForbidden):
+                group = None
             if not group:
                 errors.append("گروه مشتری انتخاب‌شده نامعتبر است.")
 
