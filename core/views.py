@@ -1,6 +1,5 @@
 import io
 import os
-import re
 import uuid
 import json
 import jdatetime
@@ -16,8 +15,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import DecimalField, F, Sum, Value, Q, Max
 from django.db.models.functions import Coalesce
 from django.shortcuts import redirect, render, get_object_or_404
-from django.db import DatabaseError, connections, transaction
-from django.test.testcases import DatabaseOperationForbidden
+from django.db import DatabaseError, transaction
 from django.urls import reverse
 from django.http import HttpResponse, Http404
 from django.utils import timezone
@@ -462,1060 +460,20 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
         return context
 
 
-_SAFE_SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_CUSTOMER_PERSON_TYPES = [
-    {"code": 1, "name": "حقیقی"},
-    {"code": 2, "name": "حقوقی"},
-    {"code": 3, "name": "مشارکت مدنی"},
-    {"code": 4, "name": "اتباع غیرایرانی"},
-]
-_CUSTOMER_DIGIT_MAP = str.maketrans(
-    "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩",
-    "01234567890123456789",
-)
-
-
-def _normalize_ascii_digits(raw_value):
-    return str(raw_value or "").strip().translate(_CUSTOMER_DIGIT_MAP)
-
-
-def _quote_sql_ident(name):
-    clean = str(name or "").strip()
-    if not _SAFE_SQL_IDENT_RE.match(clean):
-        raise ValueError(f"Unsafe SQL identifier: {name!r}")
-    return f"[{clean}]"
-
-
-def _qualify_sql_table(schema_name, table_name):
-    if schema_name:
-        return f"{_quote_sql_ident(schema_name)}.{_quote_sql_ident(table_name)}"
-    return _quote_sql_ident(table_name)
-
-
-def _format_guid_value(raw_uuid, use_lowercase=False):
-    text = str(raw_uuid).strip()
-    return text.lower() if use_lowercase else text.upper()
-
-
-def _looks_like_guid(value):
-    s = str(value or "").strip()
-    return len(s) == 36 and s.count("-") == 4
-
-
-def _discover_subdetail_tables(cursor, vendor):
-    """Discover the master SubDetail table (e.g. tblSubDetail) and any SubDetail link tables."""
-    tables_with_gsub = []
-    if vendor == "sqlite":
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-        )
-        all_tables = [r[0] for r in cursor.fetchall() if r and r[0]]
-        for t_name in all_tables:
-            if not _SAFE_SQL_IDENT_RE.match(t_name):
-                continue
-            cursor.execute(f"PRAGMA table_info({_quote_sql_ident(t_name)})")
-            cols = [str(r[1]).lower() for r in cursor.fetchall() if len(r) > 1]
-            if "gsubdetailid" in cols:
-                tables_with_gsub.append(("", t_name))
-    else:
-        cursor.execute(
-            """
-            SELECT DISTINCT t.TABLE_SCHEMA, t.TABLE_NAME
-            FROM INFORMATION_SCHEMA.TABLES t
-            INNER JOIN INFORMATION_SCHEMA.COLUMNS c
-                ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME
-            WHERE t.TABLE_TYPE = 'BASE TABLE'
-              AND LOWER(c.COLUMN_NAME) = 'gsubdetailid'
-            """
-        )
-        for schema_name, t_name in cursor.fetchall():
-            if _SAFE_SQL_IDENT_RE.match(str(schema_name or "")) and _SAFE_SQL_IDENT_RE.match(str(t_name or "")):
-                tables_with_gsub.append((str(schema_name), str(t_name)))
-
-    primary = None
-    priority_names = (
-        "tblsubdetail",
-        "subdetail",
-        "acc_subdetail",
-        "tbl_subdetail",
-        "accsubdetail",
-    )
-    by_lower = {t_name.lower(): (sch, t_name) for sch, t_name in tables_with_gsub}
-    for pname in priority_names:
-        if pname in by_lower:
-            primary = by_lower[pname]
-            break
-
-    if primary is None:
-        for sch, t_name in tables_with_gsub:
-            t_low = t_name.lower()
-            if (
-                "subdetail" in t_low
-                and "2" not in t_low
-                and "to" not in t_low
-                and "group" not in t_low
-            ):
-                primary = (sch, t_name)
-                break
-
-    link_tables = []
-    for sch, t_name in tables_with_gsub:
-        if primary and (sch, t_name) == primary:
-            continue
-        t_low = t_name.lower()
-        if "subdetail" in t_low and ("2" in t_low or "to" in t_low):
-            link_tables.append((sch, t_name))
-
-    return primary, link_tables
-
-
-def _inspect_table_columns(cursor, vendor, schema_name, table_name):
-    """Return metadata for every column on a SQL Server or SQLite table."""
-    if vendor == "sqlite":
-        q_table = _quote_sql_ident(table_name)
-        cursor.execute(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = %s",
-            [table_name],
-        )
-        ddl_row = cursor.fetchone()
-        ddl_sql = (ddl_row[0] or "").upper() if ddl_row else ""
-        has_autoincrement = "AUTOINCREMENT" in ddl_sql
-
-        single_unique_cols = set()
-        cursor.execute(f"PRAGMA index_list({q_table})")
-        for idx_row in cursor.fetchall():
-            idx_name = idx_row[1]
-            is_unique = bool(idx_row[2])
-            if not is_unique or not _SAFE_SQL_IDENT_RE.match(str(idx_name or "")):
-                continue
-            cursor.execute(f"PRAGMA index_info({_quote_sql_ident(idx_name)})")
-            idx_cols = [r[2] for r in cursor.fetchall() if len(r) > 2]
-            if len(idx_cols) == 1:
-                single_unique_cols.add(str(idx_cols[0]).lower())
-
-        cursor.execute(f"PRAGMA table_info({q_table})")
-        raw_cols = cursor.fetchall()
-        pk_cols = [r[1] for r in raw_cols if r[5]]
-        if len(pk_cols) == 1:
-            single_unique_cols.add(str(pk_cols[0]).lower())
-
-        cols = []
-        for cid, col_name, col_type, notnull, dflt_val, pk_flag in raw_cols:
-            dtype = str(col_type or "").lower()
-            max_len = None
-            m = re.search(r"\((\d+)\)", dtype)
-            if m:
-                max_len = int(m.group(1))
-            base_dtype = dtype.split("(")[0].strip()
-            is_int_pk = (
-                bool(pk_flag)
-                and len(pk_cols) == 1
-                and "int" in base_dtype
-                and has_autoincrement
-            )
-            cols.append(
-                {
-                    "name": col_name,
-                    "lower": col_name.lower(),
-                    "data_type": base_dtype,
-                    "max_length": max_len,
-                    "is_nullable": not bool(notnull) and not bool(pk_flag),
-                    "is_identity": is_int_pk,
-                    "is_computed": False,
-                    "is_single_unique": col_name.lower() in single_unique_cols,
-                }
-            )
-        return cols
-
-    full_obj = f"{schema_name}.{table_name}" if schema_name else table_name
-    cursor.execute(
-        """
-        SELECT col.name
-        FROM sys.indexes idx
-        INNER JOIN sys.index_columns ic
-            ON ic.object_id = idx.object_id AND ic.index_id = idx.index_id
-        INNER JOIN sys.columns col
-            ON col.object_id = idx.object_id AND col.column_id = ic.column_id
-        WHERE idx.object_id = OBJECT_ID(%s)
-          AND idx.is_unique = 1
-          AND ic.is_included_column = 0
-          AND (
-              SELECT COUNT(*)
-              FROM sys.index_columns ic2
-              WHERE ic2.object_id = idx.object_id
-                AND ic2.index_id = idx.index_id
-                AND ic2.is_included_column = 0
-          ) = 1
-        """,
-        [full_obj],
-    )
-    single_unique_cols = {str(r[0]).lower() for r in cursor.fetchall() if r and r[0]}
-
-    cursor.execute(
-        """
-        SELECT
-            c.COLUMN_NAME,
-            LOWER(c.DATA_TYPE),
-            c.CHARACTER_MAXIMUM_LENGTH,
-            CASE WHEN c.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END,
-            ISNULL(COLUMNPROPERTY(OBJECT_ID(%s), c.COLUMN_NAME, 'IsIdentity'), 0),
-            ISNULL(COLUMNPROPERTY(OBJECT_ID(%s), c.COLUMN_NAME, 'IsComputed'), 0)
-        FROM INFORMATION_SCHEMA.COLUMNS c
-        WHERE c.TABLE_SCHEMA = %s AND c.TABLE_NAME = %s
-        ORDER BY c.ORDINAL_POSITION
-        """,
-        [full_obj, full_obj, schema_name, table_name],
-    )
-    cols = []
-    for col_name, data_type, max_len, is_null, is_ident, is_comp in cursor.fetchall():
-        cols.append(
-            {
-                "name": col_name,
-                "lower": str(col_name).lower(),
-                "data_type": str(data_type or "").lower(),
-                "max_length": int(max_len) if (max_len is not None and int(max_len) > 0) else None,
-                "is_nullable": bool(is_null),
-                "is_identity": bool(is_ident),
-                "is_computed": bool(is_comp),
-                "is_single_unique": str(col_name).lower() in single_unique_cols,
-            }
-        )
-    return cols
-
-
-def _fetch_one_row_dict(cursor, sql, params=None):
-    cursor.execute(sql, params or [])
-    row = cursor.fetchone()
-    if not row or not cursor.description:
-        return None
-    col_names = [desc[0] for desc in cursor.description]
-    return dict(zip(col_names, row))
-
-
-def _fetch_all_row_dicts(cursor, sql, params=None):
-    cursor.execute(sql, params or [])
-    rows = cursor.fetchall()
-    if not rows or not cursor.description:
-        return []
-    col_names = [desc[0] for desc in cursor.description]
-    return [dict(zip(col_names, r)) for r in rows]
-
-
-def _find_reference_desktop_customer(selected_group_gid=""):
-    """
-    Locate a verified desktop-created Tblcustomer row (preferring one whose GSubDetailID
-    genuinely exists in tblSubDetail and belongs to the same CustomerGroup).
-    """
-    ref_customer = None
-    try:
-        conn = connections["plus"]
-        vendor = conn.vendor
-        with conn.cursor() as cursor:
-            primary_sd, _ = _discover_subdetail_tables(cursor, vendor)
-            if primary_sd:
-                sd_sql = _qualify_sql_table(*primary_sd)
-                found_cid = None
-                if selected_group_gid:
-                    if vendor == "sqlite":
-                        grp_sql = (
-                            f"SELECT c.[CustomerID] FROM [tblCustomer] c "
-                            f"INNER JOIN [Customer2Group] c2g ON LOWER(TRIM(c.[GCustomerID])) = LOWER(TRIM(c2g.[GCustomerID])) "
-                            f"INNER JOIN {sd_sql} sd ON LOWER(TRIM(c.[GSubDetailID])) = LOWER(TRIM(sd.[GSubDetailID])) "
-                            f"WHERE (c.[DeletedBy] IS NULL OR c.[DeletedBy] = '') "
-                            f"AND LOWER(TRIM(c2g.[GCustomerGroupID])) = LOWER(TRIM(%s)) "
-                            f"ORDER BY c.[CustomerID] DESC LIMIT 1"
-                        )
-                    else:
-                        grp_sql = (
-                            f"SELECT TOP 1 c.[CustomerID] FROM [tblCustomer] c "
-                            f"INNER JOIN [Customer2Group] c2g ON LOWER(LTRIM(RTRIM(c.[GCustomerID]))) = LOWER(LTRIM(RTRIM(c2g.[GCustomerID]))) "
-                            f"INNER JOIN {sd_sql} sd ON LOWER(LTRIM(RTRIM(c.[GSubDetailID]))) = LOWER(LTRIM(RTRIM(sd.[GSubDetailID]))) "
-                            f"WHERE (c.[DeletedBy] IS NULL OR c.[DeletedBy] = '') "
-                            f"AND LOWER(LTRIM(RTRIM(c2g.[GCustomerGroupID]))) = LOWER(LTRIM(RTRIM(%s))) "
-                            f"ORDER BY c.[CustomerID] DESC"
-                        )
-                    cursor.execute(grp_sql, [selected_group_gid])
-                    r = cursor.fetchone()
-                    if r:
-                        found_cid = r[0]
-
-                if found_cid is None:
-                    if vendor == "sqlite":
-                        any_sql = (
-                            f"SELECT c.[CustomerID] FROM [tblCustomer] c "
-                            f"INNER JOIN {sd_sql} sd ON LOWER(TRIM(c.[GSubDetailID])) = LOWER(TRIM(sd.[GSubDetailID])) "
-                            f"WHERE (c.[DeletedBy] IS NULL OR c.[DeletedBy] = '') "
-                            f"ORDER BY c.[CustomerID] DESC LIMIT 1"
-                        )
-                    else:
-                        any_sql = (
-                            f"SELECT TOP 1 c.[CustomerID] FROM [tblCustomer] c "
-                            f"INNER JOIN {sd_sql} sd ON LOWER(LTRIM(RTRIM(c.[GSubDetailID]))) = LOWER(LTRIM(RTRIM(sd.[GSubDetailID]))) "
-                            f"WHERE (c.[DeletedBy] IS NULL OR c.[DeletedBy] = '') "
-                            f"ORDER BY c.[CustomerID] DESC"
-                        )
-                    cursor.execute(any_sql)
-                    r = cursor.fetchone()
-                    if r:
-                        found_cid = r[0]
-
-                if found_cid is not None:
-                    ref_customer = (
-                        Tblcustomer.objects.using("plus")
-                        .filter(customerid=found_cid)
-                        .first()
-                    )
-    except (DatabaseError, DatabaseOperationForbidden):
-        ref_customer = None
-
-    if ref_customer is None:
-        try:
-            ref_customer = (
-                Tblcustomer.objects.using("plus")
-                .filter(Q(deletedby__isnull=True) | Q(deletedby=""))
-                .order_by("-customerid")
-                .first()
-            )
-        except (DatabaseError, DatabaseOperationForbidden):
-            ref_customer = None
-
-    return ref_customer
-
-
-def _resolve_customer_desktop_defaults(
-    selected_group_gid="", plus_user=None, group=None
-):
-    """Build desktop-compatible default values for Tblcustomer and related tables."""
-    ref_cust = _find_reference_desktop_customer(selected_group_gid)
-
-    # Resolve active GCompanyID reliably (never leave NULL if any company record exists)
-    company_gid = ""
-    for candidate in (
-        getattr(ref_cust, "gcompanyid", None) if ref_cust else None,
-        getattr(plus_user, "gcompanyid", None) if plus_user else None,
-        getattr(group, "gcompanyid", None) if group else None,
-    ):
-        if candidate and str(candidate).strip():
-            company_gid = str(candidate).strip()
-            break
-
-    if not company_gid:
-        try:
-            branch_comp = (
-                Branches.objects.using("plus")
-                .exclude(gcompanyid__isnull=True)
-                .exclude(gcompanyid="")
-                .values_list("gcompanyid", flat=True)
-                .first()
-            )
-            if branch_comp and str(branch_comp).strip():
-                company_gid = str(branch_comp).strip()
-        except (DatabaseError, DatabaseOperationForbidden):
-            pass
-
-    ref_gcustomerid = str(getattr(ref_cust, "gcustomerid", "") or "").strip()
-    guid_lowercase = bool(
-        ref_gcustomerid and ref_gcustomerid == ref_gcustomerid.lower() and any(ch.isalpha() for ch in ref_gcustomerid)
-    )
-
-    ref_created_by = str(getattr(ref_cust, "createdby", "") or "").strip()
-    created_by_uses_guid = _looks_like_guid(ref_created_by)
-
-    ref_custno = str(getattr(ref_cust, "custno", "") or "").strip()
-    custno_pad_width = (
-        len(ref_custno)
-        if (ref_custno.isdigit() and len(ref_custno) > 1 and ref_custno.startswith("0"))
-        else 0
-    )
-
-    ref_status = str(getattr(ref_cust, "status", "") or "").strip() or "1"
-    ref_salestatus = getattr(ref_cust, "salestatus", None)
-    ref_custtypecode = getattr(ref_cust, "custtypecode", None)
-    ref_customertypecode = getattr(ref_cust, "customertypecode", None)
-    ref_customertaxtype = getattr(ref_cust, "customertaxtype", None)
-
-    return {
-        "ref_customer": ref_cust,
-        "gcompanyid": company_gid or None,
-        "guid_lowercase": guid_lowercase,
-        "created_by_uses_guid": created_by_uses_guid,
-        "custno_pad_width": custno_pad_width,
-        "status": ref_status[:1],
-        "salestatus": ref_salestatus if ref_salestatus is not None else 1,
-        "custtypecode": ref_custtypecode if ref_custtypecode is not None else 1,
-        "customertypecode": ref_customertypecode if ref_customertypecode is not None else 1,
-        "customertaxtype": ref_customertaxtype if ref_customertaxtype is not None else 3,
-        "gprovinceid": (
-            str(ref_cust.gprovinceid).strip()
-            if (ref_cust and getattr(ref_cust, "gprovinceid", None))
-            else "ECB49B7B-30FC-472C-A1AA-45E00F329135"
-        ),
-        "gcityid": (
-            str(ref_cust.gcityid).strip()
-            if (ref_cust and getattr(ref_cust, "gcityid", None))
-            else "A8218140-B1D0-42DB-B4AD-1D5EAF501EC2"
-        ),
-        "visitpriod": (
-            ref_cust.visitpriod
-            if (ref_cust and getattr(ref_cust, "visitpriod", None) is not None)
-            else 0
-        ),
-        "callstatus": (
-            ref_cust.callstatus
-            if (ref_cust and getattr(ref_cust, "callstatus", None) is not None)
-            else 0
-        ),
-        "ranking": (
-            ref_cust.ranking
-            if (ref_cust and getattr(ref_cust, "ranking", None) is not None)
-            else 0
-        ),
-        "usercount": (
-            ref_cust.usercount
-            if (ref_cust and getattr(ref_cust, "usercount", None) is not None)
-            else 0
-        ),
-        "sentstatuscode": (
-            ref_cust.sentstatuscode
-            if (ref_cust and getattr(ref_cust, "sentstatuscode", None) is not None)
-            else 0
-        ),
-    }
-
-
-def _calculate_next_custno(existing_custnos, pad_width=0):
-    """Compute the next available CustNo strictly below 1900."""
-    used_ints = set()
-    max_custno = 0
-    for val in existing_custnos:
-        clean_val = _normalize_ascii_digits(val)
-        if clean_val.isdigit():
-            num = int(clean_val)
-            used_ints.add(num)
-            if 0 < num < 1900 and num > max_custno:
-                max_custno = num
-
-    candidate_int = (max_custno + 1) if max_custno > 0 else 1
-    if candidate_int >= 1900 or candidate_int in used_ints:
-        candidate_int = None
-        for probe in range(1899, 0, -1):
-            if probe not in used_ints:
-                candidate_int = probe
-                break
-
-    if candidate_int is None or candidate_int >= 1900:
-        return None
-
-    if pad_width and pad_width <= 4:
-        return str(candidate_int).zfill(pad_width)
-    return str(candidate_int)
-
-
-def _next_unique_subdetail_code(
-    cursor,
-    sd_sql,
-    code_col_name,
-    custno,
-    ref_customer,
-    ref_sd_row,
-    company_gid,
-    company_col_name,
-    max_length,
-):
-    """Generate a unique SubDetailCode aligned with desktop customer SubDetail numbering."""
-    q_code = _quote_sql_ident(code_col_name)
-    where_comp = ""
-    comp_params = []
-    if company_col_name and company_gid:
-        where_comp = f" AND LOWER({_quote_sql_ident(company_col_name)}) = LOWER(%s)"
-        comp_params = [company_gid]
-
-    def _code_exists(candidate):
-        cursor.execute(
-            f"SELECT 1 FROM {sd_sql} WHERE {q_code} = %s{where_comp}",
-            [candidate] + comp_params,
-        )
-        return cursor.fetchone() is not None
-
-    ref_code = ""
-    if ref_sd_row:
-        for k, v in ref_sd_row.items():
-            if k.lower() == code_col_name.lower() and v is not None:
-                ref_code = str(v).strip()
-                break
-    ref_custno = str(getattr(ref_customer, "custno", "") or "").strip()
-
-    candidates = []
-    clean_custno = str(custno).strip()
-    if ref_code and ref_custno:
-        if ref_code == ref_custno:
-            candidates.append(clean_custno)
-        elif ref_code.isdigit() and ref_custno.isdigit():
-            if int(ref_code) == int(ref_custno):
-                candidates.append(clean_custno.zfill(len(ref_code)))
-            elif ref_code.endswith(ref_custno):
-                prefix = ref_code[: -len(ref_custno)]
-                candidates.append(prefix + clean_custno.zfill(len(ref_custno)))
-    candidates.append(clean_custno)
-
-    for cand in candidates:
-        trimmed = cand[:max_length] if max_length else cand
-        if trimmed and not _code_exists(trimmed):
-            return trimmed
-
-    # Fallback: find max numeric SubDetailCode in Customer range (< 1900) or overall + 1
-    if company_col_name and company_gid:
-        cursor.execute(
-            f"SELECT {q_code} FROM {sd_sql} WHERE LOWER({_quote_sql_ident(company_col_name)}) = LOWER(%s)",
-            [company_gid],
-        )
-    else:
-        cursor.execute(f"SELECT {q_code} FROM {sd_sql}")
-
-    used_codes = set()
-    max_under_1900 = 0
-    max_overall = 0
-    for (raw_c,) in cursor.fetchall():
-        s = str(raw_c or "").strip()
-        if not s:
-            continue
-        used_codes.add(s)
-        if s.isdigit():
-            n = int(s)
-            if n < 1900 and n > max_under_1900:
-                max_under_1900 = n
-            if n > max_overall:
-                max_overall = n
-
-    if max_under_1900 + 1 < 1900:
-        cand = str(max_under_1900 + 1)
-        if cand not in used_codes:
-            return cand[:max_length] if max_length else cand
-
-    probe_num = max(max_overall + 1, 1)
-    while str(probe_num) in used_codes:
-        probe_num += 1
-    result = str(probe_num)
-    return result[:max_length] if max_length else result
-
-
-def _ensure_customer_subdetail_in_db(
-    *,
-    target_gsubdetailid,
-    target_gcustomerid,
-    custno,
-    full_customer_name,
-    custdesc,
-    company_gid,
-    plus_user,
-    shamsi_date,
-    ref_customer,
-    guid_lowercase=False,
-):
-    """
-    Ensure a corresponding accounting floating detail row exists in tblSubDetail
-    (and any SubDetail2Group / SubDetailToGroup link table) on SQL Server 'plus'.
-    """
-    try:
-        conn = connections["plus"]
-        vendor = conn.vendor
-        with conn.cursor() as cursor:
-            primary_sd, link_tables = _discover_subdetail_tables(cursor, vendor)
-            if not primary_sd:
-                return False
-
-            sd_schema, sd_table = primary_sd
-            sd_sql = _qualify_sql_table(sd_schema, sd_table)
-
-            # Check if target_gsubdetailid already exists in tblSubDetail
-            cursor.execute(
-                f"SELECT 1 FROM {sd_sql} WHERE LOWER([GSubDetailID]) = LOWER(%s)",
-                [target_gsubdetailid],
-            )
-            already_exists = cursor.fetchone() is not None
-
-            ref_gsub = str(getattr(ref_customer, "gsubdetailid", "") or "").strip()
-            ref_sd_row = None
-            if ref_gsub:
-                ref_sd_row = _fetch_one_row_dict(
-                    cursor,
-                    f"SELECT * FROM {sd_sql} WHERE LOWER([GSubDetailID]) = LOWER(%s)",
-                    [ref_gsub],
-                )
-            if ref_sd_row is None:
-                fallback_sql = (
-                    f"SELECT * FROM {sd_sql} LIMIT 1"
-                    if vendor == "sqlite"
-                    else f"SELECT TOP 1 * FROM {sd_sql}"
-                )
-                ref_sd_row = _fetch_one_row_dict(cursor, fallback_sql)
-
-            user_gucode = str(getattr(plus_user, "gucode", "") or "").strip()
-            user_name = (
-                getattr(plus_user, "uname", None)
-                or getattr(plus_user, "uid", None)
-                or ""
-            ).strip()
-            user_uid = str(getattr(plus_user, "uid", "") or "").strip()
-
-            if not already_exists:
-                cols = _inspect_table_columns(cursor, vendor, sd_schema, sd_table)
-                ref_ci = (
-                    {k.lower(): v for k, v in ref_sd_row.items()}
-                    if ref_sd_row
-                    else {}
-                )
-                company_col_name = next(
-                    (c["name"] for c in cols if c["lower"] == "gcompanyid"), None
-                )
-
-                insert_cols = []
-                insert_vals = []
-
-                for col in cols:
-                    if (
-                        col["is_identity"]
-                        or col["is_computed"]
-                        or col["data_type"] in ("timestamp", "rowversion")
-                    ):
-                        continue
-
-                    c_name = col["name"]
-                    c_low = col["lower"]
-                    max_len = col["max_length"]
-                    dtype = col["data_type"]
-                    base_val = ref_ci.get(c_low)
-
-                    if c_low == "gsubdetailid":
-                        val = target_gsubdetailid
-                    elif c_low == "gcompanyid":
-                        val = company_gid or base_val
-                    elif c_low == "gcustomerid":
-                        val = target_gcustomerid
-                    elif c_low in ("subdetailid", "tafzilid", "id") and "int" in dtype:
-                        cursor.execute(
-                            f"SELECT COALESCE(MAX({_quote_sql_ident(c_name)}), 0) + 1 FROM {sd_sql}"
-                        )
-                        val = int(cursor.fetchone()[0] or 1)
-                    elif (
-                        col["is_single_unique"]
-                        and ("char" in dtype or "uniqueidentifier" in dtype or "text" in dtype)
-                        and (max_len is None or max_len >= 36)
-                    ):
-                        val = _format_guid_value(uuid.uuid4(), guid_lowercase)
-                    elif c_low in (
-                        "subdetailcode",
-                        "tafzilcode",
-                        "code",
-                        "subcode",
-                        "detailcode",
-                    ):
-                        val = _next_unique_subdetail_code(
-                            cursor,
-                            sd_sql,
-                            c_name,
-                            custno,
-                            ref_customer,
-                            ref_sd_row,
-                            company_gid,
-                            company_col_name,
-                            max_len,
-                        )
-                    elif c_low in (
-                        "subdetailname",
-                        "tafzilname",
-                        "name",
-                        "subname",
-                        "title",
-                        "detailname",
-                        "fulltitle",
-                    ):
-                        val = (
-                            full_customer_name[:max_len]
-                            if max_len
-                            else full_customer_name
-                        )
-                    elif c_low in (
-                        "description",
-                        "descript",
-                        "subdetaildesc",
-                        "comment",
-                        "note",
-                    ):
-                        clean_desc = (custdesc or "").strip()
-                        if clean_desc:
-                            val = clean_desc[:max_len] if max_len else clean_desc
-                        else:
-                            val = None if col["is_nullable"] else ""
-                    elif c_low in ("deletedby", "deleteddate", "cancelby", "canceldate"):
-                        val = None
-                    elif c_low == "registerdate":
-                        val = timezone.now()
-                    elif c_low in ("createddate", "lastupdateddate"):
-                        if dtype in ("datetime", "datetime2", "smalldatetime", "date"):
-                            val = timezone.now()
-                        else:
-                            val = shamsi_date[:max_len] if max_len else shamsi_date
-                    elif c_low in ("createdby", "lastupdatedby"):
-                        chosen = (
-                            user_gucode
-                            if (_looks_like_guid(base_val) and user_gucode)
-                            else (user_name or user_gucode)
-                        )
-                        val = chosen[:max_len] if max_len else chosen
-                    elif c_low == "uid":
-                        val = (user_uid[:max_len] if max_len else user_uid) or base_val
-                    else:
-                        if base_val is not None:
-                            val = base_val
-                        elif col["is_nullable"]:
-                            val = None
-                        elif "int" in dtype or dtype in ("decimal", "numeric", "money", "float", "real"):
-                            val = 0
-                        elif dtype in ("bit", "bool", "boolean"):
-                            val = False
-                        elif dtype in ("datetime", "datetime2", "smalldatetime", "date"):
-                            val = timezone.now()
-                        else:
-                            val = ""
-
-                    insert_cols.append(_quote_sql_ident(c_name))
-                    insert_vals.append(val)
-
-                if insert_cols:
-                    placeholders = ", ".join(["%s"] * len(insert_cols))
-                    cols_sql = ", ".join(insert_cols)
-                    cursor.execute(
-                        f"INSERT INTO {sd_sql} ({cols_sql}) VALUES ({placeholders})",
-                        insert_vals,
-                    )
-
-            # Clone any SubDetail group/level link rows (e.g. SubDetail2Group / SubDetailToGroup)
-            if ref_gsub and link_tables:
-                for l_schema, l_table in link_tables:
-                    l_sql = _qualify_sql_table(l_schema, l_table)
-                    cursor.execute(
-                        f"SELECT 1 FROM {l_sql} WHERE LOWER([GSubDetailID]) = LOWER(%s)",
-                        [target_gsubdetailid],
-                    )
-                    if cursor.fetchone() is not None:
-                        continue
-                    ref_links = _fetch_all_row_dicts(
-                        cursor,
-                        f"SELECT * FROM {l_sql} WHERE LOWER([GSubDetailID]) = LOWER(%s)",
-                        [ref_gsub],
-                    )
-                    if not ref_links:
-                        continue
-                    l_cols = _inspect_table_columns(cursor, vendor, l_schema, l_table)
-                    l_stem_id = f"{l_table.lower().replace('tbl', '')}id"
-                    for ref_link in ref_links:
-                        link_ci = {k.lower(): v for k, v in ref_link.items()}
-                        l_ins_cols = []
-                        l_ins_vals = []
-                        for col in l_cols:
-                            if (
-                                col["is_identity"]
-                                or col["is_computed"]
-                                or col["data_type"] in ("timestamp", "rowversion")
-                            ):
-                                continue
-                            c_name = col["name"]
-                            c_low = col["lower"]
-                            dtype = col["data_type"]
-                            max_len = col["max_length"]
-                            base_val = link_ci.get(c_low)
-
-                            if c_low == "gsubdetailid":
-                                val = target_gsubdetailid
-                            elif c_low == "gcompanyid":
-                                val = company_gid or base_val
-                            elif c_low in (l_stem_id, "id") and "int" in dtype:
-                                cursor.execute(
-                                    f"SELECT COALESCE(MAX({_quote_sql_ident(c_name)}), 0) + 1 FROM {l_sql}"
-                                )
-                                val = int(cursor.fetchone()[0] or 1)
-                            elif (
-                                col["is_single_unique"]
-                                and ("char" in dtype or "uniqueidentifier" in dtype or "text" in dtype)
-                                and (max_len is None or max_len >= 36)
-                            ):
-                                val = _format_guid_value(uuid.uuid4(), guid_lowercase)
-                            else:
-                                val = base_val
-
-                            l_ins_cols.append(_quote_sql_ident(c_name))
-                            l_ins_vals.append(val)
-
-                        if l_ins_cols:
-                            placeholders = ", ".join(["%s"] * len(l_ins_cols))
-                            cursor.execute(
-                                f"INSERT INTO {l_sql} ({', '.join(l_ins_cols)}) VALUES ({placeholders})",
-                                l_ins_vals,
-                            )
-            return True
-    except (DatabaseError, DatabaseOperationForbidden):
-        return False
-
-
-def _load_provinces_and_cities_for_form():
-    """Dynamically load Province and City lookup lists from 'plus' when tables exist."""
-    provinces = []
-    cities = []
-    try:
-        conn = connections["plus"]
-        vendor = conn.vendor
-        with conn.cursor() as cursor:
-            if vendor == "sqlite":
-                cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-                )
-                tables = [("", r[0]) for r in cursor.fetchall() if r and r[0]]
-            else:
-                cursor.execute(
-                    "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'"
-                )
-                tables = [(str(s), str(t)) for s, t in cursor.fetchall() if s and t]
-
-            by_low = {
-                t.lower(): (s, t)
-                for s, t in tables
-                if _SAFE_SQL_IDENT_RE.match(t) and (not s or _SAFE_SQL_IDENT_RE.match(s))
-            }
-            prov_tbl = (
-                by_low.get("tblprovince")
-                or by_low.get("province")
-                or by_low.get("provinces")
-            )
-            city_tbl = (
-                by_low.get("tblcity")
-                or by_low.get("city")
-                or by_low.get("cities")
-            )
-
-            if prov_tbl:
-                p_cols = _inspect_table_columns(cursor, vendor, *prov_tbl)
-                gid_col = next((c["name"] for c in p_cols if c["lower"] == "gprovinceid"), None)
-                name_col = next(
-                    (
-                        c["name"]
-                        for c in p_cols
-                        if c["lower"] in ("provincename", "name", "title", "ostanname")
-                    ),
-                    None,
-                )
-                if gid_col and name_col:
-                    p_sql = _qualify_sql_table(*prov_tbl)
-                    cursor.execute(
-                        f"SELECT {_quote_sql_ident(gid_col)}, {_quote_sql_ident(name_col)} "
-                        f"FROM {p_sql} ORDER BY {_quote_sql_ident(name_col)}"
-                    )
-                    for gid, pname in cursor.fetchall():
-                        if gid and pname:
-                            provinces.append(
-                                {"id": str(gid).strip(), "name": str(pname).strip()}
-                            )
-
-            if city_tbl:
-                c_cols = _inspect_table_columns(cursor, vendor, *city_tbl)
-                gid_col = next((c["name"] for c in c_cols if c["lower"] == "gcityid"), None)
-                p_fk_col = next((c["name"] for c in c_cols if c["lower"] == "gprovinceid"), None)
-                name_col = next(
-                    (
-                        c["name"]
-                        for c in c_cols
-                        if c["lower"] in ("cityname", "name", "title", "shahrname")
-                    ),
-                    None,
-                )
-                if gid_col and name_col:
-                    c_sql = _qualify_sql_table(*city_tbl)
-                    select_p = _quote_sql_ident(p_fk_col) if p_fk_col else "''"
-                    cursor.execute(
-                        f"SELECT {_quote_sql_ident(gid_col)}, {_quote_sql_ident(name_col)}, {select_p} "
-                        f"FROM {c_sql} ORDER BY {_quote_sql_ident(name_col)}"
-                    )
-                    for gid, cname, pgid in cursor.fetchall():
-                        if gid and cname:
-                            cities.append(
-                                {
-                                    "id": str(gid).strip(),
-                                    "name": str(cname).strip(),
-                                    "province_id": str(pgid or "").strip(),
-                                }
-                            )
-    except (DatabaseError, DatabaseOperationForbidden):
-        return [], []
-    return provinces, cities
-
-
-def _load_active_visitors_for_customer_form():
-    """Load deduplicated active visitors from ViewAllvisitors for customer assignment."""
-    visitors_list = []
-    try:
-        qs = (
-            ViewAllvisitors.objects.using("plus")
-            .filter(Q(active=True) | Q(active__isnull=True))
-            .values("gvisitorid", "vizitorname", "personname", "vizitorcode")
-            .order_by("vizitorname", "personname")
-        )
-        seen = set()
-        for v in qs:
-            if not isinstance(v, dict):
-                continue
-            raw_gid = str(v.get("gvisitorid") or "").strip()
-            key = raw_gid.lower()
-            if not raw_gid or key in seen:
-                continue
-            seen.add(key)
-            visitors_list.append(
-                {
-                    "id": raw_gid,
-                    "name": (
-                        v.get("vizitorname") or v.get("personname") or "بدون نام"
-                    ).strip(),
-                    "code": str(v.get("vizitorcode") or "").strip(),
-                }
-            )
-    except (DatabaseError, DatabaseOperationForbidden):
-        return []
-    return visitors_list
-
-
 class CustomerCreateView(PlusLoginRequiredMixin, View):
     template_name = "core/customer_create.html"
 
-    def _build_form_context(self, form_values=None, errors=None, defaults=None):
-        form_values = form_values or {}
-        groups = list(
-            Customergroup.objects.using("plus").all().order_by("groupname")
-        )
-        visitors = _load_active_visitors_for_customer_form()
-        provinces, cities = _load_provinces_and_cities_for_form()
-
-        if defaults is None:
-            defaults = _resolve_customer_desktop_defaults(
-                selected_group_gid=form_values.get("selected_group_id", ""),
-                plus_user=getattr(self.request, "plus_user", None),
-            )
-
-        next_custno_preview = ""
-        try:
-            existing_custnos = (
-                Tblcustomer.objects.using("plus")
-                .exclude(custno__isnull=True)
-                .exclude(custno="")
-                .values_list("custno", flat=True)
-            )
-            next_custno_preview = (
-                _calculate_next_custno(
-                    existing_custnos, pad_width=defaults["custno_pad_width"]
-                )
-                or ""
-            )
-        except (DatabaseError, DatabaseOperationForbidden):
-            next_custno_preview = ""
-
-        selected_province_id = form_values.get("gprovinceid")
-        if selected_province_id is None:
-            selected_province_id = defaults.get("gprovinceid") or ""
-
-        selected_city_id = form_values.get("gcityid")
-        if selected_city_id is None:
-            selected_city_id = defaults.get("gcityid") or ""
-
-        selected_person_type = str(
-            form_values.get("customertypecode")
-            or defaults.get("customertypecode")
-            or 1
-        )
-
-        return {
-            "groups": groups,
-            "visitors": visitors,
-            "person_types": _CUSTOMER_PERSON_TYPES,
-            "provinces": provinces,
-            "cities": cities,
-            "cities_json": json.dumps(cities, cls=DjangoJSONEncoder),
-            "next_custno_preview": next_custno_preview,
-            "errors": errors or [],
-            "custname": form_values.get("custname", ""),
-            "prename": form_values.get("prename", ""),
-            "companyname": form_values.get("companyname", ""),
-            "selected_group_id": form_values.get("selected_group_id", ""),
-            "selected_visitor_id": form_values.get("selected_visitor_id", ""),
-            "selected_person_type": selected_person_type,
-            "mobile": form_values.get("mobile", ""),
-            "phone": form_values.get("phone", ""),
-            "citytelcode": form_values.get("citytelcode", ""),
-            "nationalid": form_values.get("nationalid", ""),
-            "economno": form_values.get("economno", ""),
-            "registno": form_values.get("registno", ""),
-            "postcode": form_values.get("postcode", ""),
-            "credit": form_values.get("credit", ""),
-            "address": form_values.get("address", ""),
-            "custdesc": form_values.get("custdesc", ""),
-            "selected_province_id": selected_province_id,
-            "selected_city_id": selected_city_id,
-        }
-
     def get(self, request, *args, **kwargs):
-        return render(request, self.template_name, self._build_form_context())
+        groups = Customergroup.objects.using("plus").all().order_by("groupname")
+        return render(request, self.template_name, {"groups": groups})
 
     def post(self, request, *args, **kwargs):
-        custname = request.POST.get("custname", "").strip()[:100]
-        prename = request.POST.get("prename", "").strip()[:50]
-        companyname = request.POST.get("companyname", "").strip()[:50]
+        custname = request.POST.get("custname", "").strip()
+        phone = request.POST.get("phone", "").strip()
+        address = request.POST.get("address", "").strip()
         selected_group_id = request.POST.get("customer_group", "").strip()
-        selected_visitor_id = request.POST.get("visitor_id", "").strip()
-        raw_person_type = _normalize_ascii_digits(
-            request.POST.get("customertypecode", "")
-        )
-        raw_mobile = request.POST.get("mobile", "").strip()[:100]
-        raw_phone = request.POST.get("phone", "").strip()[:100]
-        citytelcode = request.POST.get("citytelcode", "").strip()[:10]
-        nationalid = _normalize_ascii_digits(
-            request.POST.get("nationalid", "")
-        )[:50]
-        economno = _normalize_ascii_digits(
-            request.POST.get("economno", "")
-        )[:50]
-        registno = _normalize_ascii_digits(
-            request.POST.get("registno", "")
-        )[:50]
-        postcode = _normalize_ascii_digits(
-            request.POST.get("postcode", "")
-        )[:50]
-        raw_credit = (
-            _normalize_ascii_digits(request.POST.get("credit", ""))
-            .replace(",", "")
-            .strip()
-        )
-        address = request.POST.get("address", "").strip()[:250]
-        custdesc = request.POST.get("custdesc", "").strip()[:500]
-        posted_province_id = request.POST.get("gprovinceid", "").strip()
-        posted_city_id = request.POST.get("gcityid", "").strip()
 
-        form_values = {
-            "custname": custname,
-            "prename": prename,
-            "companyname": companyname,
-            "selected_group_id": selected_group_id,
-            "selected_visitor_id": selected_visitor_id,
-            "customertypecode": raw_person_type,
-            "mobile": raw_mobile,
-            "phone": raw_phone,
-            "citytelcode": citytelcode,
-            "nationalid": nationalid,
-            "economno": economno,
-            "registno": registno,
-            "postcode": postcode,
-            "credit": raw_credit,
-            "address": address,
-            "custdesc": custdesc,
-            "gprovinceid": posted_province_id if "gprovinceid" in request.POST else None,
-            "gcityid": posted_city_id if "gcityid" in request.POST else None,
-        }
+        groups = Customergroup.objects.using("plus").all().order_by("groupname")
 
         # Validation (only custname and customer_group are required)
         errors = []
@@ -1524,57 +482,33 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
         if not selected_group_id:
             errors.append("انتخاب گروه مشتری الزامی است.")
 
-        group = None
-        if selected_group_id:
-            group = (
-                Customergroup.objects.using("plus")
-                .filter(gcustomergroupid__iexact=selected_group_id)
-                .first()
-            )
-            if not group:
-                errors.append("گروه مشتری انتخاب‌شده نامعتبر است.")
-
-        credit_val = Decimal("0")
-        if raw_credit:
-            try:
-                credit_val = Decimal(raw_credit)
-                if credit_val < 0:
-                    errors.append("سقف اعتبار نمی‌تواند منفی باشد.")
-            except (InvalidOperation, ValueError):
-                errors.append("مقدار سقف اعتبار واردشده معتبر نیست.")
-
-        plus_user = getattr(request, "plus_user", None)
-        defaults = _resolve_customer_desktop_defaults(
-            selected_group_gid=selected_group_id,
-            plus_user=plus_user,
-            group=group,
+        group = (
+            Customergroup.objects.using("plus")
+            .filter(gcustomergroupid=selected_group_id)
+            .first()
         )
+
+        if selected_group_id and not group:
+            errors.append("گروه مشتری انتخاب‌شده نامعتبر است.")
 
         if errors:
             return render(
                 request,
                 self.template_name,
-                self._build_form_context(
-                    form_values=form_values, errors=errors, defaults=defaults
-                ),
+                {
+                    "groups": groups,
+                    "errors": errors,
+                    "custname": custname,
+                    "phone": phone,
+                    "address": address,
+                    "selected_group_id": selected_group_id,
+                },
             )
 
         try:
-            # 1. Resolve desktop-compatible user & company metadata
-            user_gucode = str(getattr(plus_user, "gucode", "") or "").strip()
-            user_name = (
-                getattr(plus_user, "uname", None)
-                or getattr(plus_user, "uid", None)
-                or ""
-            ).strip()
-            user_uid = str(getattr(plus_user, "uid", "") or "").strip()[:10]
-            created_by = (
-                user_gucode
-                if (defaults["created_by_uses_guid"] and user_gucode)
-                else (user_name or user_gucode)
-            )[:100]
-
-            company_gid = defaults["gcompanyid"]
+            # 1. Retrieve current user's username via plus_user
+            plus_user = getattr(request, "plus_user", None)
+            created_by = getattr(plus_user, "uname", "") if plus_user else ""
 
             # 2. Calculate next CustNo strictly lower than 1900
             existing_custnos = (
@@ -1583,167 +517,90 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
                 .exclude(custno="")
                 .values_list("custno", flat=True)
             )
-            next_custno = _calculate_next_custno(
-                existing_custnos, pad_width=defaults["custno_pad_width"]
-            )
 
-            if not next_custno:
+            max_custno = 0
+            for val in existing_custnos:
+                clean_val = str(val).strip()
+                if clean_val.isdigit():
+                    num = int(clean_val)
+                    if num < 1900 and num > max_custno:
+                        max_custno = num
+
+            next_custno_int = (max_custno + 1) if max_custno > 0 else 1
+
+            if next_custno_int >= 1900:
                 return render(
                     request,
                     self.template_name,
-                    self._build_form_context(
-                        form_values=form_values,
-                        errors=[
-                            "کد مشتری نمی‌تواند بیشتر یا مساوی ۱۹۰۰ باشد. سقف شماره مشتری پر شده است."
-                        ],
-                        defaults=defaults,
-                    ),
+                    {
+                        "groups": groups,
+                        "errors": ["کد مشتری نمی‌تواند بیشتر یا مساوی ۱۹۰۰ باشد. سقف شماره مشتری پر شده است."],
+                        "custname": custname,
+                        "phone": phone,
+                        "address": address,
+                        "selected_group_id": selected_group_id,
+                    },
                 )
 
-            # 3. Resolve phone/mobile, full CustomerName, person type, and location FKs
-            effective_mobile = raw_mobile or raw_phone
-            effective_phone = raw_phone or raw_mobile
-            full_customer_name = (
-                f"{prename} {custname}".strip()[:200] if prename else custname[:200]
-            )
+            next_custno = str(next_custno_int)
 
-            person_type_code = defaults["customertypecode"]
-            if raw_person_type.isdigit() and int(raw_person_type) in (1, 2, 3, 4):
-                person_type_code = int(raw_person_type)
-
-            final_province_id = posted_province_id or defaults["gprovinceid"]
-            final_city_id = posted_city_id or defaults["gcityid"]
-
-            guid_lower = defaults["guid_lowercase"]
-            new_gcustomerid = _format_guid_value(uuid.uuid4(), guid_lower)
-            new_gsubdetailid = _format_guid_value(uuid.uuid4(), guid_lower)
-            new_gc2g_id = _format_guid_value(uuid.uuid4(), guid_lower)
+            # 3. Generate UUIDs and Shamsi date
+            new_gcustomerid = str(uuid.uuid4()).upper()
+            new_gsubdetailid = str(uuid.uuid4()).upper()  # New UUID for GSubDetailID
+            new_gc2g_id = str(uuid.uuid4()).upper()
             shamsi_date = jdatetime.date.today().strftime("%Y/%m/%d")
 
-            valid_visitor_gid = ""
-            if selected_visitor_id:
-                try:
-                    vis_row = (
-                        ViewAllvisitors.objects.using("plus")
-                        .filter(gvisitorid__iexact=selected_visitor_id)
-                        .values("gvisitorid")
-                        .first()
-                    )
-                    if vis_row and vis_row.get("gvisitorid"):
-                        valid_visitor_gid = str(vis_row["gvisitorid"]).strip()
-                except (DatabaseError, DatabaseOperationForbidden):
-                    valid_visitor_gid = ""
-
             with transaction.atomic(using="plus"):
-                # 4. Create accounting SubDetail (تفصیلی شناور) in tblSubDetail (+ link tables)
-                #    so Rahjou Plus desktop's INNER JOIN on tblSubDetail shows this customer!
-                _ensure_customer_subdetail_in_db(
-                    target_gsubdetailid=new_gsubdetailid,
-                    target_gcustomerid=new_gcustomerid,
-                    custno=next_custno,
-                    full_customer_name=full_customer_name,
-                    custdesc=custdesc,
-                    company_gid=company_gid,
-                    plus_user=plus_user,
-                    shamsi_date=shamsi_date,
-                    ref_customer=defaults["ref_customer"],
-                    guid_lowercase=guid_lower,
-                )
-
-                # 5. Insert desktop-compatible customer row into tblCustomer
+                # 4. Insert customer using Django ORM
                 new_customer = Tblcustomer.objects.using("plus").create(
                     custno=next_custno,
                     custname=custname,
-                    customername=full_customer_name,
-                    prename=prename or None,
-                    companyname=companyname or None,
-                    phone=effective_phone,
-                    mobile=effective_mobile,
-                    citytelcode=citytelcode or None,
+                    customername=custname,
+                    phone=phone,
+                    mobile=phone,
                     address=address,
-                    postcode=postcode or None,
-                    nationalid=nationalid or None,
-                    economno=economno or None,
-                    registno=registno or None,
-                    custdesc=custdesc or None,
-                    status=defaults["status"],
-                    salestatus=defaults["salestatus"],
-                    custtypecode=defaults["custtypecode"],
-                    customertypecode=person_type_code,
-                    customertaxtype=defaults["customertaxtype"],
-                    credit=credit_val,
-                    creditchkd=Decimal("0"),
-                    debit=Decimal("0"),
-                    visitpriod=defaults["visitpriod"],
-                    callstatus=defaults["callstatus"],
-                    ranking=defaults["ranking"],
-                    usercount=defaults["usercount"],
-                    sentstatuscode=defaults["sentstatuscode"],
-                    callwithemailsend=False,
-                    callwithtel=False,
-                    callwithfax=False,
-                    callwithletter=False,
-                    gprovinceid=final_province_id,
-                    gcityid=final_city_id,
+                    status="1",
+                    salestatus=1,
+                    credit=0,
+                    debit=0,
+                    visitpriod=0,
+                    customertypecode=2,
+                    customertaxtype=3,
+                    gprovinceid= 'ECB49B7B-30FC-472C-A1AA-45E00F329135',
+                    gcityid='A8218140-B1D0-42DB-B4AD-1D5EAF501EC2',
                     registerdate=timezone.now(),
                     createddate=shamsi_date,
-                    lastupdateddate=shamsi_date,
                     createdby=created_by,
-                    lastupdatedby=created_by,
-                    uid=user_uid or None,
-                    deletedby=None,
-                    deleteddate=None,
-                    gsubdetailid=new_gsubdetailid,
+                    gsubdetailid=new_gsubdetailid,  # Stored here
                     gcustomerid=new_gcustomerid,
-                    gcompanyid=company_gid,
+                    gcompanyid=group.gcompanyid,
                 )
 
-                customer_int_id = getattr(new_customer, "customerid", None)
-                if customer_int_id is None:
-                    customer_int_id = (
-                        Tblcustomer.objects.using("plus")
-                        .filter(gcustomerid__iexact=new_gcustomerid)
-                        .values_list("customerid", flat=True)
-                        .first()
-                    )
-
-                # 6. Link customer to CustomerGroup in Customer2Group
+                # 5. Insert into Customer2Group
                 Customer2Group.objects.using("plus").create(
                     customergroupid=group.customergroupid,
-                    customerid=customer_int_id,
+                    customerid=new_customer.customerid,
                     gcustomerid=new_gcustomerid,
                     gcustomergroupid=group.gcustomergroupid,
                     gcustomer2groupid=new_gc2g_id,
-                    gcompanyid=company_gid or group.gcompanyid,
+                    gcompanyid=group.gcompanyid,
                 )
 
-                # 7. Link customer to Visitor in VisitorToCustomer (when selected)
-                if valid_visitor_gid:
-                    Visitortocustomer.objects.using("plus").create(
-                        gvisitorid=valid_visitor_gid,
-                        gcustomerid=new_gcustomerid,
-                        gvisitortocustomerid=_format_guid_value(
-                            uuid.uuid4(), guid_lower
-                        ),
-                        gcompanyid=company_gid,
-                    )
-
-            messages.success(
-                request,
-                f"مشتری «{custname}» با کد {next_custno} با موفقیت ثبت شد.",
-                fail_silently=True,
-            )
+            # messages.success(request, f"مشتری «{custname}» با موفقیت افزوده شد.")
             return redirect("core:customers")
 
         except Exception as exc:
             return render(
                 request,
                 self.template_name,
-                self._build_form_context(
-                    form_values=form_values,
-                    errors=[f"خطا در ثبت اطلاعات: {str(exc)}"],
-                    defaults=defaults,
-                ),
+                {
+                    "groups": groups,
+                    "errors": [f"خطا در ثبت اطلاعات: {str(exc)}"],
+                    "custname": custname,
+                    "phone": phone,
+                    "address": address,
+                    "selected_group_id": selected_group_id,
+                },
             )
 
 
@@ -1920,38 +777,6 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                 if not getattr(customer, "gcustomerid", None):
                     customer.gcustomerid = str(uuid.uuid4()).upper()
                     update_fields.append("gcustomerid")
-
-                # Repair missing desktop-required fields & tblSubDetail on legacy mobile-created customers
-                if getattr(getattr(customer, "_meta", None), "db_table", None) == "tblCustomer":
-                    defaults = _resolve_customer_desktop_defaults(
-                        selected_group_gid=selected_group_id,
-                        plus_user=plus_user,
-                        group=group,
-                    )
-                    if not customer.gsubdetailid:
-                        customer.gsubdetailid = _format_guid_value(
-                            uuid.uuid4(), defaults["guid_lowercase"]
-                        )
-                        update_fields.append("gsubdetailid")
-                    if not customer.gcompanyid and defaults["gcompanyid"]:
-                        customer.gcompanyid = defaults["gcompanyid"]
-                        update_fields.append("gcompanyid")
-                    if customer.custtypecode is None:
-                        customer.custtypecode = defaults["custtypecode"]
-                        update_fields.append("custtypecode")
-
-                    _ensure_customer_subdetail_in_db(
-                        target_gsubdetailid=customer.gsubdetailid,
-                        target_gcustomerid=customer.gcustomerid,
-                        custno=customer.custno or "1",
-                        full_customer_name=custname[:200],
-                        custdesc=customer.custdesc or "",
-                        company_gid=customer.gcompanyid or defaults["gcompanyid"],
-                        plus_user=plus_user,
-                        shamsi_date=shamsi_date,
-                        ref_customer=defaults["ref_customer"],
-                        guid_lowercase=defaults["guid_lowercase"],
-                    )
 
                 customer.save(using="plus", update_fields=update_fields)
 
