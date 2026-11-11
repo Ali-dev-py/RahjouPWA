@@ -4,6 +4,35 @@
 {% block title %}ثبت مشتری جدید | رهجو{% endblock %}
 {% block body_class %}app-body page-customer-create has-bottom-nav{% endblock %}
 
+{% block extra_css %}
+<style>
+    .location-picker-box {
+        background-color: #f8f9fa;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    .location-suggestions {
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1055;
+        max-height: 210px;
+        overflow-y: auto;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+    }
+    .location-suggestion-item {
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: background-color 0.12s ease-in-out;
+    }
+    .location-suggestion-item:hover,
+    .location-suggestion-item:focus,
+    .location-suggestion-item.active {
+        background-color: #e7f1ff;
+        color: #0a58ca;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 {% include "partials/_app_header.html" with heading="ثبت مشتری جدید" back_url_name="core:customers" %}
 
@@ -30,7 +59,7 @@
         </div>
 
         <!-- Form Card -->
-        <div class="card sale-request-card border-0 overflow-hidden mb-4">
+        <div class="card sale-request-card border-0 mb-4">
             <div class="card-body p-3 p-sm-4">
 
                 <!-- Display Errors -->
@@ -75,7 +104,7 @@
                                 <select id="customer_group" name="customer_group" class="form-select" required>
                                     <option value="">انتخاب گروه مشتری...</option>
                                     {% for group in groups %}
-                                        <option value="{{ group.gcustomergroupid }}" {% if selected_group_id == group.gcustomergroupid %}selected{% endif %}>
+                                        <option value="{{ group.gcustomergroupid }}" {% if selected_group_id|lower == group.gcustomergroupid|lower %}selected{% endif %}>
                                             {{ group.groupname }}
                                         </option>
                                     {% endfor %}
@@ -90,13 +119,110 @@
                                     <select id="visitor_id" name="visitor_id" class="form-select">
                                         <option value="">بدون ویزیتور</option>
                                         {% for visitor in visitors %}
-                                            <option value="{{ visitor.id }}" {% if selected_visitor_id == visitor.id %}selected{% endif %}>
+                                            <option value="{{ visitor.id }}" {% if selected_visitor_id|lower == visitor.id|lower %}selected{% endif %}>
                                                 {{ visitor.name }}
                                             </option>
                                         {% endfor %}
                                     </select>
                                 </div>
                             {% endif %}
+                        </div>
+
+                        <!-- Searchable Province & City (Default: تهران) -->
+                        <div class="row g-3">
+                            <!-- Province (Choose First) -->
+                            <div class="col-12 col-sm-6">
+                                <div class="location-picker-box rounded-3 p-2 p-sm-3 h-100">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <label for="gprovinceid" class="form-label fw-medium small mb-0">
+                                            استان
+                                        </label>
+                                        <span id="province_match_hint" class="text-secondary" style="font-size: 0.75rem;"></span>
+                                    </div>
+
+                                    <div class="position-relative mb-2">
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text bg-white text-secondary border-end-0">
+                                                <span class="material-symbols-outlined fs-6" aria-hidden="true">search</span>
+                                            </span>
+                                            <input type="search"
+                                                   id="province_search"
+                                                   class="form-control border-start-0"
+                                                   placeholder="جستجوی نام استان..."
+                                                   autocomplete="off"
+                                                   aria-label="جستجوی استان">
+                                        </div>
+                                        <div id="province_suggestions"
+                                             class="location-suggestions list-group position-absolute shadow-sm rounded-3 mt-1 bg-white d-none"
+                                             role="listbox"
+                                             aria-label="پیشنهادهای استان"></div>
+                                    </div>
+
+                                    <select id="gprovinceid"
+                                            name="gprovinceid"
+                                            class="form-select"
+                                            data-selected-province="{{ selected_province_id|default:'' }}">
+                                        {% if provinces %}
+                                            {% for prov in provinces %}
+                                                <option value="{{ prov.id }}" {% if selected_province_id|lower == prov.id|lower %}selected{% endif %}>
+                                                    {{ prov.name }}
+                                                </option>
+                                            {% endfor %}
+                                        {% else %}
+                                            <option value="{{ selected_province_id|default:'' }}" selected>تهران</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- City (Filtered by Selected Province GProvinceID) -->
+                            <div class="col-12 col-sm-6">
+                                <div class="location-picker-box rounded-3 p-2 p-sm-3 h-100">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <label for="gcityid" class="form-label fw-medium small mb-0">
+                                            شهر
+                                        </label>
+                                        <span id="city_match_hint" class="text-secondary" style="font-size: 0.75rem;"></span>
+                                    </div>
+
+                                    <div class="position-relative mb-2">
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text bg-white text-secondary border-end-0">
+                                                <span class="material-symbols-outlined fs-6" aria-hidden="true">search</span>
+                                            </span>
+                                            <input type="search"
+                                                   id="city_search"
+                                                   class="form-control border-start-0"
+                                                   placeholder="جستجوی نام شهر..."
+                                                   autocomplete="off"
+                                                   aria-label="جستجوی شهر">
+                                        </div>
+                                        <div id="city_suggestions"
+                                             class="location-suggestions list-group position-absolute shadow-sm rounded-3 mt-1 bg-white d-none"
+                                             role="listbox"
+                                             aria-label="پیشنهادهای شهر"></div>
+                                    </div>
+
+                                    <select id="gcityid"
+                                            name="gcityid"
+                                            class="form-select"
+                                            data-selected-city="{{ selected_city_id|default:'' }}">
+                                        {% if filtered_cities %}
+                                            {% for city in filtered_cities %}
+                                                <option value="{{ city.id }}"
+                                                        data-province="{{ city.province_id }}"
+                                                        {% if selected_city_id|lower == city.id|lower %}selected{% endif %}>
+                                                    {{ city.name }}
+                                                </option>
+                                            {% endfor %}
+                                        {% elif cities %}
+                                            <option value="">انتخاب شهر...</option>
+                                        {% else %}
+                                            <option value="{{ selected_city_id|default:'' }}" selected>تهران</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Mobile & Landline Phone -->
@@ -144,211 +270,6 @@
                                       placeholder="نشانی کامل مشتری...">{{ address|default:'' }}</textarea>
                         </div>
 
-                        <!-- Collapsible Optional Accounting, Tax & Location Details -->
-                        <div class="border rounded-3 overflow-hidden">
-                            <button class="btn btn-light w-100 d-flex align-items-center justify-content-between px-3 py-2 border-0 text-start"
-                                    type="button"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#extraCustomerFields"
-                                    aria-expanded="{% if prename or companyname or nationalid or economno or registno or postcode or credit or custdesc %}true{% else %}false{% endif %}"
-                                    aria-controls="extraCustomerFields">
-                                <span class="small fw-medium d-inline-flex align-items-center gap-2 text-dark">
-                                    <span class="material-symbols-outlined fs-5 text-primary" aria-hidden="true">tune</span>
-                                    اطلاعات تکمیلی و مالیاتی (اختیاری)
-                                </span>
-                                <span class="material-symbols-outlined fs-5 text-secondary" aria-hidden="true">expand_more</span>
-                            </button>
-
-                            <div class="collapse {% if prename or companyname or nationalid or economno or registno or postcode or credit or custdesc %}show{% endif %}"
-                                 id="extraCustomerFields">
-                                <div class="p-3 border-top bg-white d-grid gap-3">
-
-                                    <div class="row g-3">
-                                        <div class="col-12 col-sm-6">
-                                            <label for="customertypecode" class="form-label fw-medium small mb-1">
-                                                نوع شخصیت
-                                            </label>
-                                            <select id="customertypecode" name="customertypecode" class="form-select">
-                                                {% for ptype in person_types %}
-                                                    <option value="{{ ptype.code }}"
-                                                            {% if selected_person_type == ptype.code|stringformat:'s' %}selected{% endif %}>
-                                                        {{ ptype.name }}
-                                                    </option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-12 col-sm-6">
-                                            <label for="prename" class="form-label fw-medium small mb-1">
-                                                پیشوند عنوان
-                                            </label>
-                                            <input type="text"
-                                                   id="prename"
-                                                   name="prename"
-                                                   class="form-control"
-                                                   maxlength="50"
-                                                   placeholder="فروشگاه / شرکت / آقای / خانم"
-                                                   value="{{ prename|default:'' }}">
-                                        </div>
-                                    </div>
-
-                                    <div class="row g-3">
-                                        <div class="col-12 col-sm-8">
-                                            <label for="companyname" class="form-label fw-medium small mb-1">
-                                                نام شرکت / واحد تجاری
-                                            </label>
-                                            <input type="text"
-                                                   id="companyname"
-                                                   name="companyname"
-                                                   class="form-control"
-                                                   maxlength="50"
-                                                   placeholder="نام ثبتی شرکت یا فروشگاه"
-                                                   value="{{ companyname|default:'' }}">
-                                        </div>
-                                        <div class="col-12 col-sm-4">
-                                            <label for="citytelcode" class="form-label fw-medium small mb-1">
-                                                پیش‌شماره شهر
-                                            </label>
-                                            <input type="text"
-                                                   id="citytelcode"
-                                                   name="citytelcode"
-                                                   class="form-control text-start"
-                                                   dir="ltr"
-                                                   maxlength="10"
-                                                   placeholder="۰۲۱"
-                                                   value="{{ citytelcode|default:'' }}"
-                                                   inputmode="numeric">
-                                        </div>
-                                    </div>
-
-                                    <div class="row g-3">
-                                        <div class="col-12 col-sm-6">
-                                            <label for="nationalid" class="form-label fw-medium small mb-1">
-                                                کد ملی / شناسه ملی
-                                            </label>
-                                            <input type="text"
-                                                   id="nationalid"
-                                                   name="nationalid"
-                                                   class="form-control text-start"
-                                                   dir="ltr"
-                                                   maxlength="50"
-                                                   placeholder="کد ملی ۱۰ رقمی یا شناسه ملی ۱۱ رقمی"
-                                                   value="{{ nationalid|default:'' }}"
-                                                   inputmode="numeric">
-                                        </div>
-                                        <div class="col-12 col-sm-6">
-                                            <label for="economno" class="form-label fw-medium small mb-1">
-                                                کد اقتصادی
-                                            </label>
-                                            <input type="text"
-                                                   id="economno"
-                                                   name="economno"
-                                                   class="form-control text-start"
-                                                   dir="ltr"
-                                                   maxlength="50"
-                                                   placeholder="کد اقتصادی"
-                                                   value="{{ economno|default:'' }}"
-                                                   inputmode="numeric">
-                                        </div>
-                                    </div>
-
-                                    <div class="row g-3">
-                                        <div class="col-12 col-sm-6">
-                                            <label for="registno" class="form-label fw-medium small mb-1">
-                                                شماره ثبت
-                                            </label>
-                                            <input type="text"
-                                                   id="registno"
-                                                   name="registno"
-                                                   class="form-control text-start"
-                                                   dir="ltr"
-                                                   maxlength="50"
-                                                   placeholder="شماره ثبت شرکت"
-                                                   value="{{ registno|default:'' }}"
-                                                   inputmode="numeric">
-                                        </div>
-                                        <div class="col-12 col-sm-6">
-                                            <label for="postcode" class="form-label fw-medium small mb-1">
-                                                کد پستی
-                                            </label>
-                                            <input type="text"
-                                                   id="postcode"
-                                                   name="postcode"
-                                                   class="form-control text-start"
-                                                   dir="ltr"
-                                                   maxlength="50"
-                                                   placeholder="کد پستی ۱۰ رقمی"
-                                                   value="{{ postcode|default:'' }}"
-                                                   inputmode="numeric">
-                                        </div>
-                                    </div>
-
-                                    {% if provinces or cities %}
-                                        <div class="row g-3">
-                                            {% if provinces %}
-                                                <div class="col-12 {% if cities %}col-sm-6{% endif %}">
-                                                    <label for="gprovinceid" class="form-label fw-medium small mb-1">
-                                                        استان
-                                                    </label>
-                                                    <select id="gprovinceid" name="gprovinceid" class="form-select">
-                                                        <option value="">انتخاب استان...</option>
-                                                        {% for prov in provinces %}
-                                                            <option value="{{ prov.id }}" {% if selected_province_id|lower == prov.id|lower %}selected{% endif %}>
-                                                                {{ prov.name }}
-                                                            </option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            {% endif %}
-                                            {% if cities %}
-                                                <div class="col-12 {% if provinces %}col-sm-6{% endif %}">
-                                                    <label for="gcityid" class="form-label fw-medium small mb-1">
-                                                        شهر
-                                                    </label>
-                                                    <select id="gcityid" name="gcityid" class="form-select" data-selected-city="{{ selected_city_id|default:'' }}">
-                                                        <option value="">انتخاب شهر...</option>
-                                                        {% for city in cities %}
-                                                            <option value="{{ city.id }}"
-                                                                    data-province="{{ city.province_id }}"
-                                                                    {% if selected_city_id|lower == city.id|lower %}selected{% endif %}>
-                                                                {{ city.name }}
-                                                            </option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            {% endif %}
-                                        </div>
-                                    {% endif %}
-
-                                    <div>
-                                        <label for="credit" class="form-label fw-medium small mb-1">
-                                            سقف اعتبار (ریال)
-                                        </label>
-                                        <input type="text"
-                                               id="credit"
-                                               name="credit"
-                                               class="form-control text-start"
-                                               dir="ltr"
-                                               placeholder="0"
-                                               value="{{ credit|default:'' }}"
-                                               inputmode="numeric">
-                                    </div>
-
-                                    <div>
-                                        <label for="custdesc" class="form-label fw-medium small mb-1">
-                                            توضیحات
-                                        </label>
-                                        <textarea id="custdesc"
-                                                  name="custdesc"
-                                                  class="form-control"
-                                                  rows="2"
-                                                  maxlength="500"
-                                                  placeholder="توضیحات تکمیلی در مورد مشتری...">{{ custdesc|default:'' }}</textarea>
-                                    </div>
-
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Form Buttons -->
                         <div class="d-flex align-items-center justify-content-end gap-2 pt-3 border-top mt-1">
                             <a href="{% url 'core:customers' %}" class="btn btn-light rounded-pill px-4">
@@ -369,6 +290,9 @@
     </div>
 </main>
 
+{{ provinces|json_script:"customer-provinces-data" }}
+{{ cities|json_script:"customer-cities-data" }}
+
 {% include "partials/_bottom_nav.html" %}
 {% endblock %}
 
@@ -377,40 +301,341 @@
     document.addEventListener("DOMContentLoaded", function () {
         const provSelect = document.getElementById("gprovinceid");
         const citySelect = document.getElementById("gcityid");
+        const provSearch = document.getElementById("province_search");
+        const citySearch = document.getElementById("city_search");
+        const provSuggestions = document.getElementById("province_suggestions");
+        const citySuggestions = document.getElementById("city_suggestions");
+        const provHint = document.getElementById("province_match_hint");
+        const cityHint = document.getElementById("city_match_hint");
+
         if (!provSelect || !citySelect) return;
 
-        const allCityOptions = Array.from(citySelect.querySelectorAll("option[data-province]")).map(function (opt) {
-            return {
-                value: opt.value,
-                label: opt.textContent.trim(),
-                provinceId: (opt.getAttribute("data-province") || "").trim().toLowerCase()
-            };
-        });
+        function parseJsonScript(id) {
+            const el = document.getElementById(id);
+            if (!el) return [];
+            try {
+                const parsed = JSON.parse(el.textContent || "[]");
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
 
-        function syncCityOptions(preserveCurrent) {
-            const selectedProv = (provSelect.value || "").trim().toLowerCase();
-            const currentCity = preserveCurrent ? (citySelect.value || citySelect.getAttribute("data-selected-city") || "").trim().toLowerCase() : "";
+        function normalizePersian(str) {
+            if (!str) return "";
+            return String(str)
+                .replace(/\u064a/g, "\u06cc")
+                .replace(/\u0643/g, "\u06a9")
+                .replace(/\u200c/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .toLowerCase();
+        }
 
-            citySelect.innerHTML = '<option value="">انتخاب شهر...</option>';
-            allCityOptions.forEach(function (item) {
-                if (selectedProv && item.provinceId && item.provinceId !== selectedProv) {
-                    return;
-                }
-                const opt = document.createElement("option");
-                opt.value = item.value;
-                opt.textContent = item.label;
-                if (currentCity && item.value.toLowerCase() === currentCity) {
-                    opt.selected = true;
-                }
-                citySelect.appendChild(opt);
+        function toPersianDigits(num) {
+            return String(num).replace(/\d/g, function (d) {
+                return "۰۱۲۳۴۵۶۷۸۹"[Number(d)];
             });
         }
 
-        provSelect.addEventListener("change", function () {
-            syncCityOptions(false);
+        const allProvinces = parseJsonScript("customer-provinces-data").map(function (item) {
+            return {
+                id: String(item.id || "").trim(),
+                idLower: String(item.id || "").trim().toLowerCase(),
+                name: String(item.name || "").trim(),
+                norm: normalizePersian(item.name)
+            };
         });
 
-        syncCityOptions(true);
+        const allCities = parseJsonScript("customer-cities-data").map(function (item) {
+            return {
+                id: String(item.id || "").trim(),
+                idLower: String(item.id || "").trim().toLowerCase(),
+                name: String(item.name || "").trim(),
+                norm: normalizePersian(item.name),
+                provinceId: String(item.province_id || "").trim(),
+                provinceIdLower: String(item.province_id || "").trim().toLowerCase()
+            };
+        });
+
+        if (!allProvinces.length && !allCities.length) {
+            return;
+        }
+
+        let committedProvinceId = (provSelect.value || provSelect.getAttribute("data-selected-province") || "").trim();
+        let committedCityId = (citySelect.value || citySelect.getAttribute("data-selected-city") || "").trim();
+
+        function filterAndRank(items, query) {
+            const q = normalizePersian(query);
+            if (!q) return items.slice();
+            const exact = [];
+            const prefix = [];
+            const contains = [];
+            items.forEach(function (item) {
+                if (item.norm === q) {
+                    exact.push(item);
+                } else if (item.norm.indexOf(q) === 0) {
+                    prefix.push(item);
+                } else if (item.norm.indexOf(q) !== -1) {
+                    contains.push(item);
+                }
+            });
+            return exact.concat(prefix, contains);
+        }
+
+        function getProvinceById(provId) {
+            const low = String(provId || "").trim().toLowerCase();
+            for (let i = 0; i < allProvinces.length; i++) {
+                if (allProvinces[i].idLower === low) return allProvinces[i];
+            }
+            return null;
+        }
+
+        function getCitiesForProvince(provId) {
+            const low = String(provId || "").trim().toLowerCase();
+            if (!low) return [];
+            return allCities.filter(function (c) {
+                return c.provinceIdLower === low;
+            });
+        }
+
+        function pickDefaultCityForProvince(provId) {
+            const scoped = getCitiesForProvince(provId);
+            if (!scoped.length) return "";
+            const prov = getProvinceById(provId);
+            const targetNorm = prov ? prov.norm : normalizePersian("تهران");
+            for (let i = 0; i < scoped.length; i++) {
+                if (scoped[i].norm === targetNorm) return scoped[i].id;
+            }
+            for (let i = 0; i < scoped.length; i++) {
+                if (targetNorm && scoped[i].norm.indexOf(targetNorm) !== -1) return scoped[i].id;
+            }
+            return scoped[0].id;
+        }
+
+        function hideSuggestions(container) {
+            if (!container) return;
+            container.classList.add("d-none");
+            container.innerHTML = "";
+        }
+
+        function renderSuggestions(container, matches, selectedIdLower, onPick) {
+            if (!container) return;
+            container.innerHTML = "";
+            if (!matches.length) {
+                const emptyDiv = document.createElement("div");
+                emptyDiv.className = "list-group-item text-secondary small py-2";
+                emptyDiv.textContent = "موردی یافت نشد";
+                container.appendChild(emptyDiv);
+                container.classList.remove("d-none");
+                return;
+            }
+            matches.slice(0, 40).forEach(function (item) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "list-group-item list-group-item-action location-suggestion-item py-2 px-3 border-0 border-bottom" +
+                    (item.idLower === selectedIdLower ? " active fw-semibold" : "");
+                btn.textContent = item.name;
+                btn.addEventListener("mousedown", function (ev) {
+                    ev.preventDefault();
+                    onPick(item);
+                });
+                btn.addEventListener("click", function () {
+                    onPick(item);
+                });
+                container.appendChild(btn);
+            });
+            container.classList.remove("d-none");
+        }
+
+        function populateSelectOptions(selectEl, items, selectedId, emptyLabel) {
+            const selectedLower = String(selectedId || "").trim().toLowerCase();
+            selectEl.innerHTML = "";
+            if (!items.length) {
+                const emptyOpt = document.createElement("option");
+                emptyOpt.value = "";
+                emptyOpt.textContent = emptyLabel;
+                emptyOpt.disabled = true;
+                emptyOpt.selected = true;
+                selectEl.appendChild(emptyOpt);
+                return "";
+            }
+            let matchedId = "";
+            items.forEach(function (item) {
+                const opt = document.createElement("option");
+                opt.value = item.id;
+                opt.textContent = item.name;
+                if (selectedLower && item.idLower === selectedLower) {
+                    opt.selected = true;
+                    matchedId = item.id;
+                }
+                selectEl.appendChild(opt);
+            });
+            if (!matchedId && items.length) {
+                selectEl.options[0].selected = true;
+                matchedId = items[0].id;
+            }
+            return matchedId;
+        }
+
+        function updateCityList(preserveCommittedCity, showDropdown) {
+            const scopedCities = getCitiesForProvince(committedProvinceId);
+            const query = citySearch ? citySearch.value : "";
+            const matches = filterAndRank(scopedCities, query);
+
+            let desiredCity = preserveCommittedCity ? committedCityId : pickDefaultCityForProvince(committedProvinceId);
+            if (!query && !desiredCity) {
+                desiredCity = pickDefaultCityForProvince(committedProvinceId);
+            }
+
+            const chosenId = populateSelectOptions(
+                citySelect,
+                matches,
+                desiredCity,
+                scopedCities.length ? "شهری با این عبارت یافت نشد" : "شهری برای این استان ثبت نشده"
+            );
+            if (chosenId) {
+                committedCityId = chosenId;
+            }
+
+            if (cityHint) {
+                cityHint.textContent = query.trim()
+                    ? toPersianDigits(matches.length) + " از " + toPersianDigits(scopedCities.length)
+                    : toPersianDigits(scopedCities.length) + " شهر";
+            }
+
+            if (showDropdown && query.trim()) {
+                renderSuggestions(
+                    citySuggestions,
+                    matches,
+                    String(committedCityId || "").toLowerCase(),
+                    function (pickedCity) {
+                        committedCityId = pickedCity.id;
+                        if (citySearch) citySearch.value = "";
+                        hideSuggestions(citySuggestions);
+                        updateCityList(true, false);
+                    }
+                );
+            } else {
+                hideSuggestions(citySuggestions);
+            }
+        }
+
+        function updateProvinceList(showDropdown) {
+            const query = provSearch ? provSearch.value : "";
+            const matches = filterAndRank(allProvinces, query);
+            const previousProvinceLower = String(committedProvinceId || "").toLowerCase();
+
+            const chosenProvId = populateSelectOptions(
+                provSelect,
+                matches,
+                committedProvinceId,
+                "استانی با این عبارت یافت نشد"
+            );
+
+            if (provHint) {
+                provHint.textContent = query.trim()
+                    ? toPersianDigits(matches.length) + " از " + toPersianDigits(allProvinces.length)
+                    : toPersianDigits(allProvinces.length) + " استان";
+            }
+
+            if (chosenProvId && chosenProvId.toLowerCase() !== previousProvinceLower) {
+                committedProvinceId = chosenProvId;
+                committedCityId = pickDefaultCityForProvince(committedProvinceId);
+                if (citySearch) citySearch.value = "";
+                updateCityList(true, false);
+            }
+
+            if (showDropdown && query.trim()) {
+                renderSuggestions(
+                    provSuggestions,
+                    matches,
+                    String(committedProvinceId || "").toLowerCase(),
+                    function (pickedProv) {
+                        const changed = pickedProv.idLower !== String(committedProvinceId || "").toLowerCase();
+                        committedProvinceId = pickedProv.id;
+                        if (provSearch) provSearch.value = "";
+                        hideSuggestions(provSuggestions);
+                        populateSelectOptions(provSelect, allProvinces, committedProvinceId, "انتخاب استان...");
+                        if (provHint) {
+                            provHint.textContent = toPersianDigits(allProvinces.length) + " استان";
+                        }
+                        if (changed) {
+                            committedCityId = pickDefaultCityForProvince(committedProvinceId);
+                            if (citySearch) citySearch.value = "";
+                        }
+                        updateCityList(true, false);
+                    }
+                );
+            } else {
+                hideSuggestions(provSuggestions);
+            }
+        }
+
+        provSelect.addEventListener("change", function () {
+            committedProvinceId = (provSelect.value || "").trim();
+            committedCityId = pickDefaultCityForProvince(committedProvinceId);
+            if (citySearch) citySearch.value = "";
+            updateCityList(true, false);
+        });
+
+        citySelect.addEventListener("change", function () {
+            if (citySelect.value) {
+                committedCityId = citySelect.value.trim();
+            }
+        });
+
+        if (provSearch) {
+            provSearch.addEventListener("input", function () {
+                updateProvinceList(true);
+            });
+            provSearch.addEventListener("focus", function () {
+                if (provSearch.value.trim()) updateProvinceList(true);
+            });
+            provSearch.addEventListener("keydown", function (ev) {
+                if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    hideSuggestions(provSuggestions);
+                }
+            });
+        }
+
+        if (citySearch) {
+            citySearch.addEventListener("input", function () {
+                updateCityList(true, true);
+            });
+            citySearch.addEventListener("focus", function () {
+                if (citySearch.value.trim()) updateCityList(true, true);
+            });
+            citySearch.addEventListener("keydown", function (ev) {
+                if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    hideSuggestions(citySuggestions);
+                }
+            });
+        }
+
+        document.addEventListener("click", function (ev) {
+            if (provSuggestions && provSearch && !provSuggestions.contains(ev.target) && ev.target !== provSearch) {
+                hideSuggestions(provSuggestions);
+            }
+            if (citySuggestions && citySearch && !citySuggestions.contains(ev.target) && ev.target !== citySearch) {
+                hideSuggestions(citySuggestions);
+            }
+        });
+
+        // Initial sync: ensure default تهران is selected and cities are scoped to selected province
+        if (!committedProvinceId && allProvinces.length) {
+            committedProvinceId = allProvinces[0].id;
+        }
+        populateSelectOptions(provSelect, allProvinces, committedProvinceId, "انتخاب استان...");
+        if (provHint) {
+            provHint.textContent = toPersianDigits(allProvinces.length) + " استان";
+        }
+        if (!committedCityId) {
+            committedCityId = pickDefaultCityForProvince(committedProvinceId);
+        }
+        updateCityList(true, false);
     });
 </script>
 {% endblock %}
