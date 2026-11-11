@@ -2138,12 +2138,12 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             groups[0]
         )
 
-        # Provinces & Cities (including تهران default + اصفهان)
-        mock_province.objects.using.return_value.exclude.return_value.exclude.return_value.values.return_value.order_by.return_value = [
+        # Provinces & Cities (including تهران default + اصفهان; also UUID objects as returned by pyodbc)
+        mock_province.objects.using.return_value.values.return_value.order_by.return_value = [
             {"gprovinceid": "PROV-ESF-GUID", "provincename": "اصفهان"},
-            {"gprovinceid": "PROV-TEH-GUID", "provincename": "تهران"},
+            {"gprovinceid": "{PROV-TEH-GUID}", "provincename": "تهران"},
         ]
-        mock_cities.objects.using.return_value.exclude.return_value.exclude.return_value.values.return_value.order_by.return_value = [
+        mock_cities.objects.using.return_value.values.return_value.order_by.return_value = [
             {
                 "gcitiesid": "CITY-ESF-GUID",
                 "citynamefarsi": "اصفهان",
@@ -2244,6 +2244,12 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn("۱۲۶", get_html)
         self.assertIn('id="province_search"', get_html)
         self.assertIn('id="city_search"', get_html)
+        self.assertIn('id="customer-provinces-data"', get_html)
+        self.assertIn('id="customer-cities-data"', get_html)
+        self.assertIn("updateProvinceList", get_html)
+        self.assertIn("updateCityList", get_html)
+        mock_province.objects.using.return_value.exclude.assert_not_called()
+        mock_cities.objects.using.return_value.exclude.assert_not_called()
         self.assertRegex(
             get_html,
             r'<option value="PROV-TEH-GUID"\s+selected>',

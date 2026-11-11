@@ -14,8 +14,8 @@
         top: 100%;
         left: 0;
         right: 0;
-        z-index: 1055;
-        max-height: 210px;
+        z-index: 1060;
+        max-height: 220px;
         overflow-y: auto;
         border: 1px solid rgba(0, 0, 0, 0.12);
     }
@@ -296,7 +296,7 @@
 {% include "partials/_bottom_nav.html" %}
 {% endblock %}
 
-{% block extra_js %}
+{% block extra_scripts %}
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         const provSelect = document.getElementById("gprovinceid");
@@ -324,8 +324,11 @@
         function normalizePersian(str) {
             if (!str) return "";
             return String(str)
-                .replace(/\u064a/g, "\u06cc")
+                .replace(/[\u0622\u0623\u0625]/g, "\u0627")
+                .replace(/[\u064a\u0626]/g, "\u06cc")
                 .replace(/\u0643/g, "\u06a9")
+                .replace(/\u0629/g, "\u0647")
+                .replace(/[\u064b-\u065f\u0670]/g, "")
                 .replace(/\u200c/g, " ")
                 .replace(/\s+/g, " ")
                 .trim()
@@ -339,22 +342,25 @@
         }
 
         const allProvinces = parseJsonScript("customer-provinces-data").map(function (item) {
+            const cleanId = String(item.id || "").trim().replace(/^\{|\}$/g, "");
             return {
-                id: String(item.id || "").trim(),
-                idLower: String(item.id || "").trim().toLowerCase(),
+                id: cleanId,
+                idLower: cleanId.toLowerCase(),
                 name: String(item.name || "").trim(),
                 norm: normalizePersian(item.name)
             };
         });
 
         const allCities = parseJsonScript("customer-cities-data").map(function (item) {
+            const cleanId = String(item.id || "").trim().replace(/^\{|\}$/g, "");
+            const cleanProvId = String(item.province_id || "").trim().replace(/^\{|\}$/g, "");
             return {
-                id: String(item.id || "").trim(),
-                idLower: String(item.id || "").trim().toLowerCase(),
+                id: cleanId,
+                idLower: cleanId.toLowerCase(),
                 name: String(item.name || "").trim(),
                 norm: normalizePersian(item.name),
-                provinceId: String(item.province_id || "").trim(),
-                provinceIdLower: String(item.province_id || "").trim().toLowerCase()
+                provinceId: cleanProvId,
+                provinceIdLower: cleanProvId.toLowerCase()
             };
         });
 
@@ -362,8 +368,13 @@
             return;
         }
 
-        let committedProvinceId = (provSelect.value || provSelect.getAttribute("data-selected-province") || "").trim();
-        let committedCityId = (citySelect.value || citySelect.getAttribute("data-selected-city") || "").trim();
+        let committedProvinceId = String(
+            provSelect.value || provSelect.getAttribute("data-selected-province") || ""
+        ).trim().replace(/^\{|\}$/g, "");
+
+        let committedCityId = String(
+            citySelect.value || citySelect.getAttribute("data-selected-city") || ""
+        ).trim().replace(/^\{|\}$/g, "");
 
         function filterAndRank(items, query) {
             const q = normalizePersian(query);
@@ -430,7 +441,7 @@
                 container.classList.remove("d-none");
                 return;
             }
-            matches.slice(0, 40).forEach(function (item) {
+            matches.slice(0, 80).forEach(function (item) {
                 const btn = document.createElement("button");
                 btn.type = "button";
                 btn.className = "list-group-item list-group-item-action location-suggestion-item py-2 px-3 border-0 border-bottom" +
@@ -481,10 +492,17 @@
         function updateCityList(preserveCommittedCity, showDropdown) {
             const scopedCities = getCitiesForProvince(committedProvinceId);
             const query = citySearch ? citySearch.value : "";
+            const hasQuery = Boolean(query && query.trim());
             const matches = filterAndRank(scopedCities, query);
 
-            let desiredCity = preserveCommittedCity ? committedCityId : pickDefaultCityForProvince(committedProvinceId);
-            if (!query && !desiredCity) {
+            let desiredCity = preserveCommittedCity
+                ? committedCityId
+                : pickDefaultCityForProvince(committedProvinceId);
+
+            // When user actively types a search query, prefer the best ranked match!
+            if (hasQuery && matches.length) {
+                desiredCity = matches[0].id;
+            } else if (!desiredCity) {
                 desiredCity = pickDefaultCityForProvince(committedProvinceId);
             }
 
@@ -499,12 +517,12 @@
             }
 
             if (cityHint) {
-                cityHint.textContent = query.trim()
+                cityHint.textContent = hasQuery
                     ? toPersianDigits(matches.length) + " از " + toPersianDigits(scopedCities.length)
                     : toPersianDigits(scopedCities.length) + " شهر";
             }
 
-            if (showDropdown && query.trim()) {
+            if (showDropdown) {
                 renderSuggestions(
                     citySuggestions,
                     matches,
@@ -523,18 +541,24 @@
 
         function updateProvinceList(showDropdown) {
             const query = provSearch ? provSearch.value : "";
+            const hasQuery = Boolean(query && query.trim());
             const matches = filterAndRank(allProvinces, query);
             const previousProvinceLower = String(committedProvinceId || "").toLowerCase();
+
+            // When user actively types a province search query, prefer the best ranked match!
+            const targetProvId = (hasQuery && matches.length)
+                ? matches[0].id
+                : committedProvinceId;
 
             const chosenProvId = populateSelectOptions(
                 provSelect,
                 matches,
-                committedProvinceId,
+                targetProvId,
                 "استانی با این عبارت یافت نشد"
             );
 
             if (provHint) {
-                provHint.textContent = query.trim()
+                provHint.textContent = hasQuery
                     ? toPersianDigits(matches.length) + " از " + toPersianDigits(allProvinces.length)
                     : toPersianDigits(allProvinces.length) + " استان";
             }
@@ -546,7 +570,7 @@
                 updateCityList(true, false);
             }
 
-            if (showDropdown && query.trim()) {
+            if (showDropdown) {
                 renderSuggestions(
                     provSuggestions,
                     matches,
@@ -573,7 +597,7 @@
         }
 
         provSelect.addEventListener("change", function () {
-            committedProvinceId = (provSelect.value || "").trim();
+            committedProvinceId = String(provSelect.value || "").trim();
             committedCityId = pickDefaultCityForProvince(committedProvinceId);
             if (citySearch) citySearch.value = "";
             updateCityList(true, false);
@@ -581,7 +605,7 @@
 
         citySelect.addEventListener("change", function () {
             if (citySelect.value) {
-                committedCityId = citySelect.value.trim();
+                committedCityId = String(citySelect.value).trim();
             }
         });
 
@@ -590,11 +614,18 @@
                 updateProvinceList(true);
             });
             provSearch.addEventListener("focus", function () {
-                if (provSearch.value.trim()) updateProvinceList(true);
+                updateProvinceList(true);
             });
             provSearch.addEventListener("keydown", function (ev) {
-                if (ev.key === "Enter") {
+                if (ev.key === "Enter" || ev.key === "Escape") {
                     ev.preventDefault();
+                    if (ev.key === "Enter" && provSearch.value.trim()) {
+                        provSearch.value = "";
+                        populateSelectOptions(provSelect, allProvinces, committedProvinceId, "انتخاب استان...");
+                        if (provHint) {
+                            provHint.textContent = toPersianDigits(allProvinces.length) + " استان";
+                        }
+                    }
                     hideSuggestions(provSuggestions);
                 }
             });
@@ -605,11 +636,15 @@
                 updateCityList(true, true);
             });
             citySearch.addEventListener("focus", function () {
-                if (citySearch.value.trim()) updateCityList(true, true);
+                updateCityList(true, true);
             });
             citySearch.addEventListener("keydown", function (ev) {
-                if (ev.key === "Enter") {
+                if (ev.key === "Enter" || ev.key === "Escape") {
                     ev.preventDefault();
+                    if (ev.key === "Enter" && citySearch.value.trim()) {
+                        citySearch.value = "";
+                        updateCityList(true, false);
+                    }
                     hideSuggestions(citySuggestions);
                 }
             });
