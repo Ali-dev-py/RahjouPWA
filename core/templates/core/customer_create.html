@@ -1,33 +1,41 @@
 {% extends "base.html" %}
+{% load i18n_extras %}
 
 {% block title %}ثبت مشتری جدید | رهجو{% endblock %}
 {% block body_class %}app-body page-customer-create has-bottom-nav{% endblock %}
 
 {% block content %}
-{% include "partials/_app_header.html" with heading="ثبت مشتری جدید" %}
+{% include "partials/_app_header.html" with heading="ثبت مشتری جدید" back_url_name="core:customers" %}
 
 <main class="app-main container-fluid px-3">
     <div class="app-content mx-auto">
-        
+
         <!-- Header & Back Navigation -->
-        <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
             <div>
-                <h1 class="h4 fw-bold mb-1">مشتری جدید</h1>
-                <p class="text-secondary mb-0">اطلاعات مشتری را وارد کنید</p>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h1 class="h4 fw-bold mb-0">مشتری جدید</h1>
+                    {% if next_custno_preview %}
+                        <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle fw-normal px-2 py-1">
+                            کد بعدی: {{ next_custno_preview|persian_digits }}
+                        </span>
+                    {% endif %}
+                </div>
+                <p class="text-secondary small mb-0 mt-1">اطلاعات مشتری و حساب تفصیلی به‌صورت همزمان ثبت می‌شود</p>
             </div>
-            <a href="{% url 'core:customers' %}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-1 rounded-pill px-3 py-1">
-                <span class="material-symbols-outlined fs-5">arrow_forward</span>
+            <a href="{% url 'core:customers' %}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-1 rounded-pill px-3 py-1 flex-shrink-0">
+                <span class="material-symbols-outlined fs-5" aria-hidden="true">arrow_forward</span>
                 <span class="small">بازگشت</span>
             </a>
         </div>
 
         <!-- Form Card -->
         <div class="card sale-request-card border-0 overflow-hidden mb-4">
-            <div class="card-body p-4">
+            <div class="card-body p-3 p-sm-4">
 
                 <!-- Display Errors -->
                 {% if errors %}
-                    <div class="alert alert-danger py-2 px-3 small rounded-3 mb-4">
+                    <div class="alert alert-danger py-2 px-3 small rounded-3 mb-4" role="alert">
                         <ul class="mb-0 ps-3">
                             {% for error in errors %}
                                 <li>{{ error }}</li>
@@ -37,11 +45,11 @@
                 {% endif %}
 
                 <!-- Form -->
-                <form method="post" action="{% url 'core:customer_create' %}">
+                <form method="post" action="{% url 'core:customer_create' %}" novalidate>
                     {% csrf_token %}
-                    
+
                     <div class="d-grid gap-3">
-                        
+
                         <!-- Customer Name (Required) -->
                         <div>
                             <label for="custname" class="form-label fw-medium small mb-1">
@@ -51,40 +59,76 @@
                                    id="custname"
                                    name="custname"
                                    class="form-control"
-                                   placeholder="نام یا عنوان فروشگاه"
+                                   maxlength="100"
+                                   placeholder="نام مشتری یا عنوان فروشگاه"
                                    value="{{ custname|default:'' }}"
                                    required
                                    autocomplete="off">
                         </div>
 
-                        <!-- Customer Group (Required) -->
-                        <div>
-                            <label for="customer_group" class="form-label fw-medium small mb-1">
-                                گروه مشتری <span class="text-danger">*</span>
-                            </label>
-                            <select id="customer_group" name="customer_group" class="form-select" required>
-                                <option value="">انتخاب گروه مشتری...</option>
-                                {% for group in groups %}
-                                    <option value="{{ group.gcustomergroupid }}" {% if selected_group_id == group.gcustomergroupid %}selected{% endif %}>
-                                        {{ group.groupname }}
-                                    </option>
-                                {% endfor %}
-                            </select>
+                        <!-- Customer Group (Required) & Visitor (Optional) -->
+                        <div class="row g-3">
+                            <div class="col-12 {% if visitors %}col-sm-6{% endif %}">
+                                <label for="customer_group" class="form-label fw-medium small mb-1">
+                                    گروه مشتری <span class="text-danger">*</span>
+                                </label>
+                                <select id="customer_group" name="customer_group" class="form-select" required>
+                                    <option value="">انتخاب گروه مشتری...</option>
+                                    {% for group in groups %}
+                                        <option value="{{ group.gcustomergroupid }}" {% if selected_group_id == group.gcustomergroupid %}selected{% endif %}>
+                                            {{ group.groupname }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            {% if visitors %}
+                                <div class="col-12 col-sm-6">
+                                    <label for="visitor_id" class="form-label fw-medium small mb-1">
+                                        ویزیتور مرتبط
+                                    </label>
+                                    <select id="visitor_id" name="visitor_id" class="form-select">
+                                        <option value="">بدون ویزیتور</option>
+                                        {% for visitor in visitors %}
+                                            <option value="{{ visitor.id }}" {% if selected_visitor_id == visitor.id %}selected{% endif %}>
+                                                {{ visitor.name }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            {% endif %}
                         </div>
 
-                        <!-- Phone Number (Optional) -->
-                        <div>
-                            <label for="phone" class="form-label fw-medium small mb-1">
-                                شماره تماس
-                            </label>
-                            <input type="tel"
-                                   id="phone"
-                                   name="phone"
-                                   class="form-control text-start"
-                                   dir="ltr"
-                                   placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-                                   value="{{ phone|default:'' }}"
-                                   inputmode="tel">
+                        <!-- Mobile & Landline Phone -->
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6">
+                                <label for="mobile" class="form-label fw-medium small mb-1">
+                                    شماره همراه (موبایل)
+                                </label>
+                                <input type="tel"
+                                       id="mobile"
+                                       name="mobile"
+                                       class="form-control text-start"
+                                       dir="ltr"
+                                       maxlength="100"
+                                       placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                                       value="{{ mobile|default:'' }}"
+                                       inputmode="tel">
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <label for="phone" class="form-label fw-medium small mb-1">
+                                    تلفن ثابت
+                                </label>
+                                <input type="tel"
+                                       id="phone"
+                                       name="phone"
+                                       class="form-control text-start"
+                                       dir="ltr"
+                                       maxlength="100"
+                                       placeholder="۰۲۱۸۸۷۷۶۶۵۵"
+                                       value="{{ phone|default:'' }}"
+                                       inputmode="tel">
+                            </div>
                         </div>
 
                         <!-- Address (Optional) -->
@@ -95,18 +139,224 @@
                             <textarea id="address"
                                       name="address"
                                       class="form-control"
-                                      rows="3"
+                                      rows="2"
+                                      maxlength="250"
                                       placeholder="نشانی کامل مشتری...">{{ address|default:'' }}</textarea>
                         </div>
 
+                        <!-- Collapsible Optional Accounting, Tax & Location Details -->
+                        <div class="border rounded-3 overflow-hidden">
+                            <button class="btn btn-light w-100 d-flex align-items-center justify-content-between px-3 py-2 border-0 text-start"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#extraCustomerFields"
+                                    aria-expanded="{% if prename or companyname or nationalid or economno or registno or postcode or credit or custdesc %}true{% else %}false{% endif %}"
+                                    aria-controls="extraCustomerFields">
+                                <span class="small fw-medium d-inline-flex align-items-center gap-2 text-dark">
+                                    <span class="material-symbols-outlined fs-5 text-primary" aria-hidden="true">tune</span>
+                                    اطلاعات تکمیلی و مالیاتی (اختیاری)
+                                </span>
+                                <span class="material-symbols-outlined fs-5 text-secondary" aria-hidden="true">expand_more</span>
+                            </button>
+
+                            <div class="collapse {% if prename or companyname or nationalid or economno or registno or postcode or credit or custdesc %}show{% endif %}"
+                                 id="extraCustomerFields">
+                                <div class="p-3 border-top bg-white d-grid gap-3">
+
+                                    <div class="row g-3">
+                                        <div class="col-12 col-sm-6">
+                                            <label for="customertypecode" class="form-label fw-medium small mb-1">
+                                                نوع شخصیت
+                                            </label>
+                                            <select id="customertypecode" name="customertypecode" class="form-select">
+                                                {% for ptype in person_types %}
+                                                    <option value="{{ ptype.code }}"
+                                                            {% if selected_person_type == ptype.code|stringformat:'s' %}selected{% endif %}>
+                                                        {{ ptype.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label for="prename" class="form-label fw-medium small mb-1">
+                                                پیشوند عنوان
+                                            </label>
+                                            <input type="text"
+                                                   id="prename"
+                                                   name="prename"
+                                                   class="form-control"
+                                                   maxlength="50"
+                                                   placeholder="فروشگاه / شرکت / آقای / خانم"
+                                                   value="{{ prename|default:'' }}">
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-12 col-sm-8">
+                                            <label for="companyname" class="form-label fw-medium small mb-1">
+                                                نام شرکت / واحد تجاری
+                                            </label>
+                                            <input type="text"
+                                                   id="companyname"
+                                                   name="companyname"
+                                                   class="form-control"
+                                                   maxlength="50"
+                                                   placeholder="نام ثبتی شرکت یا فروشگاه"
+                                                   value="{{ companyname|default:'' }}">
+                                        </div>
+                                        <div class="col-12 col-sm-4">
+                                            <label for="citytelcode" class="form-label fw-medium small mb-1">
+                                                پیش‌شماره شهر
+                                            </label>
+                                            <input type="text"
+                                                   id="citytelcode"
+                                                   name="citytelcode"
+                                                   class="form-control text-start"
+                                                   dir="ltr"
+                                                   maxlength="10"
+                                                   placeholder="۰۲۱"
+                                                   value="{{ citytelcode|default:'' }}"
+                                                   inputmode="numeric">
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-12 col-sm-6">
+                                            <label for="nationalid" class="form-label fw-medium small mb-1">
+                                                کد ملی / شناسه ملی
+                                            </label>
+                                            <input type="text"
+                                                   id="nationalid"
+                                                   name="nationalid"
+                                                   class="form-control text-start"
+                                                   dir="ltr"
+                                                   maxlength="50"
+                                                   placeholder="کد ملی ۱۰ رقمی یا شناسه ملی ۱۱ رقمی"
+                                                   value="{{ nationalid|default:'' }}"
+                                                   inputmode="numeric">
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label for="economno" class="form-label fw-medium small mb-1">
+                                                کد اقتصادی
+                                            </label>
+                                            <input type="text"
+                                                   id="economno"
+                                                   name="economno"
+                                                   class="form-control text-start"
+                                                   dir="ltr"
+                                                   maxlength="50"
+                                                   placeholder="کد اقتصادی"
+                                                   value="{{ economno|default:'' }}"
+                                                   inputmode="numeric">
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-12 col-sm-6">
+                                            <label for="registno" class="form-label fw-medium small mb-1">
+                                                شماره ثبت
+                                            </label>
+                                            <input type="text"
+                                                   id="registno"
+                                                   name="registno"
+                                                   class="form-control text-start"
+                                                   dir="ltr"
+                                                   maxlength="50"
+                                                   placeholder="شماره ثبت شرکت"
+                                                   value="{{ registno|default:'' }}"
+                                                   inputmode="numeric">
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label for="postcode" class="form-label fw-medium small mb-1">
+                                                کد پستی
+                                            </label>
+                                            <input type="text"
+                                                   id="postcode"
+                                                   name="postcode"
+                                                   class="form-control text-start"
+                                                   dir="ltr"
+                                                   maxlength="50"
+                                                   placeholder="کد پستی ۱۰ رقمی"
+                                                   value="{{ postcode|default:'' }}"
+                                                   inputmode="numeric">
+                                        </div>
+                                    </div>
+
+                                    {% if provinces or cities %}
+                                        <div class="row g-3">
+                                            {% if provinces %}
+                                                <div class="col-12 {% if cities %}col-sm-6{% endif %}">
+                                                    <label for="gprovinceid" class="form-label fw-medium small mb-1">
+                                                        استان
+                                                    </label>
+                                                    <select id="gprovinceid" name="gprovinceid" class="form-select">
+                                                        <option value="">انتخاب استان...</option>
+                                                        {% for prov in provinces %}
+                                                            <option value="{{ prov.id }}" {% if selected_province_id|lower == prov.id|lower %}selected{% endif %}>
+                                                                {{ prov.name }}
+                                                            </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            {% endif %}
+                                            {% if cities %}
+                                                <div class="col-12 {% if provinces %}col-sm-6{% endif %}">
+                                                    <label for="gcityid" class="form-label fw-medium small mb-1">
+                                                        شهر
+                                                    </label>
+                                                    <select id="gcityid" name="gcityid" class="form-select" data-selected-city="{{ selected_city_id|default:'' }}">
+                                                        <option value="">انتخاب شهر...</option>
+                                                        {% for city in cities %}
+                                                            <option value="{{ city.id }}"
+                                                                    data-province="{{ city.province_id }}"
+                                                                    {% if selected_city_id|lower == city.id|lower %}selected{% endif %}>
+                                                                {{ city.name }}
+                                                            </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+
+                                    <div>
+                                        <label for="credit" class="form-label fw-medium small mb-1">
+                                            سقف اعتبار (ریال)
+                                        </label>
+                                        <input type="text"
+                                               id="credit"
+                                               name="credit"
+                                               class="form-control text-start"
+                                               dir="ltr"
+                                               placeholder="0"
+                                               value="{{ credit|default:'' }}"
+                                               inputmode="numeric">
+                                    </div>
+
+                                    <div>
+                                        <label for="custdesc" class="form-label fw-medium small mb-1">
+                                            توضیحات
+                                        </label>
+                                        <textarea id="custdesc"
+                                                  name="custdesc"
+                                                  class="form-control"
+                                                  rows="2"
+                                                  maxlength="500"
+                                                  placeholder="توضیحات تکمیلی در مورد مشتری...">{{ custdesc|default:'' }}</textarea>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Form Buttons -->
-                        <div class="d-flex align-items-center justify-content-end gap-2 pt-3 border-top mt-2">
+                        <div class="d-flex align-items-center justify-content-end gap-2 pt-3 border-top mt-1">
                             <a href="{% url 'core:customers' %}" class="btn btn-light rounded-pill px-4">
                                 انصراف
                             </a>
                             <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2 rounded-pill px-4">
-                                <span class="material-symbols-outlined fs-5">check</span>
-                                <span>ثبت اطلاعات</span>
+                                <span class="material-symbols-outlined fs-5" aria-hidden="true">check</span>
+                                <span>ثبت مشتری</span>
                             </button>
                         </div>
 
@@ -120,4 +370,47 @@
 </main>
 
 {% include "partials/_bottom_nav.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const provSelect = document.getElementById("gprovinceid");
+        const citySelect = document.getElementById("gcityid");
+        if (!provSelect || !citySelect) return;
+
+        const allCityOptions = Array.from(citySelect.querySelectorAll("option[data-province]")).map(function (opt) {
+            return {
+                value: opt.value,
+                label: opt.textContent.trim(),
+                provinceId: (opt.getAttribute("data-province") || "").trim().toLowerCase()
+            };
+        });
+
+        function syncCityOptions(preserveCurrent) {
+            const selectedProv = (provSelect.value || "").trim().toLowerCase();
+            const currentCity = preserveCurrent ? (citySelect.value || citySelect.getAttribute("data-selected-city") || "").trim().toLowerCase() : "";
+
+            citySelect.innerHTML = '<option value="">انتخاب شهر...</option>';
+            allCityOptions.forEach(function (item) {
+                if (selectedProv && item.provinceId && item.provinceId !== selectedProv) {
+                    return;
+                }
+                const opt = document.createElement("option");
+                opt.value = item.value;
+                opt.textContent = item.label;
+                if (currentCity && item.value.toLowerCase() === currentCity) {
+                    opt.selected = true;
+                }
+                citySelect.appendChild(opt);
+            });
+        }
+
+        provSelect.addEventListener("change", function () {
+            syncCityOptions(false);
+        });
+
+        syncCityOptions(true);
+    });
+</script>
 {% endblock %}
