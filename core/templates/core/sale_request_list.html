@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% load i18n_extras %}
 
 {% block title %}درخواست‌های فروش | رهجو{% endblock %}
@@ -99,31 +100,48 @@
                             </span>
                         </div>
                         <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top">
-                            <span class="small text-secondary d-flex align-items-center gap-1">
-                                <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
-                                {{ sale_request.date|persian_digits }}
-                            </span>
-                            {% if sale_request.can_modify %}
-                                <span class="d-flex align-items-center gap-2">
-                                    <a href="{% url 'core:sale_request_edit' pk=sale_request.id %}?from=list"
-                                       class="sale-request-card__download text-primary text-decoration-none position-relative z-2"
-                                       title="ویرایش درخواست فروش"
-                                       aria-label="ویرایش درخواست {{ sale_request.number }}">
-                                        <span class="material-symbols-outlined fs-5" aria-hidden="true">edit</span>
-                                    </a>
-                                    <button type="button"
-                                            class="sale-request-card__download border-0 text-danger position-relative z-2 js-open-delete-sr"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#deleteSaleRequestModal"
-                                            data-delete-url="{% url 'core:sale_request_delete' pk=sale_request.id %}"
-                                            data-sr-number="{{ sale_request.number|persian_digits }}"
-                                            data-sr-customer="{{ sale_request.customer_name }}"
-                                            title="حذف درخواست فروش"
-                                            aria-label="حذف درخواست {{ sale_request.number }}">
-                                        <span class="material-symbols-outlined fs-5" aria-hidden="true">delete</span>
-                                    </button>
+                            <div class="d-flex flex-column align-items-start gap-2">
+                                <span class="small text-secondary d-flex align-items-center gap-1">
+                                    <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
+                                    {{ sale_request.date|persian_digits }}
                                 </span>
-                            {% endif %}
+                                {% if sale_request.can_view_shortages %}
+                                    <a href="{% url 'core:sale_request_shortages' pk=sale_request.id %}?from=list"
+                                       class="btn btn-sm bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill fw-semibold d-inline-flex align-items-center gap-1 px-3 py-1 position-relative z-2"
+                                       title="مشاهده کسری"
+                                       aria-label="مشاهده کسری درخواست {{ sale_request.number|persian_digits }}">
+                                        <span class="material-symbols-outlined fs-6" aria-hidden="true">production_quantity_limits</span>
+                                        <span>مشاهده کسری</span>
+                                    </a>
+                                {% elif sale_request.can_modify %}
+                                    <span class="d-flex align-items-center gap-2">
+                                        <a href="{% url 'core:sale_request_edit' pk=sale_request.id %}?from=list"
+                                           class="sale-request-card__download text-primary text-decoration-none position-relative z-2"
+                                           title="ویرایش درخواست فروش"
+                                           aria-label="ویرایش درخواست {{ sale_request.number }}">
+                                            <span class="material-symbols-outlined fs-5" aria-hidden="true">edit</span>
+                                        </a>
+                                        <button type="button"
+                                                class="sale-request-card__download border-0 text-danger position-relative z-2 js-open-delete-sr"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteSaleRequestModal"
+                                                data-delete-url="{% url 'core:sale_request_delete' pk=sale_request.id %}"
+                                                data-sr-number="{{ sale_request.number|persian_digits }}"
+                                                data-sr-customer="{{ sale_request.customer_name }}"
+                                                title="حذف درخواست فروش"
+                                                aria-label="حذف درخواست {{ sale_request.number }}">
+                                            <span class="material-symbols-outlined fs-5" aria-hidden="true">delete</span>
+                                        </button>
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="text-start flex-shrink-0">
+                                <small class="text-secondary d-block mb-1">مبلغ کل</small>
+                                <strong class="sale-request-card__amount d-inline-block fs-6 text-primary">
+                                    {{ sale_request.total_amount|persian_digits|intcomma:False }}
+                                </strong>
+                                <small class="text-secondary">ریال</small>
+                            </div>
                         </div>
                     </div>
                 </article>

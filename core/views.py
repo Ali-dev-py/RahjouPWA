@@ -152,45 +152,66 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
 
         recent_activities = []
         if recent_masters:
-            master_guids = [m.gsalerequestmasterid for m in recent_masters]
+            master_guids = [
+                _clean_guid_str(m.gsalerequestmasterid)
+                for m in recent_masters
+                if _clean_guid_str(m.gsalerequestmasterid)
+            ]
             customer_guids = [
-                m.gcustomerid for m in recent_masters if m.gcustomerid
+                _clean_guid_str(m.gcustomerid)
+                for m in recent_masters
+                if _clean_guid_str(m.gcustomerid)
             ]
 
             # Batch Fetch Customers (Single Query - No N+1)
             customer_map = {}
             if customer_guids:
                 customers = Tblcustomer.objects.using("plus").filter(
-                    gcustomerid__in=customer_guids
+                    gcustomerid__in=_guid_case_variants(customer_guids)
                 )
-                customer_map = {c.gcustomerid: c.custname for c in customers}
+                customer_map = {
+                    _clean_guid_str(c.gcustomerid).lower(): c.custname
+                    for c in customers
+                    if getattr(c, "gcustomerid", None)
+                }
+
+            # Batch Resolve Visitors (No N+1)
+            visitor_map = _resolve_sale_request_visitors(recent_masters)
 
             # Batch Calculate Total Price per Sale Request (Single Query)
             # Total = (Quantity * UnitPrice) - Discount
-            details_agg = (
-                Salerequestdetail.objects.using("plus")
-                .filter(gsalerequestmasterid__in=master_guids)
-                .values("gsalerequestmasterid")
-                .annotate(
-                    total=Sum(
-                        (F("quantity") * F("unitprice"))
-                        - Coalesce(F("discount"), Value(0)),
-                        output_field=DecimalField(),
+            totals_map = {}
+            if master_guids:
+                details_agg = (
+                    Salerequestdetail.objects.using("plus")
+                    .filter(gsalerequestmasterid__in=_guid_case_variants(master_guids))
+                    .values("gsalerequestmasterid")
+                    .annotate(
+                        total=Sum(
+                            (F("quantity") * F("unitprice"))
+                            - Coalesce(F("discount"), Value(0)),
+                            output_field=DecimalField(),
+                        )
                     )
                 )
-            )
-            totals_map = {
-                d["gsalerequestmasterid"]: int(d["total"] or 0)
-                for d in details_agg
-            }
+                for d in details_agg:
+                    if isinstance(d, dict) and d.get("gsalerequestmasterid"):
+                        key = _clean_guid_str(d["gsalerequestmasterid"]).lower()
+                        totals_map[key] = totals_map.get(key, 0) + int(
+                            d.get("total") or 0
+                        )
 
             # Build list
             for m in recent_masters:
+                cust_key = _clean_guid_str(m.gcustomerid).lower()
+                sr_key = _clean_guid_str(m.gsalerequestmasterid).lower()
                 customer_name = (
-                    customer_map.get(m.gcustomerid)
+                    customer_map.get(cust_key)
                     or m.requestman
                     or "مشتری نامشخص"
                 )
+                resolved_visitor = visitor_map.get(sr_key, "")
+                visitor_name = resolved_visitor or "بدون ویزیتور"
                 status_name = status_map.get(
                     m.salerequeststatuscode, "ثبت شده"
                 )
@@ -202,9 +223,9 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
                         "sale_request_no": m.salerequestno,
                         "date": m.salerequestdate or m.createddate or "-",
                         "customer_name": customer_name,
-                        "total_amount": totals_map.get(
-                            m.gsalerequestmasterid, 0
-                        ),
+                        "visitor_name": visitor_name,
+                        "has_visitor": bool(resolved_visitor),
+                        "total_amount": totals_map.get(sr_key, 0),
                         "status_name": status_name,
                         "chip_class": style["chip_class"],
                         "dot_class": style["dot_class"],
@@ -1886,6 +1907,28 @@ def _is_sabt_shode_status(status_name):
     return _normalize_persian_status_text(status_name) == "ثبتشده"
 
 
+def _is_shortage_eligible_status(status_code, status_name):
+    """Return True strictly when a Sale Request has status code 8 or status 'پیگیری'."""
+    if status_code is not None:
+        try:
+            if int(status_code) == 8:
+                return True
+        except (TypeError, ValueError):
+            pass
+    return _normalize_persian_status_text(status_name) == "پیگیری"
+
+
+def _is_shortage_detail_item(detail):
+    """Return True for any Salerequestdetail whose status code is NOT 5."""
+    code = getattr(detail, "salerequestdetailstatuscode", None)
+    if code is None:
+        return True
+    try:
+        return int(code) != 5
+    except (TypeError, ValueError):
+        return str(code).strip() != "5"
+
+
 def _resolve_sale_request_status(master):
     """Resolve status label and whether the Sale Request can be edited/deleted."""
     status_name = "ثبت شده" if getattr(master, "salerequeststatuscode", None) == 1 else "نامشخص"
@@ -1897,7 +1940,7 @@ def _resolve_sale_request_status(master):
         )
         if status_obj and getattr(status_obj, "salerequeststatusname", None):
             status_name = status_obj.salerequeststatusname
-    except DatabaseError:
+    except (DatabaseError, DatabaseOperationForbidden):
         pass
     return status_name, _is_sabt_shode_status(status_name)
 
@@ -1908,12 +1951,67 @@ def _guid_case_variants(values):
     for val in values:
         if not val:
             continue
-        cleaned = str(val).strip()
+        cleaned = _clean_guid_str(val)
         if cleaned:
             variants.add(cleaned)
             variants.add(cleaned.upper())
             variants.add(cleaned.lower())
     return list(variants)
+
+
+def _batch_sale_request_totals(masters):
+    """Batch-aggregate net total amounts for Salerequestmaster records (no N+1)."""
+    masters = list(masters)
+    totals_by_guid = {}
+    totals_by_int = {}
+    if not masters:
+        return totals_by_guid, totals_by_int
+
+    guid_variants = _guid_case_variants(
+        getattr(m, "gsalerequestmasterid", None) for m in masters
+    )
+    int_ids = [
+        getattr(m, "salerequestmasterid", None)
+        for m in masters
+        if getattr(m, "salerequestmasterid", None) is not None
+    ]
+
+    detail_q = Q()
+    if guid_variants:
+        detail_q |= Q(gsalerequestmasterid__in=guid_variants)
+    if int_ids:
+        detail_q |= Q(salerequestmasterid__in=int_ids)
+
+    if not detail_q:
+        return totals_by_guid, totals_by_int
+
+    try:
+        details_agg = (
+            Salerequestdetail.objects.using("plus")
+            .filter(detail_q)
+            .values("gsalerequestmasterid", "salerequestmasterid")
+            .annotate(
+                line_net=Sum(
+                    (F("quantity") * F("unitprice"))
+                    - Coalesce(F("discount"), Value(0)),
+                    output_field=DecimalField(),
+                )
+            )
+        )
+        for row in details_agg:
+            if not isinstance(row, dict):
+                continue
+            net_val = int(row.get("line_net") or 0)
+            gkey = _clean_guid_str(row.get("gsalerequestmasterid")).lower()
+            if gkey:
+                totals_by_guid[gkey] = totals_by_guid.get(gkey, 0) + net_val
+            mid = row.get("salerequestmasterid")
+            if mid is not None:
+                totals_by_int[mid] = totals_by_int.get(mid, 0) + net_val
+    except (DatabaseError, DatabaseOperationForbidden):
+        pass
+
+    return totals_by_guid, totals_by_int
 
 
 def _load_visitor_lookup_maps():
@@ -1931,16 +2029,16 @@ def _load_visitor_lookup_maps():
             name = (row.get("vizitorname") or row.get("personname") or "").strip()
             if not name:
                 continue
-            gvid = str(row.get("gvisitorid") or "").strip().lower()
+            gvid = _clean_guid_str(row.get("gvisitorid")).lower()
             if gvid and gvid not in by_guid:
                 by_guid[gvid] = name
             vid = row.get("visitorid")
             if vid is not None and vid not in by_int:
                 by_int[vid] = name
-            gsub = str(row.get("gsubdetailid") or "").strip().lower()
+            gsub = _clean_guid_str(row.get("gsubdetailid")).lower()
             if gsub and gsub not in by_subdetail:
                 by_subdetail[gsub] = name
-    except DatabaseError:
+    except (DatabaseError, DatabaseOperationForbidden):
         pass
     return by_guid, by_int, by_subdetail
 
@@ -1948,7 +2046,7 @@ def _load_visitor_lookup_maps():
 def _resolve_visitor_from_link(gvisitorid, visitorid, by_guid, by_int):
     """Resolve visitor name from a junction row's GUID or integer ID."""
     if gvisitorid:
-        key = str(gvisitorid).strip().lower()
+        key = _clean_guid_str(gvisitorid).lower()
         if key in by_guid:
             return by_guid[key]
     if visitorid is not None and visitorid in by_int:
@@ -1995,18 +2093,19 @@ def _resolve_sale_request_visitors(masters, visitor_maps=None):
                 )
                 if not vname:
                     continue
-                gsrid = str(row.get("gsalerequestid") or "").strip().lower()
+                gsrid = _clean_guid_str(row.get("gsalerequestid")).lower()
                 if gsrid and gsrid not in link_by_guid:
                     link_by_guid[gsrid] = vname
                 srid = row.get("salerequestid")
                 if srid is not None and srid not in link_by_int:
                     link_by_int[srid] = vname
-    except DatabaseError:
+    except (DatabaseError, DatabaseOperationForbidden):
         pass
 
     resolved = {}
+    unresolved_masters = []
     for m in masters:
-        m_guid = str(getattr(m, "gsalerequestmasterid", "") or "").strip().lower()
+        m_guid = _clean_guid_str(getattr(m, "gsalerequestmasterid", None)).lower()
         m_int = getattr(m, "salerequestmasterid", None)
         vname = link_by_guid.get(m_guid) or (
             link_by_int.get(m_int) if m_int is not None else ""
@@ -2016,11 +2115,41 @@ def _resolve_sale_request_visitors(masters, visitor_maps=None):
             if m_vid is not None:
                 vname = by_int.get(m_vid, "")
         if not vname:
-            gsub5 = str(getattr(m, "gsubdetailid5", "") or "").strip().lower()
+            gsub5 = _clean_guid_str(getattr(m, "gsubdetailid5", None)).lower()
             if gsub5:
                 vname = by_subdetail.get(gsub5, "")
         if m_guid and vname:
             resolved[m_guid] = vname
+        elif m_guid:
+            unresolved_masters.append((m_guid, m))
+
+    # Fallback: resolve from customer's assigned visitor (VisitorToCustomer) if still unset
+    if unresolved_masters and by_guid:
+        cust_variants = _guid_case_variants(
+            getattr(m, "gcustomerid", None) for _, m in unresolved_masters
+        )
+        if cust_variants:
+            try:
+                cust_links = (
+                    Visitortocustomer.objects.using("plus")
+                    .filter(gcustomerid__in=cust_variants)
+                    .values("gcustomerid", "gvisitorid")
+                )
+                cust_to_visitor = {}
+                for row in cust_links:
+                    if not isinstance(row, dict):
+                        continue
+                    cid = _clean_guid_str(row.get("gcustomerid")).lower()
+                    vid = _clean_guid_str(row.get("gvisitorid")).lower()
+                    if cid and vid and vid in by_guid and cid not in cust_to_visitor:
+                        cust_to_visitor[cid] = by_guid[vid]
+                for m_guid, m in unresolved_masters:
+                    cid = _clean_guid_str(getattr(m, "gcustomerid", None)).lower()
+                    if cid and cid in cust_to_visitor:
+                        resolved[m_guid] = cust_to_visitor[cid]
+            except (DatabaseError, DatabaseOperationForbidden):
+                pass
+
     return resolved
 
 
@@ -2235,7 +2364,7 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
         # Limit to top 150 records for optimal performance
         sale_requests_list = list(sale_requests_qs[:150])
 
-        # 3. Batch Fetch Customer Names & Visitor Names (prevents N+1 query issue)
+        # 3. Batch Fetch Customer Names, Visitor Names & Totals (prevents N+1 query issue)
         customer_ids = _guid_case_variants(
             sr.gcustomerid for sr in sale_requests_list if sr.gcustomerid
         )
@@ -2245,31 +2374,38 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
                 gcustomerid__in=customer_ids
             )
             customer_map = {
-                str(c.gcustomerid).strip().lower(): c.custname
+                _clean_guid_str(c.gcustomerid).lower(): c.custname
                 for c in customers
                 if getattr(c, "gcustomerid", None)
             }
 
         visitor_map = _resolve_sale_request_visitors(sale_requests_list)
+        totals_by_guid, totals_by_int = _batch_sale_request_totals(
+            sale_requests_list
+        )
 
         # 4. Construct Final Data List
         sale_requests = []
         for sr in sale_requests_list:
-            cust_key = (
-                str(sr.gcustomerid).strip().lower() if sr.gcustomerid else ""
-            )
+            cust_key = _clean_guid_str(sr.gcustomerid).lower()
             customer_name = (
                 customer_map.get(cust_key)
                 or sr.requestman
                 or "مشتری نامشخص"
             )
-            sr_key = (
-                str(sr.gsalerequestmasterid).strip().lower()
-                if getattr(sr, "gsalerequestmasterid", None)
-                else ""
-            )
+            sr_key = _clean_guid_str(
+                getattr(sr, "gsalerequestmasterid", None)
+            ).lower()
+            sr_int = getattr(sr, "salerequestmasterid", None)
             resolved_visitor = visitor_map.get(sr_key, "")
             visitor_name = resolved_visitor or "بدون ویزیتور"
+
+            if sr_key and sr_key in totals_by_guid:
+                total_amount = totals_by_guid[sr_key]
+            elif sr_int is not None and sr_int in totals_by_int:
+                total_amount = totals_by_int[sr_int]
+            else:
+                total_amount = 0
 
             sr_no = sr.salerequestno or ""
             # Search by keyword (Sale Request No, Customer Name, or Visitor Name)
@@ -2281,14 +2417,20 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
             ):
                 continue
 
-            default_status = (
-                "ثبت شده" if sr.salerequeststatuscode == 1 else "نامشخص"
-            )
+            if sr.salerequeststatuscode == 1:
+                default_status = "ثبت شده"
+            elif sr.salerequeststatuscode == 8:
+                default_status = "پیگیری"
+            else:
+                default_status = "نامشخص"
             status_name = status_map.get(
                 sr.salerequeststatuscode, default_status
             )
             style = get_status_style(status_name)
             can_modify = _is_sabt_shode_status(status_name)
+            can_view_shortages = _is_shortage_eligible_status(
+                sr.salerequeststatuscode, status_name
+            )
 
             sale_requests.append(
                 {
@@ -2298,9 +2440,11 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
                     "customer_name": customer_name,
                     "visitor_name": visitor_name,
                     "has_visitor": bool(resolved_visitor),
+                    "total_amount": total_amount,
                     "status_code": sr.salerequeststatuscode,
                     "status_name": status_name,
                     "can_modify": can_modify,
+                    "can_view_shortages": can_view_shortages,
                     "chip_class": style["chip_class"],
                     "dot_class": style["dot_class"],
                 }
@@ -2349,11 +2493,19 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
             .filter(salerequeststatuscode=master.salerequeststatuscode)
             .first()
         )
-        status_name = (
-            status_obj.salerequeststatusname if status_obj else "ثبت شده"
-        )
+        if status_obj and getattr(status_obj, "salerequeststatusname", None):
+            status_name = status_obj.salerequeststatusname
+        elif master.salerequeststatuscode == 8:
+            status_name = "پیگیری"
+        elif master.salerequeststatuscode == 1:
+            status_name = "ثبت شده"
+        else:
+            status_name = "نامشخص"
         context["status_name"] = status_name
         context["can_modify"] = _is_sabt_shode_status(status_name)
+        context["can_view_shortages"] = _is_shortage_eligible_status(
+            master.salerequeststatuscode, status_name
+        )
 
         # 3. Fetch Customer & Visitor Details
         customer = None
@@ -2365,11 +2517,9 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
             )
         context["customer"] = customer
 
-        sr_key = (
-            str(master.gsalerequestmasterid).strip().lower()
-            if getattr(master, "gsalerequestmasterid", None)
-            else ""
-        )
+        sr_key = _clean_guid_str(
+            getattr(master, "gsalerequestmasterid", None)
+        ).lower()
         resolved_visitor = _resolve_sale_request_visitors([master]).get(
             sr_key, ""
         )
@@ -2377,25 +2527,29 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
         context["has_visitor"] = bool(resolved_visitor)
 
         # 4. Fetch Sale Request Line Items & Products
-        details = (
+        details = list(
             Salerequestdetail.objects.using("plus")
             .filter(gsalerequestmasterid=master.gsalerequestmasterid)
             .order_by("rowid")
         )
 
         # Batch query Tblkala to prevent N+1 query issue
-        kala_ids = [d.gkalaid for d in details if d.gkalaid]
+        kala_ids = _guid_case_variants(d.gkalaid for d in details if d.gkalaid)
         kala_map = {}
         if kala_ids:
             kalas = Tblkala.objects.using("plus").filter(gkalaid__in=kala_ids)
-            kala_map = {k.gkalaid: k for k in kalas}
+            kala_map = {
+                _clean_guid_str(k.gkalaid).lower(): k
+                for k in kalas
+                if getattr(k, "gkalaid", None)
+            }
 
         items = []
         subtotal = 0
         total_discount = 0
 
         for d in details:
-            kala = kala_map.get(d.gkalaid)
+            kala = kala_map.get(_clean_guid_str(d.gkalaid).lower())
             qty = float(d.quantity or 0)
             price = float(d.unitprice or 0)
             discount = float(d.discount or 0)
@@ -2426,6 +2580,259 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
         context["total_payable"] = int(subtotal - total_discount)
 
         return context
+
+
+class SaleRequestShortagesView(PlusLoginRequiredMixin, View):
+    """Strictly read-only view listing shortage items (status != 5) for a Sale Request."""
+
+    template_name = "core/sale_request_shortages.html"
+    http_method_names = ["get", "head"]
+
+    def _get_master(self, pk):
+        clean_pk = _clean_guid_str(pk)
+        if not clean_pk:
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
+
+        master = None
+        try:
+            master = (
+                Salerequestmaster.objects.using("plus")
+                .filter(gsalerequestmasterid__iexact=clean_pk)
+                .first()
+            )
+        except DatabaseError:
+            master = None
+
+        if not master and clean_pk.isdigit():
+            try:
+                master = (
+                    Salerequestmaster.objects.using("plus")
+                    .filter(salerequestmasterid=int(clean_pk))
+                    .first()
+                )
+            except DatabaseError:
+                master = None
+
+        if not master:
+            raise Http404("درخواست فروش مورد نظر یافت نشد.")
+        return master
+
+    def get(self, request, pk, *args, **kwargs):
+        master = self._get_master(pk)
+        return_to = (request.GET.get("from") or "").strip()
+
+        status_name, _ = _resolve_sale_request_status(master)
+        if (
+            status_name == "نامشخص"
+            and getattr(master, "salerequeststatuscode", None) == 8
+        ):
+            status_name = "پیگیری"
+
+        if not _is_shortage_eligible_status(
+            getattr(master, "salerequeststatuscode", None), status_name
+        ):
+            messages.error(
+                request,
+                "مشاهده کسری فقط برای درخواست‌های فروش با وضعیت «پیگیری» مجاز است.",
+            )
+            if return_to == "list":
+                return redirect("core:sale_request_list")
+            return redirect(
+                "core:sale_request_detail", pk=master.gsalerequestmasterid
+            )
+
+        back_url = (
+            reverse("core:sale_request_list")
+            if return_to == "list"
+            else reverse(
+                "core:sale_request_detail",
+                kwargs={"pk": master.gsalerequestmasterid},
+            )
+        )
+
+        # Customer & Visitor
+        customer = None
+        cust_guid = _clean_guid_str(getattr(master, "gcustomerid", None))
+        if cust_guid:
+            try:
+                customer = (
+                    Tblcustomer.objects.using("plus")
+                    .filter(gcustomerid__in=_guid_case_variants([cust_guid]))
+                    .first()
+                )
+            except (DatabaseError, DatabaseOperationForbidden):
+                customer = None
+
+        sr_key = _clean_guid_str(
+            getattr(master, "gsalerequestmasterid", None)
+        ).lower()
+        resolved_visitor = _resolve_sale_request_visitors([master]).get(
+            sr_key, ""
+        )
+        visitor_name = resolved_visitor or "بدون ویزیتور"
+
+        # Fetch detail rows belonging to this Sale Request whose status code != 5
+        detail_q = Q()
+        master_guid = _clean_guid_str(
+            getattr(master, "gsalerequestmasterid", None)
+        )
+        master_int = getattr(master, "salerequestmasterid", None)
+        if master_guid:
+            detail_q |= Q(
+                gsalerequestmasterid__in=_guid_case_variants([master_guid])
+            )
+        if master_int is not None:
+            detail_q |= Q(salerequestmasterid=master_int)
+
+        shortage_details = []
+        if detail_q:
+            shortage_filter = detail_q & (
+                ~Q(salerequestdetailstatuscode=5)
+                | Q(salerequestdetailstatuscode__isnull=True)
+            )
+            raw_details = list(
+                Salerequestdetail.objects.using("plus")
+                .filter(shortage_filter)
+                .order_by("rowid")
+            )
+            shortage_details = [
+                d for d in raw_details if _is_shortage_detail_item(d)
+            ]
+
+        # Batch-load products (Tblkala) and detail statuses (Salerequestdetailstatus)
+        kala_by_guid = {}
+        kala_by_int = {}
+        if shortage_details:
+            kala_guids = _guid_case_variants(
+                getattr(d, "gkalaid", None) for d in shortage_details
+            )
+            kala_ints = [
+                getattr(d, "kalaid", None)
+                for d in shortage_details
+                if getattr(d, "kalaid", None) is not None
+            ]
+            kala_q = Q()
+            if kala_guids:
+                kala_q |= Q(gkalaid__in=kala_guids)
+            if kala_ints:
+                kala_q |= Q(kalaid__in=kala_ints)
+            if kala_q:
+                try:
+                    for k in Tblkala.objects.using("plus").filter(kala_q):
+                        kg = _clean_guid_str(getattr(k, "gkalaid", None)).lower()
+                        if kg:
+                            kala_by_guid[kg] = k
+                        ki = getattr(k, "kalaid", None)
+                        if ki is not None:
+                            kala_by_int[ki] = k
+                except (DatabaseError, DatabaseOperationForbidden):
+                    pass
+
+        detail_status_map = {}
+        try:
+            for ds in Salerequestdetailstatus.objects.using("plus").all():
+                code = getattr(ds, "salerequestdetailstatuscode", None)
+                name = (getattr(ds, "salerequestdetailstatusname", "") or "").strip()
+                if code is not None and name:
+                    detail_status_map[int(code)] = name
+        except (DatabaseError, DatabaseOperationForbidden, TypeError, ValueError):
+            pass
+
+        items = []
+        subtotal = 0
+        total_discount = 0
+
+        for idx, d in enumerate(shortage_details, start=1):
+            d_guid = _clean_guid_str(getattr(d, "gkalaid", None)).lower()
+            d_int = getattr(d, "kalaid", None)
+            kala = kala_by_guid.get(d_guid) or (
+                kala_by_int.get(d_int) if d_int is not None else None
+            )
+
+            qty = float(getattr(d, "quantity", None) or 0)
+            price = float(getattr(d, "unitprice", None) or 0)
+            discount = float(getattr(d, "discount", None) or 0)
+            row_total = (qty * price) - discount
+
+            subtotal += qty * price
+            total_discount += discount
+
+            raw_mojodi = getattr(d, "kalamojodi", None)
+            has_mojodi = raw_mojodi is not None
+            mojodi_val = 0
+            if has_mojodi:
+                mojodi_float = float(raw_mojodi or 0)
+                mojodi_val = (
+                    int(mojodi_float)
+                    if mojodi_float.is_integer()
+                    else mojodi_float
+                )
+
+            raw_code = getattr(d, "salerequestdetailstatuscode", None)
+            code_int = None
+            if raw_code is not None:
+                try:
+                    code_int = int(raw_code)
+                except (TypeError, ValueError):
+                    code_int = None
+
+            if code_int is not None and code_int in detail_status_map:
+                detail_status_name = detail_status_map[code_int]
+            elif code_int == 3:
+                detail_status_name = "کسری"
+            elif code_int is not None:
+                detail_status_name = f"وضعیت {code_int}"
+            else:
+                detail_status_name = "نامشخص"
+
+            descript_text = (getattr(d, "descript", None) or "").strip()
+            reason_text = (
+                getattr(d, "reasonoknokdesc", None)
+                or getattr(d, "okdesc", None)
+                or ""
+            ).strip()
+
+            items.append(
+                {
+                    "row_no": getattr(d, "rowid", None) or idx,
+                    "name": kala.kalaname
+                    if kala
+                    else (descript_text or "کالای نامشخص"),
+                    "code": kala.kalano if (kala and getattr(kala, "kalano", None)) else "",
+                    "unit": kala.vahed1
+                    if (kala and getattr(kala, "vahed1", None))
+                    else "عدد",
+                    "quantity": int(qty) if qty.is_integer() else qty,
+                    "has_mojodi": has_mojodi,
+                    "kalamojodi": mojodi_val,
+                    "unit_price": int(price),
+                    "discount": int(discount),
+                    "row_total": int(row_total),
+                    "detail_status_code": code_int if code_int is not None else raw_code,
+                    "detail_status_name": detail_status_name,
+                    "description": descript_text,
+                    "reason_desc": reason_text,
+                }
+            )
+
+        style = get_status_style(status_name)
+        context = {
+            "current_user": getattr(request, "plus_user", None),
+            "master": master,
+            "customer": customer,
+            "visitor_name": visitor_name,
+            "has_visitor": bool(resolved_visitor),
+            "status_name": status_name,
+            "chip_class": style["chip_class"],
+            "dot_class": style["dot_class"],
+            "items": items,
+            "shortage_count": len(items),
+            "subtotal": int(subtotal),
+            "total_discount": int(total_discount),
+            "total_shortage_amount": int(subtotal - total_discount),
+            "back_url": back_url,
+        }
+        return render(request, self.template_name, context)
     
 
 class SaleRequestCreateView(PlusLoginRequiredMixin, TemplateView):

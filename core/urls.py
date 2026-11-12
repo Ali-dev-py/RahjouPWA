@@ -17,6 +17,7 @@ urlpatterns = [
     path("sale-requests/detail/<str:pk>/", SaleRequestDetailView.as_view(), name="sale_request_detail"),
     path("sale-requests/<str:pk>/edit/", SaleRequestEditView.as_view(), name="sale_request_edit"),
     path("sale-requests/<str:pk>/delete/", SaleRequestDeleteView.as_view(), name="sale_request_delete"),
+    path("sale-requests/<str:pk>/shortages/", SaleRequestShortagesView.as_view(), name="sale_request_shortages"),
     path("sale-requests/<str:pk>/pdf/", SaleRequestPDFView.as_view(), name="sale_request_pdf"),
     path("sale-requests/new/", SaleRequestCreateView.as_view(), name="sale_request_create"),
     path("pre-factors/", PreFactorListView.as_view(), name="pre_factor_list"),

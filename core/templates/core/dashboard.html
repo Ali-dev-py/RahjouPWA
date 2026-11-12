@@ -82,6 +82,10 @@
                                 <div class="min-width-0">
                                     <strong class="d-block text-dark text-truncate">درخواست فروش {{ item.sale_request_no|persian_digits }}</strong>
                                     <small class="text-secondary d-block text-truncate">{{ item.customer_name }} • {{ item.date|persian_digits }}</small>
+                                    <small class="text-secondary d-flex align-items-center gap-1 text-truncate">
+                                        <span class="material-symbols-outlined app-symbol-sm flex-shrink-0" aria-hidden="true">badge</span>
+                                        <span class="text-truncate">ویزیتور: {{ item.visitor_name }}</span>
+                                    </small>
                                 </div>
                             </div>
                             <div class="d-flex flex-column align-items-end">

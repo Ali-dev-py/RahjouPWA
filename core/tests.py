@@ -30,6 +30,7 @@ from core.views import (
     SaleRequestEditView,
     SaleRequestListView,
     SaleRequestPDFView,
+    SaleRequestShortagesView,
 )
 
 
@@ -75,6 +76,10 @@ class RouteAndPWASmokeTests(SimpleTestCase):
         self.assertEqual(
             reverse("core:sale_request_delete", kwargs={"pk": "SR-GUID-1"}),
             "/sale-requests/SR-GUID-1/delete/",
+        )
+        self.assertEqual(
+            reverse("core:sale_request_shortages", kwargs={"pk": "SR-GUID-1"}),
+            "/sale-requests/SR-GUID-1/shortages/",
         )
         self.assertEqual(
             reverse("core:sale_request_create"),
@@ -142,6 +147,7 @@ class RouteAndPWASmokeTests(SimpleTestCase):
             reverse("core:sale_request_detail", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_edit", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_delete", kwargs={"pk": "SR-1"}),
+            reverse("core:sale_request_shortages", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_pdf", kwargs={"pk": "SR-1"}),
             reverse("core:sale_request_create"),
             reverse("core:pre_factor_list"),
@@ -2376,5 +2382,521 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             v2c_kwargs["gcompanyid"],
             "3BBE4300-11CF-42B9-919F-87642C174264",
         )
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Salerequestdetail")
+    @patch("core.views.Visitortocustomer")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salerequesttovisitor")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Salerequestmaster")
+    @patch("core.views.Salerequeststatus")
+    def test_sale_request_list_displays_visitor_name_total_amount_and_shortage_button_rules(
+        self,
+        mock_sr_status,
+        mock_sr_master,
+        mock_customer,
+        mock_srv,
+        mock_visitors,
+        mock_v2c,
+        mock_detail,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_sr_status.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(salerequeststatuscode=1, salerequeststatusname="ثبت شده"),
+            SimpleNamespace(salerequeststatuscode=5, salerequeststatusname="تایید شده"),
+            SimpleNamespace(salerequeststatuscode=8, salerequeststatusname="پیگیری"),
+            SimpleNamespace(salerequeststatuscode=9, salerequeststatusname="پی‌گیری"),
+        ]
+        mock_sr_master.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(
+                salerequestmasterid=101,
+                gsalerequestmasterid="SR-STATUS-1",
+                salerequestno="001001",
+                salerequestdate="1405/08/19",
+                createddate="1405/08/19",
+                gcustomerid="CUST-A",
+                requestman="",
+                visitorid=None,
+                salerequeststatuscode=1,
+            ),
+            SimpleNamespace(
+                salerequestmasterid=102,
+                gsalerequestmasterid="{SR-STATUS-8}",
+                salerequestno="001002",
+                salerequestdate="1405/08/19",
+                createddate="1405/08/19",
+                gcustomerid="CUST-A",
+                requestman="",
+                visitorid=None,
+                salerequeststatuscode=8,
+            ),
+            SimpleNamespace(
+                salerequestmasterid=103,
+                gsalerequestmasterid="SR-PEYGIRI-NAME",
+                salerequestno="001003",
+                salerequestdate="1405/08/18",
+                createddate="1405/08/18",
+                gcustomerid="CUST-B",
+                requestman="",
+                visitorid=None,
+                salerequeststatuscode=9,
+            ),
+            SimpleNamespace(
+                salerequestmasterid=104,
+                gsalerequestmasterid="SR-APPROVED",
+                salerequestno="001004",
+                salerequestdate="1405/08/17",
+                createddate="1405/08/17",
+                gcustomerid="CUST-B",
+                requestman="",
+                visitorid=None,
+                salerequeststatuscode=5,
+            ),
+        ]
+        mock_customer.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(gcustomerid="cust-a", custname="فروشگاه امید"),
+            SimpleNamespace(gcustomerid="cust-b", custname="بازرگانی پارسه"),
+        ]
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "{vis-1}",
+                "visitorid": 1,
+                "gsubdetailid": None,
+                "vizitorname": "حسین کریمی",
+                "personname": "",
+            },
+            {
+                "gvisitorid": "vis-2",
+                "visitorid": 2,
+                "gsubdetailid": None,
+                "vizitorname": "مریم جعفری",
+                "personname": "",
+            },
+        ]
+        mock_srv.objects.using.return_value.filter.return_value.values.return_value = [
+            {
+                "gsalerequestid": "sr-status-8",
+                "salerequestid": 102,
+                "gvisitorid": "vis-1",
+                "visitorid": 1,
+            }
+        ]
+        mock_v2c.objects.using.return_value.filter.return_value.values.return_value = [
+            {"gcustomerid": "CUST-B", "gvisitorid": "VIS-2"}
+        ]
+        mock_detail.objects.using.return_value.filter.return_value.values.return_value.annotate.return_value = [
+            {
+                "gsalerequestmasterid": "sr-status-1",
+                "salerequestmasterid": 101,
+                "line_net": Decimal("1250000"),
+            },
+            {
+                "gsalerequestmasterid": "SR-STATUS-8",
+                "salerequestmasterid": 102,
+                "line_net": Decimal("4800000"),
+            },
+            {
+                "gsalerequestmasterid": "SR-PEYGIRI-NAME",
+                "salerequestmasterid": 103,
+                "line_net": Decimal("920000"),
+            },
+        ]
+
+        req = _attach_authenticated_session(
+            self.factory.get(reverse("core:sale_request_list"))
+        )
+        req.resolver_match = SimpleNamespace(url_name="sale_request_list")
+        resp = SaleRequestListView.as_view()(req)
+        resp.render()
+
+        self.assertEqual(resp.status_code, 200)
+        items = resp.context_data["sale_requests"]
+        self.assertEqual(len(items), 4)
+
+        # Totals & visitor resolution (including braced GUIDs and VisitorToCustomer fallback)
+        self.assertEqual(items[0]["total_amount"], 1250000)
+        self.assertFalse(items[0]["can_view_shortages"])
+        self.assertTrue(items[0]["can_modify"])
+
+        self.assertEqual(items[1]["visitor_name"], "حسین کریمی")
+        self.assertEqual(items[1]["total_amount"], 4800000)
+        self.assertTrue(items[1]["can_view_shortages"])
+        self.assertFalse(items[1]["can_modify"])
+
+        self.assertEqual(items[2]["visitor_name"], "مریم جعفری")
+        self.assertEqual(items[2]["total_amount"], 920000)
+        self.assertTrue(items[2]["can_view_shortages"])
+
+        self.assertEqual(items[3]["visitor_name"], "مریم جعفری")
+        self.assertEqual(items[3]["total_amount"], 0)
+        self.assertFalse(items[3]["can_view_shortages"])
+
+        html = resp.content.decode("utf-8")
+        self.assertIn("مبلغ کل", html)
+        self.assertIn("حسین کریمی", html)
+        self.assertIn("مریم جعفری", html)
+        self.assertIn("مشاهده کسری", html)
+        self.assertIn(
+            reverse("core:sale_request_shortages", kwargs={"pk": "{SR-STATUS-8}"})
+            + "?from=list",
+            html,
+        )
+        self.assertIn(
+            reverse("core:sale_request_shortages", kwargs={"pk": "SR-PEYGIRI-NAME"})
+            + "?from=list",
+            html,
+        )
+        self.assertNotIn(
+            reverse("core:sale_request_shortages", kwargs={"pk": "SR-STATUS-1"}),
+            html,
+        )
+        self.assertNotIn(
+            reverse("core:sale_request_shortages", kwargs={"pk": "SR-APPROVED"}),
+            html,
+        )
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Visitortocustomer")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salerequesttovisitor")
+    @patch("core.views.Salerequestmaster")
+    @patch("core.views.Salerequeststatus")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Salerequestdetail")
+    @patch("core.views.Tblkala")
+    def test_sale_request_detail_shows_shortage_button_only_for_status_8_or_peygiri(
+        self,
+        mock_kala,
+        mock_detail,
+        mock_customer,
+        mock_status,
+        mock_master,
+        mock_srv,
+        mock_visitors,
+        mock_v2c,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_visitors.objects.using.return_value.values.return_value = []
+        mock_srv.objects.using.return_value.filter.return_value.values.return_value = []
+        mock_v2c.objects.using.return_value.filter.return_value.values.return_value = []
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(
+                custname="فروشگاه البرز",
+                economno="",
+                nationalid="",
+                mobile="09121112233",
+                phone="",
+                address="",
+            )
+        )
+        mock_detail.objects.using.return_value.filter.return_value.order_by.return_value = []
+        mock_kala.objects.using.return_value.filter.return_value = []
+
+        # Status 8 -> shows btnViewSaleRequestShortages
+        mock_master.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(
+                gsalerequestmasterid="SR-DET-8",
+                salerequestno="000888",
+                salerequestdate="1405/08/19",
+                createddate="1405/08/19",
+                salerequeststatuscode=8,
+                gcustomerid="CUST-8",
+                requestman="",
+            )
+        )
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(salerequeststatusname="پیگیری")
+        )
+
+        req_8 = _attach_authenticated_session(
+            self.factory.get(
+                reverse("core:sale_request_detail", kwargs={"pk": "SR-DET-8"})
+            )
+        )
+        resp_8 = SaleRequestDetailView.as_view()(req_8, pk="SR-DET-8")
+        resp_8.render()
+        self.assertTrue(resp_8.context_data["can_view_shortages"])
+        self.assertIn("btnViewSaleRequestShortages", resp_8.content.decode("utf-8"))
+
+        # Status 1 (ثبت شده) -> does NOT show btnViewSaleRequestShortages
+        mock_master.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(
+                gsalerequestmasterid="SR-DET-1",
+                salerequestno="000111",
+                salerequestdate="1405/08/19",
+                createddate="1405/08/19",
+                salerequeststatuscode=1,
+                gcustomerid="CUST-8",
+                requestman="",
+            )
+        )
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(salerequeststatusname="ثبت شده")
+        )
+
+        req_1 = _attach_authenticated_session(
+            self.factory.get(
+                reverse("core:sale_request_detail", kwargs={"pk": "SR-DET-1"})
+            )
+        )
+        resp_1 = SaleRequestDetailView.as_view()(req_1, pk="SR-DET-1")
+        resp_1.render()
+        self.assertFalse(resp_1.context_data["can_view_shortages"])
+        self.assertNotIn("btnViewSaleRequestShortages", resp_1.content.decode("utf-8"))
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Salerequestdetailstatus")
+    @patch("core.views.Tblkala")
+    @patch("core.views.Salerequestdetail")
+    @patch("core.views.Visitortocustomer")
+    @patch("core.views.ViewAllvisitors")
+    @patch("core.views.Salerequesttovisitor")
+    @patch("core.views.Tblcustomer")
+    @patch("core.views.Salerequeststatus")
+    @patch("core.views.Salerequestmaster")
+    def test_sale_request_shortages_view_lists_non_5_items_and_is_strictly_read_only(
+        self,
+        mock_master,
+        mock_status,
+        mock_customer,
+        mock_srv,
+        mock_visitors,
+        mock_v2c,
+        mock_detail,
+        mock_kala,
+        mock_detail_status,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+        mock_master.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(
+                salerequestmasterid=808,
+                gsalerequestmasterid="SR-SHORT-808",
+                salerequestno="000808",
+                salerequestdate="1405/08/19",
+                createddate="1405/08/19",
+                salerequeststatuscode=8,
+                gcustomerid="CUST-808",
+                requestman="",
+                visitorid=None,
+            )
+        )
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(salerequeststatusname="پیگیری")
+        )
+        mock_customer.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(
+                custname="شرکت سپهر گستر",
+                mobile="09127778899",
+                phone="",
+            )
+        )
+        mock_visitors.objects.using.return_value.values.return_value = [
+            {
+                "gvisitorid": "VIS-808",
+                "visitorid": 88,
+                "gsubdetailid": None,
+                "vizitorname": "رضا احمدی",
+                "personname": "",
+            }
+        ]
+        mock_srv.objects.using.return_value.filter.return_value.values.return_value = [
+            {
+                "gsalerequestid": "SR-SHORT-808",
+                "salerequestid": 808,
+                "gvisitorid": "VIS-808",
+                "visitorid": 88,
+            }
+        ]
+        mock_v2c.objects.using.return_value.filter.return_value.values.return_value = []
+
+        # Include status 3 (shortage), status 2 (other non-5), and status 5 (fulfilled - MUST be excluded)
+        mock_detail.objects.using.return_value.filter.return_value.order_by.return_value = [
+            SimpleNamespace(
+                rowid=1,
+                gkalaid="KALA-SHORT-3",
+                kalaid=301,
+                quantity=Decimal("10"),
+                unitprice=Decimal("200000"),
+                discount=Decimal("50000"),
+                salerequestdetailstatuscode=3,
+                kalamojodi=Decimal("2"),
+                descript="",
+                reasonoknokdesc="کسری موجودی انبار مرکزی",
+                okdesc="",
+            ),
+            SimpleNamespace(
+                rowid=2,
+                gkalaid="KALA-OK-5",
+                kalaid=302,
+                quantity=Decimal("5"),
+                unitprice=Decimal("500000"),
+                discount=Decimal("0"),
+                salerequestdetailstatuscode=5,
+                kalamojodi=Decimal("20"),
+                descript="",
+                reasonoknokdesc="",
+                okdesc="",
+            ),
+            SimpleNamespace(
+                rowid=3,
+                gkalaid="KALA-OTHER-2",
+                kalaid=303,
+                quantity=Decimal("4"),
+                unitprice=Decimal("100000"),
+                discount=Decimal("0"),
+                salerequestdetailstatuscode=2,
+                kalamojodi=Decimal("0"),
+                descript="در انتظار تامین",
+                reasonoknokdesc="",
+                okdesc="",
+            ),
+        ]
+        mock_kala.objects.using.return_value.filter.return_value = [
+            SimpleNamespace(
+                gkalaid="kala-short-3",
+                kalaid=301,
+                kalaname="کلید مینیاتوری ۱۶ آمپر",
+                kalano="KM-16",
+                vahed1="عدد",
+            ),
+            SimpleNamespace(
+                gkalaid="kala-ok-5",
+                kalaid=302,
+                kalaname="کنتاکتور سه فاز",
+                kalano="KT-3",
+                vahed1="عدد",
+            ),
+            SimpleNamespace(
+                gkalaid="kala-other-2",
+                kalaid=303,
+                kalaname="فیوز کاردی",
+                kalano="FZ-1",
+                vahed1="بسته",
+            ),
+        ]
+        mock_detail_status.objects.using.return_value.all.return_value = [
+            SimpleNamespace(
+                salerequestdetailstatuscode=2,
+                salerequestdetailstatusname="بررسی تامین",
+            ),
+            SimpleNamespace(
+                salerequestdetailstatuscode=3,
+                salerequestdetailstatusname="کسری انبار",
+            ),
+            SimpleNamespace(
+                salerequestdetailstatuscode=5,
+                salerequestdetailstatusname="تبدیل به پیش‌فاکتور",
+            ),
+        ]
+
+        url = reverse("core:sale_request_shortages", kwargs={"pk": "SR-SHORT-808"})
+        req = _attach_authenticated_session(self.factory.get(f"{url}?from=list"))
+        resp = SaleRequestShortagesView.as_view()(req, pk="SR-SHORT-808")
+
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode("utf-8")
+
+        # Status 3 and Status 2 are included; Status 5 MUST NOT appear
+        self.assertIn("کلید مینیاتوری", html)
+        self.assertIn("کسری انبار", html)
+        self.assertIn("کسری موجودی انبار مرکزی", html)
+        self.assertIn("فیوز کاردی", html)
+        self.assertIn("بررسی تامین", html)
+        self.assertNotIn("کنتاکتور سه فاز", html)
+
+        # Header metadata & visitor & back link
+        self.assertIn("شرکت سپهر گستر", html)
+        self.assertIn("رضا احمدی", html)
+        self.assertIn("فقط مشاهده", html)
+        self.assertIn(reverse("core:sale_request_list"), html)
+
+        # Strictly read-only: no forms, inputs, selects, textareas, or edit/delete/PDF actions
+        self.assertNotIn("<form", html)
+        self.assertNotIn("<input", html)
+        self.assertNotIn("<select", html)
+        self.assertNotIn("<textarea", html)
+        self.assertNotIn(
+            reverse("core:sale_request_edit", kwargs={"pk": "SR-SHORT-808"}),
+            html,
+        )
+        self.assertNotIn(
+            reverse("core:sale_request_delete", kwargs={"pk": "SR-SHORT-808"}),
+            html,
+        )
+        self.assertNotIn(
+            reverse("core:sale_request_pdf", kwargs={"pk": "SR-SHORT-808"}),
+            html,
+        )
+
+        # POST/mutation methods must be rejected (405 Method Not Allowed)
+        post_req = _attach_authenticated_session(self.factory.post(url, data={}))
+        post_resp = SaleRequestShortagesView.as_view()(post_req, pk="SR-SHORT-808")
+        self.assertEqual(post_resp.status_code, 405)
+
+    @patch("core.views.TuaUser")
+    @patch("core.views.Salerequeststatus")
+    @patch("core.views.Salerequestmaster")
+    def test_sale_request_shortages_view_rejects_non_eligible_status_and_404_when_missing(
+        self,
+        mock_master,
+        mock_status,
+        mock_user,
+    ) -> None:
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
+            self.user
+        )
+
+        # Non-eligible status (1 / ثبت شده) redirects away
+        mock_master.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(
+                salerequestmasterid=100,
+                gsalerequestmasterid="SR-NOT-ELIGIBLE",
+                salerequestno="000100",
+                salerequeststatuscode=1,
+            )
+        )
+        mock_status.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(salerequeststatusname="ثبت شده")
+        )
+
+        url = reverse("core:sale_request_shortages", kwargs={"pk": "SR-NOT-ELIGIBLE"})
+        req = _attach_authenticated_session(self.factory.get(url))
+        resp = SaleRequestShortagesView.as_view()(req, pk="SR-NOT-ELIGIBLE")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            resp["Location"],
+            reverse("core:sale_request_detail", kwargs={"pk": "SR-NOT-ELIGIBLE"}),
+        )
+
+        req_from_list = _attach_authenticated_session(
+            self.factory.get(f"{url}?from=list")
+        )
+        resp_from_list = SaleRequestShortagesView.as_view()(
+            req_from_list, pk="SR-NOT-ELIGIBLE"
+        )
+        self.assertEqual(resp_from_list.status_code, 302)
+        self.assertEqual(
+            resp_from_list["Location"],
+            reverse("core:sale_request_list"),
+        )
+
+        # Missing Sale Request raises Http404
+        mock_master.objects.using.return_value.filter.return_value.first.return_value = (
+            None
+        )
+        missing_req = _attach_authenticated_session(self.factory.get(url))
+        with self.assertRaises(Http404):
+            SaleRequestShortagesView.as_view()(missing_req, pk="DOES-NOT-EXIST")
+
 
 
