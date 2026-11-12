@@ -30,6 +30,16 @@
                     {{ status_name }}
                 </span>
                 <div class="d-flex align-items-center gap-2">
+                    {% if can_view_shortages %}
+                        <a class="btn btn-sm bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill fw-semibold d-inline-flex align-items-center gap-1 px-3 py-2"
+                           href="{% url 'core:sale_request_shortages' pk=master.gsalerequestmasterid %}"
+                           id="btnViewSaleRequestShortages"
+                           aria-label="مشاهده کسری درخواست فروش"
+                           title="مشاهده کسری">
+                            <span class="material-symbols-outlined fs-6" aria-hidden="true">production_quantity_limits</span>
+                            <span>مشاهده کسری</span>
+                        </a>
+                    {% endif %}
                     {% if can_modify %}
                         <a class="btn app-icon-button app-icon-button--surface text-primary"
                            href="{% url 'core:sale_request_edit' pk=master.gsalerequestmasterid %}"
