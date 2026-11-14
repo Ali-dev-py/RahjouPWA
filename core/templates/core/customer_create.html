@@ -37,10 +37,10 @@
 {% include "partials/_app_header.html" with heading="ثبت مشتری جدید" back_url_name="core:customers" %}
 
 <main class="app-main container-fluid px-3">
-    <div class="app-content mx-auto">
+    <div class="app-content app-content--narrow mx-auto">
 
         <!-- Header & Back Navigation -->
-        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
             <div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <h1 class="h4 fw-bold mb-0">مشتری جدید</h1>
@@ -73,6 +73,7 @@
                     </div>
                 {% endif %}
 
+                <p class="small text-secondary mb-3">فیلدهای دارای <span class="text-danger" aria-hidden="true">*</span> الزامی هستند؛ سایر اطلاعات اختیاری است.</p>
                 <!-- Form -->
                 <form method="post" action="{% url 'core:customer_create' %}" novalidate>
                     {% csrf_token %}
@@ -92,12 +93,12 @@
                                    placeholder="نام مشتری یا عنوان فروشگاه"
                                    value="{{ custname|default:'' }}"
                                    required
-                                   autocomplete="off">
+                                   autocomplete="organization">
                         </div>
 
-                        <!-- Customer Group (Required) & Visitor (Optional) -->
+                        <!-- Full-width group, then aligned visitor and region fields -->
                         <div class="row g-3">
-                            <div class="col-12 {% if visitors %}col-sm-6{% endif %}">
+                            <div class="col-12">
                                 <label for="customer_group" class="form-label fw-medium small mb-1">
                                     گروه مشتری <span class="text-danger">*</span>
                                 </label>
@@ -111,19 +112,10 @@
                                 </select>
                             </div>
 
-                            <div class="col-12 col-sm-6">
-                                <label for="area_id" class="form-label">منطقه</label>
-                                <select id="area_id" name="area_id" class="form-select">
-                                    <option value="">بدون منطقه</option>
-                                    {% for area in areas %}
-                                    <option value="{{ area.gareageographyid }}" {% if selected_area_id|lower == area.gareageographyid|lower %}selected{% endif %}>{{ area.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
                             {% if visitors %}
                                 <div class="col-12 col-sm-6">
                                     <label for="visitor_id" class="form-label fw-medium small mb-1">
-                                        ویزیتور مرتبط
+                                        ویزیتور مرتبط <span class="text-secondary fw-normal">(اختیاری)</span>
                                     </label>
                                     <select id="visitor_id" name="visitor_id" class="form-select">
                                         <option value="">بدون ویزیتور</option>
@@ -135,6 +127,15 @@
                                     </select>
                                 </div>
                             {% endif %}
+                            <div class="col-12 {% if visitors %}col-sm-6{% endif %}">
+                                <label for="area_id" class="form-label fw-medium small mb-1">منطقه <span class="text-secondary fw-normal">(اختیاری)</span></label>
+                                <select id="area_id" name="area_id" class="form-select">
+                                    <option value="">بدون منطقه</option>
+                                    {% for area in areas %}
+                                    <option value="{{ area.gareageographyid }}" {% if selected_area_id|lower == area.gareageographyid|lower %}selected{% endif %}>{{ area.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
                         </div>
 
                         <!-- Searchable Province & City (Default: تهران) -->
@@ -248,7 +249,8 @@
                                        maxlength="100"
                                        placeholder="۰۹۱۲۳۴۵۶۷۸۹"
                                        value="{{ mobile|default:'' }}"
-                                       inputmode="tel">
+                                       inputmode="tel"
+                                       autocomplete="tel-national">
                             </div>
                             <div class="col-12 col-sm-6">
                                 <label for="phone" class="form-label fw-medium small mb-1">
@@ -262,7 +264,8 @@
                                        maxlength="100"
                                        placeholder="۰۲۱۸۸۷۷۶۶۵۵"
                                        value="{{ phone|default:'' }}"
-                                       inputmode="tel">
+                                       inputmode="tel"
+                                       autocomplete="tel-national">
                             </div>
                         </div>
 
@@ -274,13 +277,14 @@
                             <textarea id="address"
                                       name="address"
                                       class="form-control"
-                                      rows="2"
+                                      autocomplete="street-address"
+                                      rows="3"
                                       maxlength="250"
                                       placeholder="نشانی کامل مشتری...">{{ address|default:'' }}</textarea>
                         </div>
 
                         <!-- Form Buttons -->
-                        <div class="d-flex align-items-center justify-content-end gap-2 pt-3 border-top mt-1">
+                        <div class="customer-form-actions d-flex align-items-center justify-content-end gap-2 pt-3 border-top mt-1">
                             <a href="{% url 'core:customers' %}" class="btn btn-light rounded-pill px-4">
                                 انصراف
                             </a>

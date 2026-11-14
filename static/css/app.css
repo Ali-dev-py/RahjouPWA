@@ -1145,3 +1145,99 @@ textarea {
         box-shadow: none;
     }
 }
+
+/* Customer identity: region belongs to the customer, not the document status. */
+.customer-identity {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.customer-identity__name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.65;
+}
+
+.customer-region {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    max-width: 100%;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid #c9d8ed;
+    border-radius: 0.65rem;
+    background: #edf3fc;
+    color: #355783;
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.5;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+}
+
+.customer-region .material-symbols-outlined {
+    flex: 0 0 auto;
+    font-size: 0.95rem;
+}
+
+.customer-region--empty {
+    border-color: #e1e3e7;
+    background: #f3f4f5;
+    color: #59616d;
+}
+
+.document-card-header {
+    flex-wrap: wrap;
+}
+
+.document-card-heading {
+    flex: 1 1 12rem;
+}
+
+.document-filters .form-select,
+.document-filters .btn,
+.page-customer-create .form-control,
+.page-customer-create .form-select,
+.page-customer-create .btn,
+.page-customer-create .location-suggestion-item {
+    min-height: 2.75rem;
+}
+
+.page-customer-create .form-label {
+    line-height: 1.6;
+}
+
+.page-customer-create textarea {
+    resize: vertical;
+}
+
+@media (max-width: 575.98px) {
+    /* Keep the large search/filter panel from covering the list while scrolling. */
+    .page-sale-request-list .sale-request-toolbar,
+    .page-pre-factor-list .sale-request-toolbar,
+    .page-factor-list .sale-request-toolbar {
+        position: static;
+    }
+
+    .document-filters .form-select,
+    .sale-request-toolbar input[type="search"],
+    .page-customer-create .form-control,
+    .page-customer-create .form-select {
+        font-size: 1rem; /* Avoid automatic input zoom on iOS. */
+    }
+
+    .sale-request-filters .nav-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2.75rem;
+    }
+
+    .customer-form-actions > .btn {
+        justify-content: center;
+        flex: 1 1 0;
+    }
+}

@@ -1,0 +1,6 @@
+{% if region_name %}
+<span class="customer-region{% if region_name == 'بدون منطقه' %} customer-region--empty{% endif %}">
+    <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+    <span><span class="visually-hidden">منطقه: </span>{{ region_name }}</span>
+</span>
+{% endif %}
