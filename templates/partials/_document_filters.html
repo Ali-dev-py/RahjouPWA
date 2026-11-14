@@ -1,17 +1,22 @@
-<div class="row g-2 mt-2">
+<div class="document-filters row g-2 mt-2">
     <div class="col-6">
-        <label class="form-label small" for="area-filter">منطقه</label>
+        <label class="form-label small mb-1" for="area-filter">منطقه</label>
         <select class="form-select" name="area" id="area-filter">
             <option value="">همه مناطق</option>
             {% for id, name in area_options %}<option value="{{ id }}" {% if selected_area == id %}selected{% endif %}>{{ name }}</option>{% endfor %}
         </select>
     </div>
     <div class="col-6">
-        <label class="form-label small" for="visitor-filter">ویزیتور</label>
+        <label class="form-label small mb-1" for="visitor-filter">ویزیتور</label>
         <select class="form-select" name="visitor" id="visitor-filter">
             <option value="">همه ویزیتورها</option>
             {% for name in visitor_options %}<option value="{{ name }}" {% if selected_visitor == name %}selected{% endif %}>{{ name }}</option>{% endfor %}
         </select>
     </div>
-    <div class="col-12"><button class="btn btn-primary btn-sm" type="submit">اعمال فیلتر</button></div>
+    <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary flex-grow-1" type="submit">اعمال فیلتر</button>
+        {% if selected_area or selected_visitor %}
+            <a class="btn btn-outline-secondary d-inline-flex align-items-center justify-content-center" href="?status={{ current_status|urlencode }}&amp;q={{ query|default:''|urlencode }}" aria-label="حذف فیلتر منطقه و ویزیتور">حذف فیلتر</a>
+        {% endif %}
+    </div>
 </div>

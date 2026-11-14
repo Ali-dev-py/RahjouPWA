@@ -3025,3 +3025,79 @@ class VisitorPermissionAndAreaTests(SimpleTestCase):
                 else:
                     with self.assertRaises(PermissionDenied):
                         view.post(request)
+
+
+class MobilePresentationTests(SimpleTestCase):
+    """Presentation-only regressions; no changes to data or permission behavior."""
+
+    def test_region_is_part_of_customer_heading_on_all_document_lists(self):
+        import re
+        from django.template.loader import render_to_string
+        for prefix, key in (('sale_request', 'sale_requests'),
+                            ('pre_factor', 'pre_factors'), ('factor', 'factors')):
+            with self.subTest(document=prefix):
+                html = render_to_string(f'core/{prefix}_list.html', {
+                    key: [{'id': 'DOC1', 'customer_name': 'فروشگاه مشتری',
+                           'visitor_name': 'نام ویزیتور', 'area_name': 'منطقه شمال'}],
+                    'current_status': 'all',
+                })
+                heading = re.search(r'<h2 class="customer-identity.*?</h2>', html, re.S).group()
+                self.assertIn('فروشگاه مشتری', heading)
+                self.assertIn('منطقه شمال', heading)
+                self.assertIn('customer-region', heading)
+                self.assertNotIn('نام ویزیتور', heading)
+                self.assertNotIn('text-truncate', heading)
+
+    def test_detail_region_is_inside_customer_panel_not_above_header(self):
+        import re
+        from django.template.loader import render_to_string
+        master = SimpleNamespace(
+            gsalerequestmasterid='SR1', gprefactormasterid='PF1', gsalefactormasterid='F1',
+            createddate='1405/01/01')
+        for prefix, found in (('sale_request', 'sale_request_found'),
+                              ('pre_factor', 'pre_factor_found'), ('factor', 'factor_found')):
+            with self.subTest(document=prefix):
+                html = render_to_string(f'core/{prefix}_detail.html', {
+                    found: True, 'master': master,
+                    'customer': SimpleNamespace(custname='مشتری'), 'area_name': 'شمال',
+                })
+                panel = re.search(r'<section[^>]*aria-labelledby="customer-title".*?</section>', html, re.S).group()
+                self.assertIn('customer-identity', panel)
+                self.assertIn('customer-region', panel)
+                self.assertIn('شمال', panel)
+                self.assertEqual(html.count('class="customer-region"'), 1)
+
+    def test_region_badge_handles_missing_region_and_escapes_names(self):
+        from django.template.loader import render_to_string
+        template = 'partials/_customer_region_badge.html'
+        self.assertEqual(render_to_string(template, {}).strip(), '')
+        html = render_to_string(template, {'region_name': 'بدون منطقه'})
+        self.assertIn('customer-region--empty', html)
+        html = render_to_string(template, {'region_name': '<script>alert(1)</script>'})
+        self.assertNotIn('<script>', html)
+        self.assertIn('&lt;script&gt;', html)
+
+    def test_create_form_region_alignment_and_selected_value(self):
+        import re
+        from django.template.loader import render_to_string
+        for visitors in ([], [{'id': 'V1', 'name': 'علی'}]):
+            html = render_to_string('core/customer_create.html', {
+                'visitors': visitors, 'selected_area_id': 'A1',
+                'areas': [SimpleNamespace(gareageographyid='A1', name='شمال')],
+            })
+            self.assertRegex(html, r'<option value="A1"\s+selected>شمال</option>')
+            self.assertIn('app-content--narrow', html)
+            area = re.search(r'<div class="col-12[^>]*>\s*<label for="area_id"', html).group()
+            self.assertEqual('col-sm-6' in area, bool(visitors))
+            self.assertIn('customer-form-actions', html)
+            self.assertIn('autocomplete="street-address"', html)
+
+    def test_filter_reset_preserves_search_and_status(self):
+        from django.template.loader import render_to_string
+        html = render_to_string('partials/_document_filters.html', {
+            'selected_area': 'A1', 'selected_visitor': 'علی',
+            'current_status': '8', 'query': 'دو & سه',
+        })
+        self.assertIn('حذف فیلتر', html)
+        self.assertIn('status=8&amp;q=', html)
+        self.assertNotIn('btn-sm', html)
