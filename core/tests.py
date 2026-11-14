@@ -229,74 +229,24 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.factory = RequestFactory()
         self.user = _mock_active_user()
 
+    @patch("core.income_report.build_report")
     @patch("core.views.TuaUser")
-    @patch("core.views.Salerequeststatus")
-    @patch("core.views.Salerequestmaster")
-    @patch("core.views.Tblcustomer")
-    @patch("core.views.Salerequestdetail")
-    def test_dashboard_uses_sale_request_no_context_key_and_links(
-        self,
-        mock_detail,
-        mock_customer,
-        mock_master,
-        mock_status,
-        mock_user,
-    ) -> None:
-        mock_user.objects.using.return_value.filter.return_value.first.return_value = (
-            self.user
-        )
-        mock_status.objects.using.return_value.all.return_value = [
-            SimpleNamespace(
-                salerequeststatuscode=1, salerequeststatusname="تایید شده"
-            )
-        ]
-
-        sample_master = SimpleNamespace(
-            gsalerequestmasterid="SR-GUID-100",
-            salerequestno="000123",
-            salerequestdate="1405/08/18",
-            createddate="1405/08/18",
-            gcustomerid="CUST-1",
-            requestman="",
-            salerequeststatuscode=1,
-        )
-        master_using = mock_master.objects.using.return_value
-        master_using.filter.return_value.order_by.return_value = [sample_master]
-        master_using.filter.return_value.values_list.return_value = [
-            "SR-GUID-100"
-        ]
-        master_using.filter.return_value.count.return_value = 1
-
-        mock_customer.objects.using.return_value.filter.return_value = [
-            SimpleNamespace(gcustomerid="CUST-1", custname="فروشگاه بهار")
-        ]
-        detail_using = mock_detail.objects.using.return_value
-        detail_using.filter.return_value.values.return_value.annotate.return_value = [
-            {"gsalerequestmasterid": "SR-GUID-100", "total": Decimal("250000")}
-        ]
-        detail_using.filter.return_value.aggregate.return_value = {
-            "total": Decimal("250000")
+    def test_dashboard_shows_factor_income_report(self, mock_user, mock_report):
+        mock_user.objects.using.return_value.filter.return_value.first.return_value = self.user
+        mock_report.return_value = {
+            "report_rows": [], "report_total": {"gross": 0, "discount": 0, "net": 0, "income": 0},
+            "factor_count": 0, "visitor_summaries": [], "report_visitors": [],
+            "is_visitor_report": False, "selected_report_visitor": "",
+            "unassigned_count": 0, "warning_count": 0,
         }
-
-        request = _attach_authenticated_session(
-            self.factory.get(reverse("core:dashboard"))
-        )
+        request = _attach_authenticated_session(self.factory.get(reverse("core:dashboard")))
         response = DashboardView.as_view()(request)
         response.render()
-
         self.assertEqual(response.status_code, 200)
-        activities = response.context_data["recent_activities"]
-        self.assertEqual(len(activities), 1)
-        self.assertIn("sale_request_no", activities[0])
-        self.assertNotIn("factor_no", activities[0])
-        self.assertEqual(activities[0]["sale_request_no"], "000123")
-
-        html = response.content.decode("utf-8")
-        self.assertIn(reverse("core:sale_request_list"), html)
-        self.assertIn(
-            f'{reverse("core:sale_request_detail")}?id=SR-GUID-100', html
-        )
-        self.assertIn(reverse("core:sale_request_create"), html)
+        self.assertIn("report_total", response.context_data)
+        self.assertIn("پورسانت محاسبه‌شده", response.content.decode())
+        self.assertIn(reverse("core:sale_request_create"), response.content.decode())
+        mock_report.assert_called_once()
 
     @patch("core.views.TuaUser")
     @patch("core.views.ViewAllvisitors")

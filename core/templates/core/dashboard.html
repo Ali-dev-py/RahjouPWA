@@ -1,125 +1,127 @@
 {% extends "base.html" %}
-{% load humanize %}
-{% load i18n_extras %}
-
-{% block title %}خانه | رهجو{% endblock %}
+{% load humanize i18n_extras %}
+{% block title %}گزارش فروش و پورسانت | رهجو{% endblock %}
 {% block body_class %}app-body page-dashboard has-bottom-nav{% endblock %}
-
 {% block content %}
-{% include "partials/_app_header.html" with heading="خانه" %}
-
+{% include "partials/_app_header.html" with heading="گزارش فروش و پورسانت" %}
 <main class="app-main container-fluid px-3">
-    <div class="app-content mx-auto">
-        
-        <!-- Summary Cards Section -->
-        <section class="mb-5" aria-labelledby="summary-title">
-            <div class="d-flex justify-content-between align-items-end mb-3">
-                <h1 class="h4 fw-bold mb-0" id="summary-title">خلاصه وضعیت</h1>
-                <a class="app-link fw-semibold text-decoration-none"
-                   href="{% url 'core:sale_request_list' %}">گزارش کامل</a>
-            </div>
-
-            <div class="summary-scroller d-flex gap-2 overflow-x-auto pb-3">
-                <article class="card summary-card summary-card--primary border-0 flex-shrink-0">
-                    <div class="card-body d-flex flex-column justify-content-between p-3 position-relative">
-                        <div class="summary-card__orb" aria-hidden="true"></div>
-                        <div class="d-flex align-items-center justify-content-between position-relative">
-                            <span class="fw-semibold">فروش امروز من</span>
-                            <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">trending_up</span>
-                        </div>
-                        <div class="position-relative mt-4 text-start" dir="ltr">
-                            <strong class="summary-card__value d-block">{{ today_sales_total|persian_digits|intcomma:False }}</strong>
-                            <small>تومان</small>
-                        </div>
-                    </div>
-                </article>
-
-                <article class="card summary-card summary-card--accent border-0 flex-shrink-0">
-                    <div class="card-body d-flex flex-column justify-content-between p-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <span class="fw-semibold">درخواست‌های در انتظار</span>
-                            <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">pending_actions</span>
-                        </div>
-                        <div class="mt-4 text-start" dir="ltr">
-                            <strong class="summary-card__value d-block">{{ pending_count|persian_digits }}</strong>
-                            <small>مورد</small>
-                        </div>
-                    </div>
-                </article>
-
-                <article class="card summary-card summary-card--neutral border-0 flex-shrink-0">
-                    <div class="card-body d-flex flex-column justify-content-between p-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <span class="fw-semibold">کل درخواست‌های من</span>
-                            <span class="summary-card__icon material-symbols-outlined" aria-hidden="true">draft</span>
-                        </div>
-                        <div class="mt-4 text-start" dir="ltr">
-                            <strong class="summary-card__value d-block">{{ total_requests_count|persian_digits }}</strong>
-                            <small>مورد</small>
-                        </div>
-                    </div>
-                </article>
-            </div>
-        </section>
-
-        <!-- Recent Activities Section -->
-        <section aria-labelledby="recent-title">
-            <div class="d-flex justify-content-between align-items-end mb-3">
-                <h2 class="h5 fw-bold mb-0" id="recent-title">فعالیت‌های اخیر</h2>
-                <a class="small text-secondary text-decoration-none"
-                   href="{% url 'core:sale_request_list' %}">همه موارد</a>
-            </div>
-
-            <div class="d-grid gap-2">
-                {% for item in recent_activities %}
-                    <a class="card activity-card border-0 text-decoration-none"
-                       href="{% url 'core:sale_request_detail' %}?id={{ item.id }}">
-                        <div class="card-body d-flex align-items-center justify-content-between gap-3 p-3">
-                            <div class="d-flex align-items-center gap-3 min-width-0">
-                                <span class="activity-card__icon material-symbols-outlined flex-shrink-0 text-primary" aria-hidden="true">
-                                    description
-                                </span>
-                                <div class="min-width-0">
-                                    <strong class="d-block text-dark text-truncate">درخواست فروش {{ item.sale_request_no|persian_digits }}</strong>
-                                    <small class="text-secondary d-block text-truncate">{{ item.customer_name }} • {{ item.date|persian_digits }}</small>
-                                    <small class="text-secondary d-flex align-items-center gap-1 text-truncate">
-                                        <span class="material-symbols-outlined app-symbol-sm flex-shrink-0" aria-hidden="true">badge</span>
-                                        <span class="text-truncate">ویزیتور: {{ item.visitor_name }}</span>
-                                    </small>
-                                </div>
-                            </div>
-                            <div class="d-flex flex-column align-items-end">
-                                <span class="status-chip {{ item.chip_class }}">{{ item.status_name }}</span>
-                                <strong class="d-block text-dark" dir="ltr">{{ item.total_amount|persian_digits|intcomma:False }} تومان</strong>
-                            </div>
-                        </div>
-                    </a>
-                {% empty %}
-                    <div class="card border-0 bg-light p-4 text-center">
-                        <span class="material-symbols-outlined text-secondary fs-1 mb-2">inbox</span>
-                        <p class="text-secondary mb-0 small">هنوز هیچ درخواست فروشی توسط شما ثبت نشده است.</p>
-                    </div>
-                {% endfor %}
-            </div>
-        </section>
-
-        <section class="visually-hidden" id="customers-placeholder" aria-label="مشتریان">
-            <h2>مشتریان</h2>
-            <p>این بخش در فاز بعدی پیاده‌سازی می‌شود.</p>
-        </section>
-        <section class="visually-hidden" id="profile-placeholder" aria-label="پروفایل">
-            <h2>پروفایل</h2>
-            <p>این بخش در فاز بعدی پیاده‌سازی می‌شود.</p>
-        </section>
+<div class="app-content mx-auto">
+    <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+        <div><h1 class="h4 fw-bold mb-1">{% if is_visitor_report %}پورسانت من{% else %}عملکرد فروش{% endif %}</h1>
+        <p class="small text-secondary mb-0">سهم هر فاکتور، شفاف و قابل بررسی • مبالغ به ریال</p></div>
+        <a class="btn btn-light rounded-pill flex-shrink-0" href="{% url 'core:sale_request_create' %}" aria-label="ثبت درخواست فروش جدید"><span class="material-symbols-outlined" aria-hidden="true">add</span></a>
     </div>
+    <form method="get" class="card border-0 rounded-4 p-3 mb-3 income-filters" aria-label="بازه گزارش">
+        <div class="row g-3">
+            <div class="col-12">
+                <label class="form-label small" for="report-period">بازه زمانی</label>
+                <select class="form-select" name="period" id="report-period">
+                    <option value="month" {% if period == 'month' %}selected{% endif %}>ماه جاری تا امروز</option>
+                    <option value="today" {% if period == 'today' %}selected{% endif %}>امروز</option>
+                    <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>ماه گذشته</option>
+                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>بازه دلخواه</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <label class="form-label small" for="report-start">از تاریخ (شمسی)</label>
+                <input class="form-control" id="report-start" name="start" value="{{ start }}" placeholder="۱۴۰۵/۰۸/۰۱" dir="ltr" aria-describedby="report-date-help" maxlength="10" {% if period != 'custom' %}disabled{% endif %}>
+            </div>
+            <div class="col-6">
+                <label class="form-label small" for="report-end">تا تاریخ (شمسی)</label>
+                <input class="form-control" id="report-end" name="end" value="{{ end }}" placeholder="۱۴۰۵/۰۸/۳۰" dir="ltr" aria-describedby="report-date-help" maxlength="10" {% if period != 'custom' %}disabled{% endif %}>
+            </div>
+            <p id="report-date-help" class="small text-secondary mb-0">تاریخ فاکتور مبنای گزارش است؛ روز شروع و پایان نیز محاسبه می‌شوند. برای تغییر تاریخ‌ها «بازه دلخواه» را انتخاب کنید.</p>
+            {% if not is_visitor_report %}
+            <div class="col-12">
+                <label class="form-label small" for="report-visitor">ویزیتور</label>
+                <select class="form-select" name="visitor" id="report-visitor">
+                    <option value="">همه ویزیتورها و تمام فاکتورها</option>
+                    <option value="unassigned" {% if selected_report_visitor == 'unassigned' %}selected{% endif %}>بدون ویزیتور / نیازمند بررسی</option>
+                    {% for visitor in report_visitors %}<option value="{{ visitor.id }}" {% if selected_report_visitor == visitor.id %}selected{% endif %}>{{ visitor.name }} ({{ visitor.id|slice:':8' }})</option>{% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-12"><button class="btn btn-primary w-100 rounded-3" type="submit">نمایش گزارش</button></div>
+        </div>
+    </form>
+    {% if report_error %}
+        <div class="alert alert-danger" role="alert">{{ report_error }}</div>
+    {% else %}
+    <p class="small text-secondary mb-3">{{ start|persian_digits }} تا {{ end|persian_digits }} · {{ factor_count|persian_digits }} فاکتور</p>
+    <section class="income-summary mb-4" aria-label="خلاصه گزارش">
+        <article class="income-total income-total--primary"><span class="small">پورسانت محاسبه‌شده</span><strong>{{ report_total.income|persian_digits|intcomma:False }}</strong><small>ریال · پرداخت‌شده نیست</small></article>
+        <article class="income-total"><span class="small text-secondary">فروش ناخالص</span><strong>{{ report_total.gross|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · قبل از تخفیف</small></article>
+        <article class="income-total"><span class="small text-secondary">مجموع تخفیف</span><strong>{{ report_total.discount|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · فاکتور و ردیف‌ها</small></article>
+        <article class="income-total"><span class="small text-secondary">فروش خالص</span><strong>{{ report_total.net|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · پس از تخفیف</small></article>
+    </section>
+    {% if warning_count %}<div class="alert alert-warning small">{{ warning_count|persian_digits }} فاکتور دارای تخفیف بالای ۱۵٪، مبلغ نامعتبر یا ردیف ثبت‌نشده است؛ جزئیات را بررسی کنید.</div>{% endif %}
+    {% if unassigned_count %}<div class="alert alert-light border small">{{ unassigned_count|persian_digits }} فاکتور ویزیتور مشخص و یکتا ندارد. فروش آن‌ها در جمع گزارش هست، اما پورسانتی به کسی اختصاص نیافته است.</div>{% endif %}
+    <details class="card border-0 rounded-4 p-3 mb-4 income-explanation">
+        <summary class="fw-semibold">پورسانت چگونه محاسبه می‌شود؟</summary>
+        <div class="small text-secondary mt-3">
+            <p>۳۰٪ × بیشینهٔ (صفر، ۱۵٪ مبلغ ناخالص − مجموع تخفیف)</p>
+            <p>مثال: برای فاکتور ۱۰۰٬۰۰۰٬۰۰۰ ریالی با ۵٪ تخفیف، پورسانت ۳٬۰۰۰٬۰۰۰ ریال است. تخفیف ۱۵٪ یا بیشتر، پورسانت صفر دارد.</p>
+            <p>مبنای مبلغ: مجموع تعداد × قیمت واحد، بدون مالیات و هزینه‌های جانبی. تخفیف فاکتور و تخفیف ردیف‌ها هرکدام یک بار کسر می‌شوند. پورسانت هر فاکتور به نزدیک‌ترین ریال گرد می‌شود.</p>
+            <p class="mb-0">انتساب بر اساس ویزیتور ثبت‌شده روی فاکتور است، نه ویزیتور فعلی مشتری. تمام فاکتورهای حذف‌نشده، مستقل از وضعیت تأیید یا وصول، در بازه انتخابی محاسبه می‌شوند. این گزارش محاسباتی است و وضعیت پرداخت پورسانت را نشان نمی‌دهد.</p>
+        </div>
+    </details>
+    {% if not is_visitor_report and visitor_summaries %}
+    <section class="mb-4" aria-labelledby="visitor-summary-title">
+        <h2 class="h6 fw-bold mb-3" id="visitor-summary-title">خلاصه به تفکیک ویزیتور</h2>
+        <div class="d-grid gap-2">
+        {% for visitor in visitor_summaries %}
+            <a class="card border-0 p-3 text-decoration-none text-reset" href="?period={{ period|urlencode }}&amp;start={{ start|urlencode }}&amp;end={{ end|urlencode }}&amp;visitor={{ visitor.id|default:'unassigned'|urlencode }}">
+                <div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ visitor.name }}</strong><span class="text-primary fw-bold">{{ visitor.income|persian_digits|intcomma:False }} ریال</span></div>
+                <small class="text-secondary mt-1">{{ visitor.count|persian_digits }} فاکتور · فروش {{ visitor.gross|floatformat:0|persian_digits|intcomma:False }} ریال</small>
+            </a>
+        {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    <section aria-labelledby="factor-income-title">
+        <div class="d-flex align-items-center justify-content-between mb-3"><h2 class="h5 fw-bold mb-0" id="factor-income-title">ریز پورسانت فاکتورها</h2><span class="small text-secondary">جدیدترین ابتدا</span></div>
+        <div class="d-grid gap-3">
+        {% for factor in report_page %}
+        <article class="card border-0 rounded-4 p-3 income-factor">
+            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><span class="small text-secondary">فاکتور {{ factor.number|persian_digits }}</span><time class="small text-secondary">{{ factor.date|persian_digits }}</time></div>
+            <h3 class="h6 fw-bold income-customer">{% if factor.can_open %}<a class="text-reset" href="{% url 'core:factor_detail' pk=factor.id %}">{{ factor.customer_name }}</a>{% else %}{{ factor.customer_name }}{% endif %}</h3>
+            {% if not is_visitor_report %}<p class="small text-secondary mb-2">{{ factor.visitor_name }}</p>{% endif %}
+            <dl class="income-breakdown mb-0">
+                <div><dt>مبلغ ناخالص</dt><dd>{{ factor.gross|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
+                <div><dt>تخفیف ({{ factor.discount_percent|floatformat:2|persian_digits }}٪)</dt><dd>{{ factor.discount|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
+                <div><dt>خالص فاکتور</dt><dd>{{ factor.net|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
+                <div class="income-factor-profit"><dt>پورسانت ({{ factor.effective_rate|floatformat:2|persian_digits }}٪)</dt><dd>{{ factor.income|persian_digits|intcomma:False }} ریال</dd></div>
+            </dl>
+            {% if factor.over_margin %}<p class="small text-warning-emphasis mb-0 mt-2">تخفیف بیش از ۱۵٪؛ پورسانت این فاکتور صفر است.</p>{% endif %}
+            {% if factor.invalid_amount or factor.missing_details %}<p class="small text-danger mb-0 mt-2">مبلغ یا ردیف‌های فاکتور نیازمند بررسی است؛ پورسانت صفر در نظر گرفته شده است.</p>{% endif %}
+            {% if is_visitor_report and not factor.can_open %}<p class="small text-secondary mb-0 mt-2">ریز پورسانت بر اساس ثبت تاریخی است؛ جزئیات مشتری تابع دسترسی فعلی شماست.</p>{% endif %}
+        </article>
+        {% empty %}
+        <div class="card border-0 rounded-4 p-4 text-center"><span class="material-symbols-outlined text-secondary mb-2" aria-hidden="true">receipt_long</span><h3 class="h6">فاکتوری در این بازه وجود ندارد</h3><p class="small text-secondary mb-0">بازه زمانی یا ویزیتور انتخابی را تغییر دهید.</p></div>
+        {% endfor %}
+        </div>
+        {% if report_page.has_other_pages %}
+        <nav class="d-flex justify-content-between align-items-center gap-2 mt-3" aria-label="صفحه‌بندی فاکتورها">
+            {% if report_page.has_previous %}<a class="btn btn-outline-primary" href="?{{ report_query }}&amp;page={{ report_page.previous_page_number }}">قبلی</a>{% endif %}
+            <span class="small">صفحه {{ report_page.number|persian_digits }} از {{ report_page.paginator.num_pages|persian_digits }}</span>
+            {% if report_page.has_next %}<a class="btn btn-outline-primary" href="?{{ report_query }}&amp;page={{ report_page.next_page_number }}">بعدی</a>{% endif %}
+        </nav>
+        {% endif %}
+    </section>
+    {% endif %}
+</div>
 </main>
-
-<!-- Floating Action Button for New Sale Request -->
-<a class="btn app-fab d-flex align-items-center justify-content-center"
-   href="{% url 'core:sale_request_create' %}"
-   aria-label="ایجاد درخواست فروش جدید">
-    <span class="material-symbols-outlined" aria-hidden="true">add</span>
-</a>
-
 {% include "partials/_bottom_nav.html" %}
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(() => {
+    const period = document.getElementById('report-period');
+    const dates = [document.getElementById('report-start'), document.getElementById('report-end')];
+    period.addEventListener('change', () => dates.forEach(input => {
+        input.disabled = period.value !== 'custom';
+        input.required = period.value === 'custom';
+    }));
+})();
+</script>
 {% endblock %}

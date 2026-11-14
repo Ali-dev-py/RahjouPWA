@@ -201,158 +201,38 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/dashboard.html"
 
     def get_context_data(self, **kwargs):
+        from .income_report import report_period, build_report
+        from django.core.paginator import Paginator
+        from urllib.parse import urlencode
+
         context = super().get_context_data(**kwargs)
-
-        # 1. Get logged-in user's gucode
-        user_gucode = self.request.session.get("user_id")
-        if not user_gucode and hasattr(self.request, "plus_user"):
-            user_gucode = str(self.request.plus_user.gucode)
-
-        if not user_gucode:
-            context["recent_activities"] = []
-            return context
-
-        # 2. Fetch Status Map for styling and text
-        statuses = Salerequeststatus.objects.using("plus").all()
-        status_map = {
-            s.salerequeststatuscode: s.salerequeststatusname for s in statuses
-        }
-
-        # 3. Query Last 10 Sale Requests for the current user
-        recent_masters = list(
-            self._documents(Salerequestmaster)
-            .filter(gcreatedby=user_gucode)
-            .order_by("-salerequestdate", "-salerequestno")[:10]
-        )
-
-        recent_activities = []
-        if recent_masters:
-            master_guids = [
-                _clean_guid_str(m.gsalerequestmasterid)
-                for m in recent_masters
-                if _clean_guid_str(m.gsalerequestmasterid)
-            ]
-            customer_guids = [
-                _clean_guid_str(m.gcustomerid)
-                for m in recent_masters
-                if _clean_guid_str(m.gcustomerid)
-            ]
-
-            # Batch Fetch Customers (Single Query - No N+1)
-            customer_map = {}
-            if customer_guids:
-                customers = self._customers().filter(
-                    gcustomerid__in=_guid_case_variants(customer_guids)
-                )
-                customer_map = {
-                    _clean_guid_str(c.gcustomerid).lower(): c.custname
-                    for c in customers
-                    if getattr(c, "gcustomerid", None)
-                }
-
-            # Batch Resolve Visitors (No N+1)
-            visitor_map = _resolve_sale_request_visitors(recent_masters)
-
-            # Batch Calculate Total Price per Sale Request (Single Query)
-            # Total = (Quantity * UnitPrice) - Discount
-            totals_map = {}
-            if master_guids:
-                details_agg = (
-                    Salerequestdetail.objects.using("plus")
-                    .filter(gsalerequestmasterid__in=_guid_case_variants(master_guids))
-                    .values("gsalerequestmasterid")
-                    .annotate(
-                        total=Sum(
-                            (F("quantity") * F("unitprice"))
-                            - Coalesce(F("discount"), Value(0)),
-                            output_field=DecimalField(),
-                        )
-                    )
-                )
-                for d in details_agg:
-                    if isinstance(d, dict) and d.get("gsalerequestmasterid"):
-                        key = _clean_guid_str(d["gsalerequestmasterid"]).lower()
-                        totals_map[key] = totals_map.get(key, 0) + int(
-                            d.get("total") or 0
-                        )
-
-            # Build list
-            for m in recent_masters:
-                cust_key = _clean_guid_str(m.gcustomerid).lower()
-                sr_key = _clean_guid_str(m.gsalerequestmasterid).lower()
-                customer_name = (
-                    customer_map.get(cust_key)
-                    or m.requestman
-                    or "مشتری نامشخص"
-                )
-                resolved_visitor = visitor_map.get(sr_key, "")
-                visitor_name = resolved_visitor or "بدون ویزیتور"
-                status_name = status_map.get(
-                    m.salerequeststatuscode, "ثبت شده"
-                )
-                style = get_status_style(status_name)
-
-                recent_activities.append(
-                    {
-                        "id": m.gsalerequestmasterid,
-                        "sale_request_no": m.salerequestno,
-                        "date": m.salerequestdate or m.createddate or "-",
-                        "customer_name": customer_name,
-                        "visitor_name": visitor_name,
-                        "has_visitor": bool(resolved_visitor),
-                        "total_amount": totals_map.get(sr_key, 0),
-                        "status_name": status_name,
-                        "chip_class": style["chip_class"],
-                        "dot_class": style["dot_class"],
-                    }
-                )
-
-        context["recent_activities"] = recent_activities
-
-        # -------------------------------------------------------------
-        # 4. Calculate Top Summary Cards Data
-        # -------------------------------------------------------------
-        today_jalali = jdatetime.date.today().strftime("%Y/%m/%d")
-
-        # Today's masters by this user
-        today_master_guids = list(
-            self._documents(Salerequestmaster)
-            .filter(gcreatedby=user_gucode, salerequestdate=today_jalali)
-            .values_list("gsalerequestmasterid", flat=True)
-        )
-
-        today_total_sum = 0
-        if today_master_guids:
-            sum_agg = Salerequestdetail.objects.using("plus").filter(
-                gsalerequestmasterid__in=today_master_guids
-            ).aggregate(
-                total=Sum(
-                    (F("quantity") * F("unitprice"))
-                    - Coalesce(F("discount"), Value(0)),
-                    output_field=DecimalField(),
-                )
-            )[
-                "total"
-            ] or Decimal(
-                "0"
-            )
-            today_total_sum = int(sum_agg)
-
-        context["today_sales_total"] = today_total_sum
-        context["pending_count"] = (
-            self._documents(Salerequestmaster)
-            .filter(gcreatedby=user_gucode, salerequeststatuscode=1)
-            .count()
-        )
-        context["total_requests_count"] = (
-            self._documents(Salerequestmaster)
-            .filter(gcreatedby=user_gucode)
-            .count()
-        )
-
+        context["period"] = self.request.GET.get("period", "month")
+        context["start"] = self.request.GET.get("start", "")
+        context["end"] = self.request.GET.get("end", "")
+        context["is_visitor_report"] = _name_key(getattr(self.request.plus_user, "utitle", "")) == "ویزیتور"
+        try:
+            period, start, end = report_period(self.request.GET)
+            context.update(period=period, start=start, end=end)
+            report = build_report(self.request.plus_user, start, end, self.request.GET.get("visitor", ""))
+            # Factor detail/PDF permissions remain customer-scoped. Avoid dead links
+            # when historical factor attribution differs from current assignment.
+            allowed_customers = self._visitor_customer_ids() if report['is_visitor_report'] else None
+            allowed_keys = {_clean_guid_str(c).lower() for c in allowed_customers or []}
+            for row in report['report_rows']:
+                row['can_open'] = allowed_customers is None or row['customer_id'] in allowed_keys
+            paginator = Paginator(report.pop('report_rows'), 20)
+            context.update(report)
+            context['report_page'] = paginator.get_page(self.request.GET.get('page'))
+            context['report_query'] = urlencode({'period': period, 'start': start, 'end': end,
+                                               'visitor': report['selected_report_visitor']})
+        except ValueError as exc:
+            context['report_error'] = str(exc)
+        except DatabaseError:
+            context['report_error'] = "دریافت گزارش ممکن نشد. لطفاً دوباره تلاش کنید."
         return context
-    
-    
+
+
+
 class CustomersView(PlusLoginRequiredMixin, TemplateView):
     template_name = "core/customers.html"
 

@@ -4,8 +4,8 @@
         <a class="app-bottom-nav__link{% if current == 'dashboard' %} is-active{% endif %}"
            href="{% url 'core:dashboard' %}"
            {% if current == 'dashboard' %}aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">home</span>
-            <span>خانه</span>
+            <span class="material-symbols-outlined" aria-hidden="true">monitoring</span>
+            <span>گزارش</span>
         </a>
         <a class="app-bottom-nav__link{% if current == 'sale_request_list' or current == 'sale_request_detail' or current == 'sale_request_create' or current == 'sale_request_edit' %} is-active{% endif %}"
            href="{% url 'core:sale_request_list' %}"
