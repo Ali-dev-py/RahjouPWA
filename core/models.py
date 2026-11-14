@@ -1005,7 +1005,6 @@ class Province(models.Model):
         db_table = 'Province'
 
 
-
 class Cities(models.Model):
     citiesid = models.AutoField(db_column='CitiesID', primary_key=True)
     citynamefarsi = models.CharField(db_column='CityNameFarsi', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
@@ -1021,3 +1020,16 @@ class Cities(models.Model):
         managed = False
         db_table = 'Cities'
 
+
+class Areageography(models.Model):
+    areageographyid = models.AutoField(db_column='AreaGeographyID', primary_key=True)
+    areageographyparentid = models.IntegerField(db_column='AreaGeographyParentID', blank=True, null=True)
+    code = models.CharField(db_column='Code', max_length=50, db_collation='Arabic_CI_AS')
+    name = models.CharField(db_column='Name', max_length=50, db_collation='Arabic_CI_AS')
+    gareageographyid = models.CharField(db_column='GAreaGeographyID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    gareageographyparentid = models.CharField(db_column='GAreaGeographyParentID', max_length=36, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'AreaGeography'
