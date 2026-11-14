@@ -25,21 +25,22 @@
                            aria-label="جستجوی فاکتور فروش"
                            placeholder="جستجوی فاکتور فروش (شماره، نام مشتری، ویزیتور...)">
                     {% if query %}
-                        <a href="?status={{ current_status }}" class="btn border-0 text-secondary d-flex align-items-center" aria-label="پاک کردن جستجو">
+                        <a href="?status={{ current_status }}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}" class="btn border-0 text-secondary d-flex align-items-center" aria-label="پاک کردن جستجو">
                             <span class="material-symbols-outlined fs-5">close</span>
                         </a>
                     {% endif %}
                 </div>
+                {% include "partials/_document_filters.html" %}
             </form>
 
             <!-- Dynamic Status Filter Tabs from DB -->
             <div class="sale-request-filters nav nav-pills flex-nowrap gap-2 overflow-x-auto mt-3 pb-1" role="group" aria-label="وضعیت فاکتور فروش">
-                <a href="?status=all{% if query %}&q={{ query }}{% endif %}"
+                <a href="?status=all{% if query %}&q={{ query }}{% endif %}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}"
                    class="nav-link flex-shrink-0 text-decoration-none {% if current_status == 'all' or not current_status %}active{% endif %}">
                     همه
                 </a>
                 {% for status in statuses %}
-                    <a href="?status={{ status.salefactorstatuscode }}{% if query %}&q={{ query }}{% endif %}"
+                    <a href="?status={{ status.salefactorstatuscode }}{% if query %}&q={{ query }}{% endif %}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}"
                        class="nav-link flex-shrink-0 text-decoration-none {% if current_status == status.salefactorstatuscode|stringformat:'s' %}active{% endif %}">
                         {{ status.salefactorstatusname }}
                     </a>
@@ -79,6 +80,7 @@
                                 <small class="text-secondary d-flex align-items-center gap-1 mt-1 text-truncate">
                                     <span class="material-symbols-outlined app-symbol-sm flex-shrink-0" aria-hidden="true">badge</span>
                                     <span class="text-truncate">ویزیتور: {{ factor.visitor_name }}</span>
+                                    <span class="badge bg-info-subtle text-dark">منطقه: {{ factor.area_name }}</span>
                                 </small>
                             </div>
                             <span class="status-chip {{ factor.chip_class }} flex-shrink-0">

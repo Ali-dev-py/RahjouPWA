@@ -111,6 +111,15 @@
                                 </select>
                             </div>
 
+                            <div class="col-12 col-sm-6">
+                                <label for="area_id" class="form-label">منطقه</label>
+                                <select id="area_id" name="area_id" class="form-select">
+                                    <option value="">بدون منطقه</option>
+                                    {% for area in areas %}
+                                    <option value="{{ area.gareageographyid }}" {% if selected_area_id|lower == area.gareageographyid|lower %}selected{% endif %}>{{ area.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
                             {% if visitors %}
                                 <div class="col-12 col-sm-6">
                                     <label for="visitor_id" class="form-label fw-medium small mb-1">
