@@ -1241,3 +1241,20 @@ textarea {
         flex: 1 1 0;
     }
 }
+
+/* Read-only commission dashboard, sized for small screens first. */
+.income-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.income-total { min-width: 0; padding: 1rem; border-radius: 1rem; background: #fff; display: flex; flex-direction: column; gap: .5rem; }
+.income-total strong { font-size: clamp(.95rem, 3.6vw, 1.35rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.income-total small { font-size: .7rem; }
+.income-total--primary { background: var(--rahjou-primary); color: #fff; }
+.income-filters .form-control, .income-filters .form-select, .income-filters .btn,
+.page-dashboard .app-main .btn, .income-explanation summary { min-height: 2.75rem; }
+.income-filters .form-control, .income-filters .form-select { font-size: 1rem; }
+.income-customer { overflow-wrap: anywhere; line-height: 1.7; }
+.income-breakdown > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .75rem; padding-block: .5rem; font-size: .8rem; }
+.income-breakdown dt { font-weight: 400; color: #616774; }
+.income-breakdown dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.income-breakdown .income-factor-profit { border-top: 1px solid #e5e9f0; margin-top: .4rem; color: var(--rahjou-primary); font-size: .95rem; }
+.income-factor-profit dt { color: inherit; font-weight: 600; }
+.income-explanation summary { cursor: pointer; line-height: 2; }
