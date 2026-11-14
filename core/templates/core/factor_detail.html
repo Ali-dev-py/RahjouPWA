@@ -7,6 +7,7 @@
 {% block body_class %}app-body page-factor-detail has-action-bar{% endblock %}
 
 {% block content %}
+<div class="container pt-2"><span class="badge bg-info-subtle text-dark">منطقه: {{ area_name|default:"بدون منطقه" }}</span></div>
 {% include "partials/_app_header.html" with heading="جزئیات فاکتور فروش" back_url=back_url back_url_name="core:factor_list" %}
 
 <main class="app-main container-fluid px-3">

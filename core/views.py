@@ -20,12 +20,56 @@ from django.db import DatabaseError, connections, transaction
 from django.test.testcases import DatabaseOperationForbidden
 from django.urls import reverse
 from django.http import HttpResponse, Http404
+from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 from django.template.loader import render_to_string
 
 from .models import *
+
+
+def _name_key(value):
+    return " ".join(str(value or "").replace("ي", "ی").replace("ك", "ک").split())
+
+
+def _area_rows():
+    try:
+        return list(Areageography.objects.using("plus").all().order_by("name"))
+    except (DatabaseError, DatabaseOperationForbidden):
+        return []
+
+
+def _area_map():
+    return {_clean_guid_str(a.gareageographyid).lower(): a.name for a in _area_rows()}
+
+
+def _customer_areas(customers):
+    areas = _area_map()
+    if not areas:
+        return {}
+    return {
+        _clean_guid_str(c.gcustomerid).lower(): (
+            _clean_guid_str(getattr(c, "gareageoghrafiid", None)).lower(),
+            areas.get(_clean_guid_str(getattr(c, "gareageoghrafiid", None)).lower(), "بدون منطقه"),
+        )
+        for c in customers.all()
+    }
+
+
+def _document_filters(request, context, key):
+    rows = context[key]
+    context["area_options"] = sorted(
+        {r["area_id"]: r["area_name"] for r in rows if r["area_id"]}.items(),
+        key=lambda item: item[1],
+    )
+    context["visitor_options"] = sorted({r["visitor_name"] for r in rows})
+    area = _clean_guid_str(request.GET.get("area", "")).lower()
+    visitor = request.GET.get("visitor", "")
+    context["selected_area"] = area
+    context["selected_visitor"] = visitor
+    context[key] = [r for r in rows if (not area or r["area_id"] == area)
+                    and (not visitor or r["visitor_name"] == visitor)][:150]
 
 
 # MIXINS
@@ -56,6 +100,37 @@ class PlusLoginRequiredMixin:
         # Attach the full TuaUser object to the request
         request.plus_user = user
         return super().dispatch(request, *args, **kwargs)
+
+    def _visitor_customer_ids(self):
+        """None means unrestricted; an empty list denies all customer/document rows.
+
+        Resolve from the authenticated DB user, never from submitted filter values.
+        Database failures intentionally propagate rather than granting access.
+        """
+        request = self.request
+        if hasattr(request, "_visitor_customer_ids"):
+            return request._visitor_customer_ids
+        user = getattr(request, "plus_user", None)
+        if _name_key(getattr(user, "utitle", "")) != "ویزیتور":
+            return None
+        name = _name_key(getattr(user, "uname", ""))
+        visitors = [v.gvisitorid for v in ViewAllvisitors.objects.using("plus").all()
+                    if name and _name_key(v.vizitorname) == name]
+        ids = list(Visitortocustomer.objects.using("plus").filter(
+            gvisitorid__in=_guid_case_variants(visitors)
+        ).values_list("gcustomerid", flat=True)) if visitors else []
+        request._visitor_customer_ids = _guid_case_variants(ids)
+        return request._visitor_customer_ids
+
+    def _customers(self):
+        qs = Tblcustomer.objects.using("plus")
+        ids = self._visitor_customer_ids()
+        return qs if ids is None else qs.filter(gcustomerid__in=ids)
+
+    def _documents(self, model):
+        qs = model.objects.using("plus")
+        ids = self._visitor_customer_ids()
+        return qs if ids is None else qs.filter(gcustomerid__in=ids)
 
     def get_context_data(self, **kwargs):
         """Automatically pass current_user to all template contexts"""
@@ -145,7 +220,7 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
 
         # 3. Query Last 10 Sale Requests for the current user
         recent_masters = list(
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .filter(gcreatedby=user_gucode)
             .order_by("-salerequestdate", "-salerequestno")[:10]
         )
@@ -166,7 +241,7 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
             # Batch Fetch Customers (Single Query - No N+1)
             customer_map = {}
             if customer_guids:
-                customers = Tblcustomer.objects.using("plus").filter(
+                customers = self._customers().filter(
                     gcustomerid__in=_guid_case_variants(customer_guids)
                 )
                 customer_map = {
@@ -241,7 +316,7 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
 
         # Today's masters by this user
         today_master_guids = list(
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .filter(gcreatedby=user_gucode, salerequestdate=today_jalali)
             .values_list("gsalerequestmasterid", flat=True)
         )
@@ -265,12 +340,12 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
 
         context["today_sales_total"] = today_total_sum
         context["pending_count"] = (
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .filter(gcreatedby=user_gucode, salerequeststatuscode=1)
             .count()
         )
         context["total_requests_count"] = (
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .filter(gcreatedby=user_gucode)
             .count()
         )
@@ -304,7 +379,7 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
                 balance_map[gid] = debit - credit
 
         customers = list(
-            Tblcustomer.objects.using("plus")
+            self._customers()
             .all()
             .order_by("custname")
         )
@@ -876,6 +951,8 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
         ]
 
         return {
+            "areas": _area_rows(),
+            "selected_area_id": form_values.get("area_id", ""),
             "groups": groups,
             "visitors": visitors,
             "provinces": provinces,
@@ -903,6 +980,7 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
         raw_mobile = request.POST.get("mobile", "").strip()[:100]
         raw_phone = request.POST.get("phone", "").strip()[:100]
         address = request.POST.get("address", "").strip()[:250]
+        area_id = request.POST.get("area_id", "").strip()
         posted_province_id = request.POST.get("gprovinceid", "").strip()
         posted_city_id = request.POST.get("gcityid", "").strip()
 
@@ -915,11 +993,17 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
             "mobile": raw_mobile,
             "phone": raw_phone,
             "address": address,
+            "area_id": area_id,
             "gprovinceid": posted_province_id or None,
             "gcityid": posted_city_id or None,
         }
 
         errors = []
+        selected_area = next((a for a in _area_rows()
+                              if _clean_guid_str(a.gareageographyid).lower()
+                              == _clean_guid_str(area_id).lower()), None) if area_id else None
+        if area_id and selected_area is None:
+            errors.append("منطقه انتخاب‌شده معتبر نیست.")
         if not custname:
             errors.append("نام مشتری الزامی است.")
         if not selected_group_id:
@@ -994,6 +1078,14 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
                 )
         else:
             final_city_id = posted_city_id or DEFAULT_FALLBACK_CITY_GID
+
+        if self._visitor_customer_ids() is not None:
+            allowed_visitors = [v for v in ViewAllvisitors.objects.using("plus").all()
+                                if _name_key(v.vizitorname) == _name_key(request.plus_user.uname)]
+            chosen = next((v for v in allowed_visitors if _clean_guid_str(v.gvisitorid).lower()
+                           == _clean_guid_str(selected_visitor_id).lower()), None)
+            if not chosen:
+                errors.append("مشتری باید به ویزیتور جاری اختصاص داده شود.")
 
         valid_visitor_gid = ""
         if selected_visitor_id:
@@ -1087,6 +1179,7 @@ class CustomerCreateView(PlusLoginRequiredMixin, View):
                     customertypecode=2,
                     customertaxtype=3,
                     gprovinceid=final_province_id,
+                    gareageoghrafiid=selected_area.gareageographyid if selected_area else None,
                     gcityid=final_city_id,
                     registerdate=timezone.now(),
                     createddate=shamsi_date,
@@ -1151,13 +1244,13 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
             raise Http404("مشتری مورد نظر یافت نشد.")
 
         customer = (
-            Tblcustomer.objects.using("plus")
+            self._customers()
             .filter(gcustomerid__iexact=clean_pk)
             .first()
         )
         if not customer and clean_pk.isdigit():
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(customerid=int(clean_pk))
                 .first()
             )
@@ -1497,13 +1590,13 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
             raise Http404("مشتری مورد نظر یافت نشد.")
 
         customer = (
-            Tblcustomer.objects.using("plus")
+            self._customers()
             .filter(gcustomerid__iexact=clean_pk)
             .first()
         )
         if not customer and clean_pk.isdigit():
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(customerid=int(clean_pk))
                 .first()
             )
@@ -1703,7 +1796,7 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
         factor_masters = []
         if clean_cust_gid:
             factor_masters = list(
-                Salefactormaster.objects.using("plus").filter(
+                self._documents(Salefactormaster).filter(
                     gcustomerid__iexact=clean_cust_gid
                 )
             )
@@ -2335,6 +2428,7 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
+        customer_areas = _customer_areas(self._customers())
         query = self.request.GET.get("q", "").strip()
         status_filter = self.request.GET.get("status", "all").strip()
 
@@ -2350,7 +2444,7 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
 
         # 2. Fetch Sale Requests QuerySet
         sale_requests_qs = (
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .all()
             .order_by("-salerequestdate", "-salerequestno")
         )
@@ -2361,8 +2455,8 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
                 salerequeststatuscode=int(status_filter)
             )
 
-        # Limit to top 150 records for optimal performance
-        sale_requests_list = list(sale_requests_qs[:150])
+        # Apply the display limit after area/visitor/search filtering.
+        sale_requests_list = list(sale_requests_qs)
 
         # 3. Batch Fetch Customer Names, Visitor Names & Totals (prevents N+1 query issue)
         customer_ids = _guid_case_variants(
@@ -2370,7 +2464,7 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
         )
         customer_map = {}
         if customer_ids:
-            customers = Tblcustomer.objects.using("plus").filter(
+            customers = self._customers().filter(
                 gcustomerid__in=customer_ids
             )
             customer_map = {
@@ -2437,6 +2531,8 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
                     "id": sr.gsalerequestmasterid,
                     "number": sr_no,
                     "date": sr.salerequestdate or sr.createddate or "-",
+                    "area_id": customer_areas.get(_clean_guid_str(sr.gcustomerid).lower(), ("", "بدون منطقه"))[0],
+                    "area_name": customer_areas.get(_clean_guid_str(sr.gcustomerid).lower(), ("", "بدون منطقه"))[1],
                     "customer_name": customer_name,
                     "visitor_name": visitor_name,
                     "has_visitor": bool(resolved_visitor),
@@ -2454,6 +2550,7 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
         context["statuses"] = statuses
         context["current_status"] = status_filter
         context["query"] = query
+        _document_filters(self.request, context, "sale_requests")
         return context
 
 
@@ -2468,14 +2565,14 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
 
         if sale_request_id:
             master = (
-                Salerequestmaster.objects.using("plus")
+                self._documents(Salerequestmaster)
                 .filter(gsalerequestmasterid=str(sale_request_id).strip())
                 .first()
             )
         else:
             # Fallback to the latest sale request only if no ID was provided at all
             master = (
-                Salerequestmaster.objects.using("plus")
+                self._documents(Salerequestmaster)
                 .order_by("-salerequestdate", "-salerequestno")
                 .first()
             )
@@ -2511,7 +2608,7 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
         customer = None
         if master.gcustomerid:
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(gcustomerid=master.gcustomerid)
                 .first()
             )
@@ -2523,6 +2620,7 @@ class SaleRequestDetailView(PlusLoginRequiredMixin, TemplateView):
         resolved_visitor = _resolve_sale_request_visitors([master]).get(
             sr_key, ""
         )
+        context["area_name"] = _customer_areas(self._customers()).get(_clean_guid_str(master.gcustomerid).lower(), ("", "بدون منطقه"))[1]
         context["visitor_name"] = resolved_visitor or "بدون ویزیتور"
         context["has_visitor"] = bool(resolved_visitor)
 
@@ -2596,7 +2694,7 @@ class SaleRequestShortagesView(PlusLoginRequiredMixin, View):
         master = None
         try:
             master = (
-                Salerequestmaster.objects.using("plus")
+                self._documents(Salerequestmaster)
                 .filter(gsalerequestmasterid__iexact=clean_pk)
                 .first()
             )
@@ -2606,7 +2704,7 @@ class SaleRequestShortagesView(PlusLoginRequiredMixin, View):
         if not master and clean_pk.isdigit():
             try:
                 master = (
-                    Salerequestmaster.objects.using("plus")
+                    self._documents(Salerequestmaster)
                     .filter(salerequestmasterid=int(clean_pk))
                     .first()
                 )
@@ -2656,7 +2754,7 @@ class SaleRequestShortagesView(PlusLoginRequiredMixin, View):
         if cust_guid:
             try:
                 customer = (
-                    Tblcustomer.objects.using("plus")
+                    self._customers()
                     .filter(gcustomerid__in=_guid_case_variants([cust_guid]))
                     .first()
                 )
@@ -2843,7 +2941,7 @@ class SaleRequestCreateView(PlusLoginRequiredMixin, TemplateView):
 
         # 1. Fetch Customers
         customers_queryset = (
-            Tblcustomer.objects.using("plus")
+            self._customers()
             .values("gcustomerid", "custname", "custno", "mobile", "phone")
             .order_by("custname")
         )
@@ -2953,6 +3051,10 @@ class SaleRequestCreateView(PlusLoginRequiredMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         customer_id = request.POST.get("customer_id", "").strip()
+        if self._visitor_customer_ids() is not None and not self._customers().filter(
+            gcustomerid__iexact=customer_id
+        ).exists():
+            raise PermissionDenied("دسترسی به این مشتری مجاز نیست.")
         branch_id = request.POST.get("branch_id", "").strip()
         inv_id = request.POST.get("inv_id", "").strip()
         visitor_id = request.POST.get("visitor_id", "").strip()
@@ -3055,7 +3157,7 @@ class SaleRequestCreateView(PlusLoginRequiredMixin, TemplateView):
                 current_user_gucode = request.session.get("user_id")
 
                 # A. Create Master Record
-                master = Salerequestmaster.objects.using("plus").create(
+                master = self._documents(Salerequestmaster).create(
                     salerequestno=next_sale_request_no,
                     atfno=next_sale_request_no,                # Same as SaleRequestNo
                     receipttypecode=1,                         # 1
@@ -3178,13 +3280,13 @@ class SaleRequestEditView(SaleRequestCreateView):
             raise Http404("درخواست فروش مورد نظر یافت نشد.")
 
         master = (
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .filter(gsalerequestmasterid__iexact=clean_pk)
             .first()
         )
         if not master and clean_pk.isdigit():
             master = (
-                Salerequestmaster.objects.using("plus")
+                self._documents(Salerequestmaster)
                 .filter(salerequestmasterid=int(clean_pk))
                 .first()
             )
@@ -3299,7 +3401,7 @@ class SaleRequestEditView(SaleRequestCreateView):
         initial_customer = None
         if raw_customer_id:
             cust_obj = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(gcustomerid__iexact=str(raw_customer_id).strip())
                 .first()
             )
@@ -3452,6 +3554,10 @@ class SaleRequestEditView(SaleRequestCreateView):
             request.POST.get("return_to") or request.GET.get("from") or ""
         ).strip()
         customer_id = request.POST.get("customer_id", "").strip()
+        if self._visitor_customer_ids() is not None and not self._customers().filter(
+            gcustomerid__iexact=customer_id
+        ).exists():
+            raise PermissionDenied("دسترسی به این مشتری مجاز نیست.")
         branch_id = request.POST.get("branch_id", "").strip()
         inv_id = request.POST.get("inv_id", "").strip()
         visitor_id = request.POST.get("visitor_id", "").strip()
@@ -3640,13 +3746,13 @@ class SaleRequestDeleteView(PlusLoginRequiredMixin, View):
             raise Http404("درخواست فروش مورد نظر یافت نشد.")
 
         master = (
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .filter(gsalerequestmasterid__iexact=clean_pk)
             .first()
         )
         if not master and clean_pk.isdigit():
             master = (
-                Salerequestmaster.objects.using("plus")
+                self._documents(Salerequestmaster)
                 .filter(salerequestmasterid=int(clean_pk))
                 .first()
             )
@@ -3712,7 +3818,7 @@ class SaleRequestPDFView(PlusLoginRequiredMixin, View):
 
         # 1. Fetch Master Record
         master = (
-            Salerequestmaster.objects.using("plus")
+            self._documents(Salerequestmaster)
             .filter(gsalerequestmasterid=sale_request_id)
             .first()
         )
@@ -3723,7 +3829,7 @@ class SaleRequestPDFView(PlusLoginRequiredMixin, View):
         customer = None
         if master.gcustomerid:
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(gcustomerid=master.gcustomerid)
                 .first()
             )
@@ -3828,6 +3934,7 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
+        customer_areas = _customer_areas(self._customers())
         query = self.request.GET.get("q", "").strip()
         status_filter = self.request.GET.get("status", "all").strip()
 
@@ -3848,7 +3955,7 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
 
         # 2. Fetch Sale Pre-Factors QuerySet (exclude purchase pre-factors where IsBuy=1)
         pre_factors_qs = (
-            Prefactormaster.objects.using("plus")
+            self._documents(Prefactormaster)
             .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
             .order_by("-prefactordate", "-prefactorno")
         )
@@ -3869,7 +3976,7 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
                 pass
             pre_factors_qs = pre_factors_qs.filter(status_q)
 
-        pre_factors_list = list(pre_factors_qs[:150])
+        pre_factors_list = list(pre_factors_qs)
 
         # 3. Batch Fetch Customer Names, Visitor Names & Totals/Detail Statuses (No N+1)
         customer_ids = _guid_case_variants(
@@ -3877,7 +3984,7 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
         )
         customer_map = {}
         if customer_ids:
-            customers = Tblcustomer.objects.using("plus").filter(
+            customers = self._customers().filter(
                 gcustomerid__in=customer_ids
             )
             customer_map = {
@@ -3972,6 +4079,8 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
                     "id": pf.gprefactormasterid,
                     "number": pf_no,
                     "date": pf.prefactordate or pf.createddate or "-",
+                    "area_id": customer_areas.get(_clean_guid_str(pf.gcustomerid).lower(), ("", "بدون منطقه"))[0],
+                    "area_name": customer_areas.get(_clean_guid_str(pf.gcustomerid).lower(), ("", "بدون منطقه"))[1],
                     "customer_name": customer_name,
                     "visitor_name": visitor_name,
                     "has_visitor": bool(resolved_visitor),
@@ -3987,6 +4096,7 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
         context["statuses"] = statuses
         context["current_status"] = status_filter
         context["query"] = query
+        _document_filters(self.request, context, "pre_factors")
         return context
 
 
@@ -4000,13 +4110,13 @@ class PreFactorDetailView(PlusLoginRequiredMixin, TemplateView):
 
         if pre_factor_id:
             master = (
-                Prefactormaster.objects.using("plus")
+                self._documents(Prefactormaster)
                 .filter(gprefactormasterid__iexact=str(pre_factor_id).strip())
                 .first()
             )
         else:
             master = (
-                Prefactormaster.objects.using("plus")
+                self._documents(Prefactormaster)
                 .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
                 .order_by("-prefactordate", "-prefactorno")
                 .first()
@@ -4023,7 +4133,7 @@ class PreFactorDetailView(PlusLoginRequiredMixin, TemplateView):
         customer = None
         if master.gcustomerid:
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
                 .first()
             )
@@ -4037,6 +4147,7 @@ class PreFactorDetailView(PlusLoginRequiredMixin, TemplateView):
         resolved_visitor = _resolve_pre_factor_visitors([master]).get(
             pf_key, ""
         )
+        context["area_name"] = _customer_areas(self._customers()).get(_clean_guid_str(master.gcustomerid).lower(), ("", "بدون منطقه"))[1]
         context["visitor_name"] = resolved_visitor or "بدون ویزیتور"
         context["has_visitor"] = bool(resolved_visitor)
 
@@ -4144,7 +4255,7 @@ class PreFactorPDFView(PlusLoginRequiredMixin, View):
             raise Http404("پیش‌فاکتور مورد نظر یافت نشد.")
 
         master = (
-            Prefactormaster.objects.using("plus")
+            self._documents(Prefactormaster)
             .filter(gprefactormasterid__iexact=str(pre_factor_id).strip())
             .first()
         )
@@ -4154,7 +4265,7 @@ class PreFactorPDFView(PlusLoginRequiredMixin, View):
         customer = None
         if master.gcustomerid:
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
                 .first()
             )
@@ -4261,6 +4372,7 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
+        customer_areas = _customer_areas(self._customers())
         query = self.request.GET.get("q", "").strip()
         status_filter = self.request.GET.get("status", "all").strip()
 
@@ -4281,7 +4393,7 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
 
         # 2. Fetch Sale Factors QuerySet
         factors_qs = (
-            Salefactormaster.objects.using("plus")
+            self._documents(Salefactormaster)
             .all()
             .order_by("-salefactordate", "-salefactorno")
         )
@@ -4291,7 +4403,7 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
                 salefactorstatuscode=int(status_filter)
             )
 
-        factors_list = list(factors_qs[:150])
+        factors_list = list(factors_qs)
 
         # 3. Batch Fetch Customer Names, Visitor Names & Totals (No N+1)
         customer_ids = _guid_case_variants(
@@ -4299,7 +4411,7 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
         )
         customer_map = {}
         if customer_ids:
-            customers = Tblcustomer.objects.using("plus").filter(
+            customers = self._customers().filter(
                 gcustomerid__in=customer_ids
             )
             customer_map = {
@@ -4382,6 +4494,8 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
                     "id": sf.gsalefactormasterid,
                     "number": sf_no,
                     "date": sf.salefactordate or sf.createddate or "-",
+                    "area_id": customer_areas.get(_clean_guid_str(sf.gcustomerid).lower(), ("", "بدون منطقه"))[0],
+                    "area_name": customer_areas.get(_clean_guid_str(sf.gcustomerid).lower(), ("", "بدون منطقه"))[1],
                     "customer_name": customer_name,
                     "visitor_name": visitor_name,
                     "has_visitor": bool(resolved_visitor),
@@ -4397,6 +4511,7 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
         context["statuses"] = statuses
         context["current_status"] = status_filter
         context["query"] = query
+        _document_filters(self.request, context, "factors")
         return context
 
 
@@ -4416,13 +4531,13 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
 
         if factor_id:
             master = (
-                Salefactormaster.objects.using("plus")
+                self._documents(Salefactormaster)
                 .filter(gsalefactormasterid__iexact=str(factor_id).strip())
                 .first()
             )
         else:
             master = (
-                Salefactormaster.objects.using("plus")
+                self._documents(Salefactormaster)
                 .order_by("-salefactordate", "-salefactorno")
                 .first()
             )
@@ -4453,7 +4568,7 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
         customer = None
         if master.gcustomerid:
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
                 .first()
             )
@@ -4465,6 +4580,7 @@ class FactorDetailView(PlusLoginRequiredMixin, TemplateView):
             else ""
         )
         resolved_visitor = _resolve_factor_visitors([master]).get(sf_key, "")
+        context["area_name"] = _customer_areas(self._customers()).get(_clean_guid_str(master.gcustomerid).lower(), ("", "بدون منطقه"))[1]
         context["visitor_name"] = resolved_visitor or "بدون ویزیتور"
         context["has_visitor"] = bool(resolved_visitor)
 
@@ -4546,7 +4662,7 @@ class FactorPDFView(PlusLoginRequiredMixin, View):
             raise Http404("فاکتور فروش مورد نظر یافت نشد.")
 
         master = (
-            Salefactormaster.objects.using("plus")
+            self._documents(Salefactormaster)
             .filter(gsalefactormasterid__iexact=str(factor_id).strip())
             .first()
         )
@@ -4556,7 +4672,7 @@ class FactorPDFView(PlusLoginRequiredMixin, View):
         customer = None
         if master.gcustomerid:
             customer = (
-                Tblcustomer.objects.using("plus")
+                self._customers()
                 .filter(gcustomerid__iexact=str(master.gcustomerid).strip())
                 .first()
             )

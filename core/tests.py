@@ -2361,6 +2361,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertEqual(created_kwargs["customertypecode"], 2)
         self.assertEqual(created_kwargs["gprovinceid"], "PROV-ESF-GUID")
         self.assertEqual(created_kwargs["gcityid"], "CITY-KASHAN-GUID")
+        self.assertIsNone(created_kwargs["gareageoghrafiid"])
         self.assertEqual(created_kwargs["createdby"], "علی")
 
         # Verify Step 3: Customer2Group fields
@@ -2382,6 +2383,28 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             v2c_kwargs["gcompanyid"],
             "3BBE4300-11CF-42B9-919F-87642C174264",
         )
+
+        # An optional area is validated against AreaGeography and persists its GUID.
+        with patch("core.views._area_rows", return_value=[
+            SimpleNamespace(gareageographyid="AREA-GUID-1", name="شمال")
+        ]):
+            data = post_req.POST.dict()
+            data["area_id"] = "{area-guid-1}"
+            selected_req = _attach_authenticated_session(self.factory.post(
+                reverse("core:customer_create"), data))
+            selected_resp = CustomerCreateView.as_view()(selected_req)
+            self.assertEqual(selected_resp.status_code, 302)
+            self.assertEqual(mock_customer.objects.using.return_value.create.call_args.kwargs[
+                "gareageoghrafiid"], "AREA-GUID-1")
+            writes_before = mock_customer.objects.using.return_value.create.call_count
+            data["area_id"] = "INVALID-AREA"
+            invalid_req = _attach_authenticated_session(self.factory.post(
+                reverse("core:customer_create"), data))
+            invalid_resp = CustomerCreateView.as_view()(invalid_req)
+            self.assertEqual(invalid_resp.status_code, 200)
+            self.assertIn("منطقه انتخاب‌شده معتبر نیست.", invalid_resp.content.decode())
+            self.assertEqual(mock_customer.objects.using.return_value.create.call_count, writes_before)
+
 
     @patch("core.views.TuaUser")
     @patch("core.views.Salerequestdetail")
@@ -2900,3 +2923,105 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
 
 
+
+
+
+
+class VisitorPermissionAndAreaTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def view(self, user=None):
+        from core.views import PlusLoginRequiredMixin
+        view = PlusLoginRequiredMixin()
+        view.request = self.factory.get('/')
+        view.request.plus_user = user or SimpleNamespace(utitle='ویزیتور', uname='علی کریمی')
+        return view
+
+    @patch('core.views.Visitortocustomer')
+    @patch('core.views.ViewAllvisitors')
+    def test_name_matching_normalizes_arabic_letters_and_caches_scope(self, visitors, links):
+        visitors.objects.using.return_value.all.return_value = [
+            SimpleNamespace(gvisitorid='VIS-1', vizitorname=' علي  كريمي '),
+            SimpleNamespace(gvisitorid='VIS-2', vizitorname='شخص دیگر'),
+        ]
+        links.objects.using.return_value.filter.return_value.values_list.return_value = ['CUST-1']
+        view = self.view()
+        self.assertEqual(set(view._visitor_customer_ids()), {'CUST-1', 'cust-1'})
+        self.assertEqual(set(view._visitor_customer_ids()), {'CUST-1', 'cust-1'})
+        links.objects.using.return_value.filter.assert_called_once()
+        used_ids = links.objects.using.return_value.filter.call_args.kwargs['gvisitorid__in']
+        self.assertIn('VIS-1', used_ids)
+        self.assertNotIn('VIS-2', used_ids)
+
+    @patch('core.views.ViewAllvisitors')
+    def test_unmatched_or_blank_visitor_name_fails_closed(self, visitors):
+        visitors.objects.using.return_value.all.return_value = [
+            SimpleNamespace(gvisitorid='V1', vizitorname='شخص دیگر')]
+        self.assertEqual(self.view()._visitor_customer_ids(), [])
+        self.assertEqual(self.view(SimpleNamespace(utitle='ویزیتور', uname=''))._visitor_customer_ids(), [])
+
+    @patch('core.views.ViewAllvisitors')
+    def test_other_titles_keep_existing_access(self, visitors):
+        self.assertIsNone(self.view(SimpleNamespace(utitle='مدیر', uname='علی'))._visitor_customer_ids())
+        visitors.objects.using.assert_not_called()
+
+    def test_customer_and_all_document_queries_are_scoped(self):
+        from core.views import PlusLoginRequiredMixin
+        from core.models import Salerequestmaster, Prefactormaster, Salefactormaster
+        view = self.view()
+        with patch.object(PlusLoginRequiredMixin, '_visitor_customer_ids', return_value=['C1']):
+            with patch('core.views.Tblcustomer') as customers:
+                view._customers()
+                customers.objects.using.return_value.filter.assert_called_once_with(gcustomerid__in=['C1'])
+            for model in (Salerequestmaster, Prefactormaster, Salefactormaster):
+                with self.subTest(model=model.__name__), patch.object(model.objects, 'using') as using:
+                    view._documents(model)
+                    using.return_value.filter.assert_called_once_with(gcustomerid__in=['C1'])
+
+    def test_combined_area_and_visitor_filters_for_all_three_lists(self):
+        from core.views import _document_filters
+        rows = [
+            {'area_id': 'a1', 'area_name': 'شمال', 'visitor_name': 'علی'},
+            {'area_id': 'a2', 'area_name': 'جنوب', 'visitor_name': 'علی'},
+            {'area_id': 'a1', 'area_name': 'شمال', 'visitor_name': 'سارا'},
+        ]
+        for key in ('sale_requests', 'pre_factors', 'factors'):
+            context = {key: rows[:]}
+            _document_filters(self.factory.get('/', {'area': '{A1}', 'visitor': 'علی'}), context, key)
+            self.assertEqual(context[key], [rows[0]])
+            self.assertEqual(len(context['area_options']), 2)
+            self.assertEqual(context['selected_area'], 'a1')
+            context = {key: rows[:]}
+            _document_filters(self.factory.get('/', {'visitor': 'نام نامعتبر'}), context, key)
+            self.assertEqual(context[key], [])
+
+    @patch('core.views._area_rows')
+    def test_area_map_matches_customer_area_guid_and_handles_null(self, areas):
+        from core.views import _customer_areas
+        areas.return_value = [SimpleNamespace(gareageographyid='{AREA-1}', name='شمال')]
+        customers = MagicMock()
+        customers.all.return_value = [
+            SimpleNamespace(gcustomerid='C1', gareageoghrafiid='area-1'),
+            SimpleNamespace(gcustomerid='C2', gareageoghrafiid=None)]
+        result = _customer_areas(customers)
+        self.assertEqual(result['c1'], ('area-1', 'شمال'))
+        self.assertEqual(result['c2'], ('', 'بدون منطقه'))
+
+    def test_visitor_cannot_post_sale_request_for_another_customer(self):
+        from django.core.exceptions import PermissionDenied
+        for cls in (SaleRequestCreateView, SaleRequestEditView):
+            request = self.factory.post('/', {'customer_id': 'OTHER-CUSTOMER'})
+            view = cls()
+            view.request = request
+            with patch.object(cls, '_visitor_customer_ids', return_value=['OWN-CUSTOMER']), \
+                 patch.object(cls, '_customers') as customers:
+                customers.return_value.filter.return_value.exists.return_value = False
+                if cls is SaleRequestEditView:
+                    with patch.object(cls, '_get_master', return_value=SimpleNamespace(gsalerequestmasterid='SR')), \
+                         patch('core.views._resolve_sale_request_status', return_value=('ثبت شده', True)):
+                        with self.assertRaises(PermissionDenied):
+                            view.post(request, pk='SR')
+                else:
+                    with self.assertRaises(PermissionDenied):
+                        view.post(request)
