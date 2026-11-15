@@ -25,7 +25,7 @@
                            aria-label="جستجوی پیش‌فاکتور"
                            placeholder="جستجوی پیش‌فاکتور (شماره، نام مشتری، ویزیتور...)">
                     {% if query %}
-                        <a href="?status={{ current_status }}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}" class="btn border-0 text-secondary d-flex align-items-center" aria-label="پاک کردن جستجو">
+                        <a href="?status={{ current_status }}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}&amp;branch={{ selected_branch|urlencode }}" class="btn border-0 text-secondary d-flex align-items-center" aria-label="پاک کردن جستجو">
                             <span class="material-symbols-outlined fs-5">close</span>
                         </a>
                     {% endif %}
@@ -35,12 +35,12 @@
 
             <!-- Dynamic Status Filter Tabs from PreFactorDetailStatus -->
             <div class="sale-request-filters nav nav-pills flex-nowrap gap-2 overflow-x-auto mt-3 pb-1" role="group" aria-label="وضعیت پیش‌فاکتور">
-                <a href="?status=all{% if query %}&q={{ query }}{% endif %}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}"
+                <a href="?status=all{% if query %}&q={{ query }}{% endif %}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}&amp;branch={{ selected_branch|urlencode }}"
                    class="nav-link flex-shrink-0 text-decoration-none {% if current_status == 'all' or not current_status %}active{% endif %}">
                     همه
                 </a>
                 {% for status in statuses %}
-                    <a href="?status={{ status.prefactordetailstatuscode }}{% if query %}&q={{ query }}{% endif %}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}"
+                    <a href="?status={{ status.prefactordetailstatuscode }}{% if query %}&q={{ query }}{% endif %}&area={{ selected_area|urlencode }}&visitor={{ selected_visitor|urlencode }}&amp;branch={{ selected_branch|urlencode }}"
                        class="nav-link flex-shrink-0 text-decoration-none {% if current_status == status.prefactordetailstatuscode|stringformat:'s' %}active{% endif %}">
                         {{ status.prefactordetailstatusname }}
                     </a>

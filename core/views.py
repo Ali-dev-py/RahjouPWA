@@ -57,6 +57,18 @@ def _customer_areas(customers):
     }
 
 
+def _document_branch_options():
+    """Branch labels are metadata; selected branch matching never bypasses row scope."""
+    try:
+        return [
+            {"id": _clean_guid_str(branch.gbranchid).lower(), "name": branch.branchname}
+            for branch in Branches.objects.using("plus").all().order_by("branchname")
+            if branch.gbranchid
+        ]
+    except (DatabaseError, DatabaseOperationForbidden):
+        return []
+
+
 def _document_filters(request, context, key):
     rows = context[key]
     context["area_options"] = sorted(
@@ -66,10 +78,14 @@ def _document_filters(request, context, key):
     context["visitor_options"] = sorted({r["visitor_name"] for r in rows})
     area = _clean_guid_str(request.GET.get("area", "")).lower()
     visitor = request.GET.get("visitor", "")
+    branch = _clean_guid_str(request.GET.get("branch", "")).lower()
+    context["branch_options"] = _document_branch_options()
+    context["selected_branch"] = branch
     context["selected_area"] = area
     context["selected_visitor"] = visitor
     context[key] = [r for r in rows if (not area or r["area_id"] == area)
-                    and (not visitor or r["visitor_name"] == visitor)][:150]
+                    and (not visitor or r["visitor_name"] == visitor)
+                    and (not branch or r.get("branch_id", "") == branch)][:150]
 
 
 # MIXINS
@@ -2479,6 +2495,7 @@ class SaleRequestListView(PlusLoginRequiredMixin, TemplateView):
             sale_requests.append(
                 {
                     "id": sr.gsalerequestmasterid,
+                    "branch_id": _clean_guid_str(getattr(sr, "gbranchid", None)).lower(),
                     "number": sr_no,
                     "date": sr.salerequestdate or sr.createddate or "-",
                     "area_id": customer_areas.get(_clean_guid_str(sr.gcustomerid).lower(), ("", "بدون منطقه"))[0],
@@ -4027,6 +4044,7 @@ class PreFactorListView(PlusLoginRequiredMixin, TemplateView):
             pre_factors.append(
                 {
                     "id": pf.gprefactormasterid,
+                    "branch_id": _clean_guid_str(getattr(pf, "gbranchid", None)).lower(),
                     "number": pf_no,
                     "date": pf.prefactordate or pf.createddate or "-",
                     "area_id": customer_areas.get(_clean_guid_str(pf.gcustomerid).lower(), ("", "بدون منطقه"))[0],
@@ -4442,6 +4460,7 @@ class FactorListView(PlusLoginRequiredMixin, TemplateView):
             factors.append(
                 {
                     "id": sf.gsalefactormasterid,
+                    "branch_id": _clean_guid_str(getattr(sf, "gbranchid", None)).lower(),
                     "number": sf_no,
                     "date": sf.salefactordate or sf.createddate or "-",
                     "area_id": customer_areas.get(_clean_guid_str(sf.gcustomerid).lower(), ("", "بدون منطقه"))[0],

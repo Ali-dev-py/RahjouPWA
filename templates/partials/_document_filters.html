@@ -13,10 +13,17 @@
             {% for name in visitor_options %}<option value="{{ name }}" {% if selected_visitor == name %}selected{% endif %}>{{ name }}</option>{% endfor %}
         </select>
     </div>
+    <div class="col-12">
+        <label class="form-label small mb-1" for="branch-filter">شعبه</label>
+        <select class="form-select" name="branch" id="branch-filter">
+            <option value="">همه شعبه‌ها</option>
+            {% for branch in branch_options %}<option value="{{ branch.id }}" {% if selected_branch == branch.id %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+        </select>
+    </div>
     <div class="col-12 d-flex gap-2">
         <button class="btn btn-primary flex-grow-1" type="submit">اعمال فیلتر</button>
-        {% if selected_area or selected_visitor %}
-            <a class="btn btn-outline-secondary d-inline-flex align-items-center justify-content-center" href="?status={{ current_status|urlencode }}&amp;q={{ query|default:''|urlencode }}" aria-label="حذف فیلتر منطقه و ویزیتور">حذف فیلتر</a>
+        {% if selected_area or selected_visitor or selected_branch %}
+            <a class="btn btn-outline-secondary d-inline-flex align-items-center justify-content-center" href="?status={{ current_status|urlencode }}&amp;q={{ query|default:''|urlencode }}" aria-label="حذف فیلتر منطقه، ویزیتور و شعبه">حذف فیلتر</a>
         {% endif %}
     </div>
 </div>

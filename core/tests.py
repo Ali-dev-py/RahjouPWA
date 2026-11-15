@@ -281,6 +281,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         mock_master.objects.using.return_value.all.return_value.order_by.return_value = [
             SimpleNamespace(
                 gsalerequestmasterid="SR-GUID-200",
+                gbranchid="{BRANCH-1}",
                 salerequestno="000456",
                 salerequestdate="1405/08/18",
                 createddate="1405/08/18",
@@ -304,6 +305,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn("sale_requests", response.context_data)
         self.assertNotIn("factors", response.context_data)
         self.assertEqual(len(response.context_data["sale_requests"]), 1)
+        self.assertEqual(response.context_data["sale_requests"][0]["branch_id"], "branch-1")
 
         html = response.content.decode("utf-8")
         self.assertIn("شرکت امید", html)
@@ -1123,6 +1125,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             SimpleNamespace(
                 prefactormasterid=100,
                 gprefactormasterid="PF-GUID-100",
+                gbranchid="{BRANCH-1}",
                 prefactorno="000501",
                 prefactordate="1405/02/01",
                 createddate="1405/02/01",
@@ -1168,6 +1171,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context_data["pre_factors"]), 1)
+        self.assertEqual(response.context_data["pre_factors"][0]["branch_id"], "branch-1")
         pf_item = response.context_data["pre_factors"][0]
         self.assertEqual(pf_item["customer_name"], "شرکت سپهر")
         self.assertEqual(pf_item["visitor_name"], "رضا بازاریاب")
@@ -1348,6 +1352,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             SimpleNamespace(
                 salefactormasterid=901,
                 gsalefactormasterid="FAC-GUID-100",
+                gbranchid="{BRANCH-1}",
                 salefactorno="000901",
                 salefactordate="1405/02/10",
                 createddate="1405/02/10",
@@ -1387,6 +1392,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context_data["factors"]), 1)
+        self.assertEqual(response.context_data["factors"][0]["branch_id"], "branch-1")
         fac_item = response.context_data["factors"][0]
         self.assertEqual(fac_item["customer_name"], "بازرگانی نوین")
         self.assertEqual(fac_item["visitor_name"], "مهدی کریمی")
@@ -3142,3 +3148,87 @@ class SharedDocumentSummaryTests(SimpleTestCase):
                 self.assertIn('/sale-requests/DOC1/edit/?from=list', html)
                 self.assertIn('data-delete-url=', html)
                 self.assertIn('js-open-delete-sr', html)
+
+
+class DocumentBranchFilterTests(SimpleTestCase):
+    @patch('core.views.Branches')
+    def test_branch_choices_use_branch_name_and_normalized_guid(self, branches):
+        from core.views import _document_branch_options
+        branches.objects.using.return_value.all.return_value.order_by.return_value = [
+            SimpleNamespace(gbranchid='{BRANCH-1}', branchname='شعبه مرکزی'),
+            SimpleNamespace(gbranchid='BRANCH-2', branchname='شعبه غرب'),
+        ]
+        self.assertEqual(_document_branch_options(), [
+            {'id': 'branch-1', 'name': 'شعبه مرکزی'},
+            {'id': 'branch-2', 'name': 'شعبه غرب'},
+        ])
+        branches.objects.using.assert_called_once_with('plus')
+        branches.objects.using.return_value.all.return_value.order_by.assert_called_once_with('branchname')
+
+    @patch('core.views._document_branch_options', return_value=[])
+    def test_branch_combines_with_region_and_visitor_on_all_lists(self, choices):
+        from core.views import _document_filters
+        rows = [
+            {'id': 1, 'branch_id': 'b1', 'area_id': 'a1', 'area_name': 'شمال', 'visitor_name': 'علی'},
+            {'id': 2, 'branch_id': 'b2', 'area_id': 'a1', 'area_name': 'شمال', 'visitor_name': 'علی'},
+            {'id': 3, 'branch_id': 'b1', 'area_id': 'a2', 'area_name': 'جنوب', 'visitor_name': 'علی'},
+            {'id': 4, 'branch_id': 'b1', 'area_id': 'a1', 'area_name': 'شمال', 'visitor_name': 'سارا'},
+            {'id': 5, 'branch_id': '', 'area_id': 'a1', 'area_name': 'شمال', 'visitor_name': 'علی'},
+        ]
+        for key in ('sale_requests', 'pre_factors', 'factors'):
+            with self.subTest(key=key):
+                context = {key: rows[:]}
+                _document_filters(RequestFactory().get('/', {'branch': '{B1}', 'area': 'a1', 'visitor': 'علی'}), context, key)
+                self.assertEqual(context[key], [rows[0]])
+                self.assertEqual(context['selected_branch'], 'b1')
+                for branch, expected in (('', rows), ('UNKNOWN', [])):
+                    context = {key: rows[:]}
+                    _document_filters(RequestFactory().get('/', {'branch': branch}), context, key)
+                    self.assertEqual(context[key], expected)
+
+    @patch('core.views._document_branch_options', return_value=[])
+    def test_branch_filter_runs_before_display_limit(self, choices):
+        from core.views import _document_filters
+        rows = [dict(branch_id='other', area_id='', area_name='', visitor_name='') for _ in range(160)]
+        wanted = dict(branch_id='wanted', area_id='', area_name='', visitor_name='')
+        context = {'factors': rows + [wanted]}
+        _document_filters(RequestFactory().get('/', {'branch': 'WANTED'}), context, 'factors')
+        self.assertEqual(context['factors'], [wanted])
+
+    def test_branch_dropdown_selection_and_branch_only_reset(self):
+        from django.template.loader import render_to_string
+        html = render_to_string('partials/_document_filters.html', {
+            'branch_options': [{'id': 'b1', 'name': 'شعبه مرکزی'}],
+            'selected_branch': 'b1', 'current_status': '8', 'query': 'مشتری',
+        })
+        self.assertIn('id="branch-filter"', html)
+        self.assertIn('name="branch"', html)
+        self.assertIn('<option value="b1" selected>شعبه مرکزی</option>', html)
+        self.assertIn('حذف فیلتر', html)
+        self.assertIn('status=8&amp;q=', html)
+
+    def test_branch_is_preserved_in_status_and_search_clear_links(self):
+        from html import unescape
+        from urllib.parse import urlparse, parse_qs
+        from django.template.loader import render_to_string
+        import re
+        cases = (
+            ('sale_request', 'sale_requests', SimpleNamespace(salerequeststatuscode=8, salerequeststatusname='پیگیری')),
+            ('pre_factor', 'pre_factors', SimpleNamespace(prefactordetailstatuscode=8, prefactordetailstatusname='پیگیری')),
+            ('factor', 'factors', SimpleNamespace(salefactorstatuscode=8, salefactorstatusname='پیگیری')),
+        )
+        for prefix, key, status in cases:
+            with self.subTest(page=prefix):
+                html = render_to_string(f'core/{prefix}_list.html', {
+                    key: [], 'statuses': [status], 'query': 'مشتری', 'current_status': 'all',
+                    'selected_branch': 'b1', 'selected_area': 'a1', 'selected_visitor': 'علی',
+                })
+                links = [unescape(link) for link in re.findall(r'href="(\?status=[^"]*)"', html)]
+                # The explicit reset link intentionally removes branch/area/visitor.
+                links = [link for link in links if "branch=" in link]
+                self.assertGreaterEqual(len(links), 3)
+                for link in links:
+                    params = parse_qs(urlparse(link).query)
+                    self.assertEqual(params['branch'], ['b1'])
+                    self.assertEqual(params['area'], ['a1'])
+                    self.assertEqual(params['visitor'], ['علی'])
