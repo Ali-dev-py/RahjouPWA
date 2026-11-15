@@ -49,7 +49,7 @@
     {% else %}
     <p class="small text-secondary mb-3">{{ start|persian_digits }} تا {{ end|persian_digits }} · {{ factor_count|persian_digits }} فاکتور</p>
     <section class="income-summary mb-4" aria-label="خلاصه گزارش">
-        <article class="income-total income-total--primary"><span class="small">پورسانت محاسبه‌شده</span><strong>{{ report_total.income|persian_digits|intcomma:False }}</strong><small>ریال · پرداخت‌شده نیست</small></article>
+        <article class="income-total income-total--primary"><span class="small">پورسانت محاسبه‌شده</span><strong>{{ report_total.income|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · پرداخت‌شده نیست</small></article>
         <article class="income-total"><span class="small text-secondary">فروش ناخالص</span><strong>{{ report_total.gross|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · قبل از تخفیف</small></article>
         <article class="income-total"><span class="small text-secondary">مجموع تخفیف</span><strong>{{ report_total.discount|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · فاکتور و ردیف‌ها</small></article>
         <article class="income-total"><span class="small text-secondary">فروش خالص</span><strong>{{ report_total.net|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · پس از تخفیف</small></article>
@@ -72,7 +72,7 @@
         <div class="d-grid gap-2">
         {% for visitor in visitor_summaries %}
             <a class="card border-0 p-3 text-decoration-none text-reset" href="?period={{ period|urlencode }}&amp;start={{ start|urlencode }}&amp;end={{ end|urlencode }}&amp;visitor={{ visitor.id|default:'unassigned'|urlencode }}">
-                <div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ visitor.name }}</strong><span class="text-primary fw-bold">{{ visitor.income|persian_digits|intcomma:False }} ریال</span></div>
+                <div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ visitor.name }}</strong><span class="text-primary fw-bold">{{ visitor.income|floatformat:0|persian_digits|intcomma:False }} ریال</span></div>
                 <small class="text-secondary mt-1">{{ visitor.count|persian_digits }} فاکتور · فروش {{ visitor.gross|floatformat:0|persian_digits|intcomma:False }} ریال</small>
             </a>
         {% endfor %}
@@ -95,7 +95,7 @@
                 <div><dt>مبلغ ناخالص</dt><dd>{{ factor.gross|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
                 <div><dt>تخفیف ({{ factor.discount_percent|floatformat:2|persian_digits }}٪)</dt><dd>{{ factor.discount|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
                 <div><dt>خالص فاکتور</dt><dd>{{ factor.net|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
-                <div class="income-factor-profit"><dt>پورسانت ({{ factor.effective_rate|floatformat:2|persian_digits }}٪)</dt><dd>{{ factor.income|persian_digits|intcomma:False }} ریال</dd></div>
+                <div class="income-factor-profit"><dt>پورسانت ({{ factor.effective_rate|floatformat:2|persian_digits }}٪)</dt><dd>{{ factor.income|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
             </dl>
             {% if factor.over_margin %}<p class="small text-warning-emphasis mb-0 mt-2">تخفیف بیش از ۱۵٪؛ پورسانت این فاکتور صفر است.</p>{% endif %}
             {% if factor.invalid_amount or factor.missing_details %}<p class="small text-danger mb-0 mt-2">مبلغ یا ردیف‌های فاکتور نیازمند بررسی است؛ پورسانت صفر در نظر گرفته شده است.</p>{% endif %}
