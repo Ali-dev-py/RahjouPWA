@@ -26,20 +26,28 @@ def link(visitor='V1', key='F1', integer=1, visitor_int=None):
 
 class CommissionMathTests(SimpleTestCase):
     def test_requested_examples_and_zero_floor(self):
-        for discount, expected in ((0, 5000000), (5000000, 3000000),
-                                   (10000000, 1500000), (15000000, 0), (20000000, 0)):
+        for discount, expected in ((0, 5000000), (5000000, 3333333),
+                                   (10000000, 1666667), (15000000, 0), (20000000, 0)):
             with self.subTest(discount=discount):
                 self.assertEqual(commission(100000000, discount)['income'], Decimal(expected))
         self.assertTrue(commission(100, 16)['over_margin'])
         self.assertFalse(commission(100, 15)['over_margin'])
 
-    def test_no_discount_exception_does_not_change_discounted_formula(self):
+    def test_five_percent_without_discount_and_one_third_remaining_margin(self):
         undiscounted = commission(100000000, 0)
         self.assertEqual(undiscounted['income'], 5000000)
         self.assertEqual(undiscounted['effective_rate'], 5)
-        self.assertEqual(commission(100000000, '0.01')['income'], 4500000)
-        self.assertEqual(commission(100000000, 5000000)['income'], 3000000)
-        self.assertEqual(commission(100000000, 10000000)['income'], 1500000)
+        self.assertEqual(commission(100000000, '0.01')['income'], 5000000)
+        self.assertEqual(commission(100000000, 5000000)['income'], 3333333)
+        self.assertEqual(commission(100000000, 10000000)['income'], 1666667)
+
+    def test_fractional_discount_rate_is_not_rounded_before_calculation(self):
+        gross, discount = Decimal('123456789'), Decimal('1234567.89')
+        result = commission(gross, discount)
+        self.assertEqual(result['discount_percent'], 1)
+        expected = (gross * Decimal('0.14') / 3).quantize(Decimal('1'), rounding='ROUND_HALF_UP')
+        self.assertEqual(result['income'], expected)
+        self.assertEqual(commission(100, Decimal('10.5'))['income'], 2)
 
     def test_decimal_precision_rounding_and_invalid_amounts(self):
         self.assertEqual(commission('100.5', 0)['income'], Decimal('5'))
@@ -127,8 +135,8 @@ class IncomeReportTests(SimpleTestCase):
     def test_combines_header_and_line_discount_exactly_once_and_unassigned_has_no_income(self):
         report = self.report()
         self.assertEqual(report['report_rows'][0]['discount'], 5000000)
-        self.assertEqual(report['report_rows'][0]['income'], 3000000)
-        self.assertEqual(report['report_total']['income'], 8000000)
+        self.assertEqual(report['report_rows'][0]['income'], 3333333)
+        self.assertEqual(report['report_total']['income'], 8333333)
         self.assertEqual(report['report_total']['gross'], 300000000)
         self.assertEqual(report['unassigned_count'], 1)
         self.assertEqual(report['report_rows'][2]['income'], 0)
@@ -143,7 +151,7 @@ class IncomeReportTests(SimpleTestCase):
         self.details.objects.using.return_value.filter.return_value.values.return_value = all_details[:1]
         report = self.report(Obj(utitle='ویزیتور', uname=' علي  كريمي '), 'v2')
         self.assertEqual([r['id'] for r in report['report_rows']], ['F1'])
-        self.assertEqual(report['report_total']['income'], 3000000)
+        self.assertEqual(report['report_total']['income'], 3333333)
         self.assertEqual(report['report_visitors'], [])
         detail_ids = self.details.objects.using.return_value.filter.call_args.kwargs['gsalefactormasterid__in']
         self.assertNotIn('f2', detail_ids)

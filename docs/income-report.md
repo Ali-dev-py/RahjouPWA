@@ -12,12 +12,12 @@ and does not use the database's pre-existing `Porsant`/`PorsantPrice` values.
 - Discount = sum of detail `Discount` + master `Discount`, matching the existing
   factor PDF. Do not also subtract `PercentDiscount` or allocated `Discount_Koli`
   fields: that would potentially double-count the same discount.
-- No-discount exception (confirmed correction): when discount is zero, commission
-  = `gross * 0.05` (5%, not 4.5%).
-- With a positive discount, keep the previous formula:
-  `max(0, gross * 0.15 - discount) * 0.30`.
-- This is intentionally a piecewise rule: any positive discount switches to the
-  discounted formula, rather than proportionally reducing a 5% starting rate.
+- Total discount percent = `discount / gross * 100` (do not round this before
+  computing commission).
+- Commission = `gross * max(0, 0.15 - discount / gross) / 3`, equivalently
+  `max(0, gross * 0.15 - discount) / 3`.
+- With no discount the share is exactly `gross * 0.05` (5%). This is continuous
+  with the discounted formula; the previous 30% multiplier is no longer used.
 - Use Decimal arithmetic, with sufficient precision for SQL decimal fields.
   Round commission per factor to a whole rial, half-up; totals sum the rounded
   per-factor commissions, so the list reconciles with the dashboard total.
@@ -32,8 +32,8 @@ Examples for gross 100,000,000 rials:
 | Discount | Commission |
 | --- | --- |
 | 0 | 5,000,000 |
-| 5,000,000 (5%) | 3,000,000 |
-| 10,000,000 (10%) | 1,500,000 |
+| 5,000,000 (5%) | 3,333,333 |
+| 10,000,000 (10%) | 1,666,667 |
 | 15,000,000 or more | 0 |
 
 ## Attribution and access
