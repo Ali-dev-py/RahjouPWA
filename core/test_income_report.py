@@ -232,6 +232,7 @@ class HomeOverviewTests(SimpleTestCase):
         from django.template.loader import render_to_string
         html = render_to_string('core/dashboard.html', context)
         self.assertEqual(html.count('class="card home-summary-card'), 4)
+        self.assertEqual(html.count("home-summary-card--white"), 2)
         self.assertIn('href="/income-report/?period=month"', html)
         self.assertIn('فعالیت‌های اخیر', html)
         self.assertIn('فروشگاه نمونه', html)

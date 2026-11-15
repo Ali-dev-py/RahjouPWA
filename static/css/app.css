@@ -1261,11 +1261,19 @@ textarea {
 
 /* Compact home overview; the full income report is a separate screen. */
 .home-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
-.home-summary-card { min-width: 0; padding: .85rem; border-radius: 1rem; color: var(--rahjou-text); gap: .6rem; }
-.home-summary-card > div { font-size: .76rem; font-weight: 600; }
+.home-summary-card { min-width: 0; padding: .9rem; border-radius: 1rem; color: var(--rahjou-text); gap: .6rem; box-shadow: 0 .15rem .6rem rgb(25 28 29 / 4%); transition: box-shadow 150ms ease; }
+.home-summary-card > div { font-size: .76rem; font-weight: 600; line-height: 1.7; }
 .home-summary-card .material-symbols-outlined { font-size: 1.3rem; flex-shrink: 0; }
-.home-summary-card strong { font-size: clamp(1rem, 3.5vw, 1.35rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.home-summary-card small { font-size: .7rem; }
+.home-summary-card strong { margin-top: auto; line-height: 1.65; font-size: clamp(1rem, 3.5vw, 1.35rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.home-summary-card small { font-size: .7rem; line-height: 1.6; }
+.home-summary-card--white { background: #fff; color: var(--rahjou-text); }
+.home-summary-card--white small { color: #616774; }
+@media (hover: hover) {
+    .home-summary-card:hover { box-shadow: 0 .3rem .9rem rgb(25 28 29 / 9%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-summary-card { transition: none; }
+}
 .home-summary-card--primary { background: var(--rahjou-primary); color: #fff; }
 .home-summary-card--accent { background: var(--rahjou-accent-soft); color: var(--rahjou-accent-text); }
 .home-summary-card:focus-visible { outline: 3px solid var(--rahjou-primary); outline-offset: 3px; }

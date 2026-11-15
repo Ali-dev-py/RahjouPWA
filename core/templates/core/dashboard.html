@@ -25,11 +25,11 @@
                     <div class="d-flex align-items-center justify-content-between gap-2"><span>تعداد فروش</span><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span></div>
                     <strong>{{ factor_count|persian_digits }}</strong><small>فاکتور در ماه جاری</small>
                 </a>
-                <a class="card home-summary-card border-0 text-decoration-none" href="{{ income_report_url }}">
+                <a class="card home-summary-card home-summary-card--white border-0 text-decoration-none" href="{{ income_report_url }}">
                     <div class="d-flex align-items-center justify-content-between gap-2"><span>فروش خالص</span><span class="material-symbols-outlined text-primary" aria-hidden="true">payments</span></div>
                     <strong>{{ report_total.net|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · پس از تخفیف</small>
                 </a>
-                <a class="card home-summary-card border-0 text-decoration-none" href="{{ income_report_url }}">
+                <a class="card home-summary-card home-summary-card--white border-0 text-decoration-none" href="{{ income_report_url }}">
                     <div class="d-flex align-items-center justify-content-between gap-2"><span>مجموع تخفیف</span><span class="material-symbols-outlined text-primary" aria-hidden="true">sell</span></div>
                     <strong>{{ report_total.discount|floatformat:0|persian_digits|intcomma:False }}</strong><small>ریال · فاکتور و ردیف‌ها</small>
                 </a>
