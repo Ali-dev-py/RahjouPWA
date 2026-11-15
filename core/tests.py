@@ -142,6 +142,7 @@ class RouteAndPWASmokeTests(SimpleTestCase):
     def test_protected_sale_request_routes_redirect_when_anonymous(self) -> None:
         protected_urls = [
             reverse("core:dashboard"),
+            reverse("core:income_report"),
             reverse("core:sale_request_list"),
             reverse("core:sale_request_detail"),
             reverse("core:sale_request_detail", kwargs={"pk": "SR-1"}),
@@ -231,7 +232,8 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
 
     @patch("core.income_report.build_report")
     @patch("core.views.TuaUser")
-    def test_dashboard_shows_factor_income_report(self, mock_user, mock_report):
+    @patch.object(DashboardView, "_load_recent_activities", return_value=[])
+    def test_dashboard_shows_factor_income_report(self, mock_activities, mock_user, mock_report):
         mock_user.objects.using.return_value.filter.return_value.first.return_value = self.user
         mock_report.return_value = {
             "report_rows": [], "report_total": {"gross": 0, "discount": 0, "net": 0, "income": 0},
@@ -244,7 +246,10 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         response.render()
         self.assertEqual(response.status_code, 200)
         self.assertIn("report_total", response.context_data)
-        self.assertIn("پورسانت محاسبه‌شده", response.content.decode())
+        self.assertIn("سود فروش / پورسانت", response.content.decode())
+        self.assertIn("فعالیت‌های اخیر", response.content.decode())
+        self.assertNotIn('id="report-period"', response.content.decode())
+        self.assertIn(reverse("core:income_report"), response.content.decode())
         self.assertIn(reverse("core:sale_request_create"), response.content.decode())
         mock_report.assert_called_once()
 

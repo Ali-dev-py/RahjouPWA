@@ -8,6 +8,7 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    path("income-report/", IncomeReportView.as_view(), name="income_report"),
     path("customers/", CustomersView.as_view(), name="customers"),
     path("customers/create/", CustomerCreateView.as_view(), name="customer_create"),
     path("customers/<str:pk>/edit/", CustomerEditView.as_view(), name="customer_edit"),

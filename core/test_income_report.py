@@ -9,7 +9,7 @@ from django.urls import reverse
 
 from .income_report import (commission, report_period, parse_date, guid_batches,
                             build_report, factor_attribution)
-from .views import DashboardView
+from .views import IncomeReportView, DashboardView
 
 
 def master(key='F1', visitor='V1', discount=0, customer='C1', number=1):
@@ -26,12 +26,20 @@ def link(visitor='V1', key='F1', integer=1, visitor_int=None):
 
 class CommissionMathTests(SimpleTestCase):
     def test_requested_examples_and_zero_floor(self):
-        for discount, expected in ((0, 4500000), (5000000, 3000000),
+        for discount, expected in ((0, 5000000), (5000000, 3000000),
                                    (10000000, 1500000), (15000000, 0), (20000000, 0)):
             with self.subTest(discount=discount):
                 self.assertEqual(commission(100000000, discount)['income'], Decimal(expected))
         self.assertTrue(commission(100, 16)['over_margin'])
         self.assertFalse(commission(100, 15)['over_margin'])
+
+    def test_no_discount_exception_does_not_change_discounted_formula(self):
+        undiscounted = commission(100000000, 0)
+        self.assertEqual(undiscounted['income'], 5000000)
+        self.assertEqual(undiscounted['effective_rate'], 5)
+        self.assertEqual(commission(100000000, '0.01')['income'], 4500000)
+        self.assertEqual(commission(100000000, 5000000)['income'], 3000000)
+        self.assertEqual(commission(100000000, 10000000)['income'], 1500000)
 
     def test_decimal_precision_rounding_and_invalid_amounts(self):
         self.assertEqual(commission('100.5', 0)['income'], Decimal('5'))
@@ -120,7 +128,7 @@ class IncomeReportTests(SimpleTestCase):
         report = self.report()
         self.assertEqual(report['report_rows'][0]['discount'], 5000000)
         self.assertEqual(report['report_rows'][0]['income'], 3000000)
-        self.assertEqual(report['report_total']['income'], 7500000)
+        self.assertEqual(report['report_total']['income'], 8000000)
         self.assertEqual(report['report_total']['gross'], 300000000)
         self.assertEqual(report['unassigned_count'], 1)
         self.assertEqual(report['report_rows'][2]['income'], 0)
@@ -164,13 +172,13 @@ class IncomeReportTests(SimpleTestCase):
 
 class IncomeDashboardTests(SimpleTestCase):
     def request(self, params):
-        request = RequestFactory().get(reverse('core:dashboard'), params)
+        request = RequestFactory().get(reverse('core:income_report'), params)
         request.plus_user = Obj(utitle='ویزیتور', uname='علی')
         return request
 
     @patch('core.income_report.build_report')
     def test_invalid_dates_do_not_query_financial_data(self, build):
-        view = DashboardView()
+        view = IncomeReportView()
         view.request = self.request({'period': 'custom', 'start': 'bad', 'end': 'bad'})
         context = view.get_context_data()
         self.assertIn('report_error', context)
@@ -178,7 +186,7 @@ class IncomeDashboardTests(SimpleTestCase):
 
     @patch('core.income_report.build_report', side_effect=DatabaseError('sensitive database info'))
     def test_database_failure_is_error_not_false_zero_report(self, build):
-        view = DashboardView()
+        view = IncomeReportView()
         view.request = self.request({})
         context = view.get_context_data()
         self.assertIn('report_error', context)
@@ -186,22 +194,93 @@ class IncomeDashboardTests(SimpleTestCase):
         self.assertNotIn('sensitive', context['report_error'])
 
     @patch('core.income_report.build_report')
-    @patch.object(DashboardView, '_visitor_customer_ids', return_value=[])
+    @patch.object(IncomeReportView, '_visitor_customer_ids', return_value=[])
     def test_pagination_full_totals_and_visitor_selector_hidden(self, scope, build):
         rows = [dict(id=f'F{i}', customer_id='c1', customer_name='مشتری', gross=100,
-                     discount=0, net=100, discount_percent=0, effective_rate=4.5,
+                     discount=0, net=100, discount_percent=0, effective_rate=5,
                      income=5, date='1405/08/01', number=i) for i in range(25)]
         build.return_value = dict(report_rows=rows, report_total=dict(gross=2500, discount=0, net=2500, income=125),
                                   factor_count=25, is_visitor_report=True, selected_report_visitor='',
                                   report_visitors=[], visitor_summaries=[], warning_count=0, unassigned_count=0)
-        view = DashboardView()
+        view = IncomeReportView()
         view.request = self.request({'page': '2'})
         context = view.get_context_data()
         self.assertEqual(len(context['report_page']), 5)
         self.assertEqual(context['report_total']['income'], 125)
         self.assertFalse(context['report_page'][0]['can_open'])
         from django.template.loader import render_to_string
-        html = render_to_string('core/dashboard.html', context)
+        html = render_to_string('core/income_report.html', context)
         self.assertNotIn('id="report-visitor"', html)
         self.assertNotIn('/factors/detail/F', html)
         self.assertIn('پورسانت من', html)
+
+
+class HomeOverviewTests(SimpleTestCase):
+    def setUp(self):
+        self.view = DashboardView()
+        self.view.request = RequestFactory().get(reverse('core:dashboard'), {'period': 'custom', 'visitor': 'forged'})
+        self.view.request.plus_user = Obj(gucode='USER1', utitle='ویزیتور', uname='علی')
+
+    @patch('core.income_report.build_report')
+    @patch.object(DashboardView, '_load_recent_activities')
+    def test_home_has_four_small_cards_and_activity_feed_not_report_form(self, activities, build):
+        activities.return_value = [dict(id='SR1', sale_request_no='123', date='1405/08/01',
+                                       customer_name='فروشگاه نمونه', visitor_name='علی',
+                                       total_amount=1000, status_name='ثبت شده')]
+        build.return_value = dict(report_total=dict(income=50, net=1000, discount=0), factor_count=1)
+        context = self.view.get_context_data()
+        from django.template.loader import render_to_string
+        html = render_to_string('core/dashboard.html', context)
+        self.assertEqual(html.count('class="card home-summary-card'), 4)
+        self.assertIn('href="/income-report/?period=month"', html)
+        self.assertIn('فعالیت‌های اخیر', html)
+        self.assertIn('فروشگاه نمونه', html)
+        self.assertIn(reverse('core:sale_request_detail', kwargs={'pk': 'SR1'}), html)
+        self.assertNotIn('id="report-period"', html)
+        self.assertNotIn('ریز پورسانت فاکتورها', html)
+        self.assertNotIn('report_page', context)
+        # Home is always a compact current-month overview, not a forged filter.
+        self.assertEqual(len(build.call_args.args), 3)
+        self.assertEqual(build.call_args.args[1][-2:], '01')
+
+    @patch('core.income_report.build_report', side_effect=DatabaseError('private'))
+    @patch.object(DashboardView, '_load_recent_activities', return_value=[{'id': 'SR1'}])
+    def test_summary_failure_does_not_hide_recent_activities(self, activities, build):
+        context = self.view.get_context_data()
+        self.assertIn('report_error', context)
+        self.assertNotIn('report_total', context)
+        self.assertEqual(context['recent_activities'], [{'id': 'SR1'}])
+        self.assertNotIn('private', context['report_error'])
+
+    @patch('core.income_report.build_report')
+    @patch.object(DashboardView, '_load_recent_activities', side_effect=DatabaseError('private'))
+    def test_activity_failure_does_not_hide_summary(self, activities, build):
+        build.return_value = dict(report_total={'income': 50}, factor_count=1)
+        context = self.view.get_context_data()
+        self.assertEqual(context['report_total']['income'], 50)
+        self.assertIn('activity_error', context)
+
+    @patch('core.views.Salerequeststatus')
+    @patch('core.views._resolve_sale_request_visitors', return_value={'sr1': 'علی'})
+    @patch('core.views._batch_sale_request_totals', return_value=({'sr1': 1000}, {}))
+    @patch.object(DashboardView, '_customers')
+    @patch.object(DashboardView, '_documents')
+    def test_recent_feed_uses_scoped_documents_and_current_user(self, documents, customers, totals, visitors, statuses):
+        documents.return_value.filter.return_value.order_by.return_value = [Obj(
+            gsalerequestmasterid='SR1', salerequestmasterid=1, gcustomerid='C1',
+            salerequestno='123', salerequestdate='1405/08/01', createddate='',
+            salerequeststatuscode=1, requestman='')]
+        customers.return_value.filter.return_value = [Obj(gcustomerid='C1', custname='مشتری')]
+        statuses.objects.using.return_value.all.return_value = [Obj(salerequeststatuscode=1, salerequeststatusname='ثبت شده')]
+        rows = self.view._load_recent_activities()
+        documents.return_value.filter.assert_called_once_with(gcreatedby='USER1')
+        self.assertEqual(rows[0]['sale_request_no'], '123')
+        self.assertEqual(rows[0]['customer_name'], 'مشتری')
+        self.assertEqual(rows[0]['visitor_name'], 'علی')
+        self.assertEqual(rows[0]['total_amount'], 1000)
+
+    def test_report_route_is_separate_and_requires_login(self):
+        self.assertEqual(reverse('core:income_report'), '/income-report/')
+        response = self.client.get(reverse('core:income_report'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('core:login'), response['Location'])
