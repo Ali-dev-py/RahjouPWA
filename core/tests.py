@@ -3232,3 +3232,14 @@ class DocumentBranchFilterTests(SimpleTestCase):
                     self.assertEqual(params['branch'], ['b1'])
                     self.assertEqual(params['area'], ['a1'])
                     self.assertEqual(params['visitor'], ['علی'])
+
+
+class DocumentFilterLayoutTests(SimpleTestCase):
+    def test_three_filters_share_one_equal_width_row(self):
+        from django.template.loader import render_to_string
+        html = render_to_string('partials/_document_filters.html', {})
+        self.assertEqual(html.count('class="col-4"'), 3)
+        self.assertNotIn('class="col-6"', html)
+        self.assertIn('class="col-12 d-flex gap-2"', html)
+        for field in ('area-filter', 'visitor-filter', 'branch-filter'):
+            self.assertIn(f'id="{field}"', html)
