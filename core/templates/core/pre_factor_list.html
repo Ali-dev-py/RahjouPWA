@@ -66,43 +66,12 @@
         </div>
 
         <!-- Pre-Factor Cards List -->
-        <section class="d-grid gap-3" aria-label="فهرست پیش‌فاکتورها">
+        <section class="d-grid gap-2" aria-label="فهرست پیش‌فاکتورها">
             {% for pre_factor in pre_factors %}
-                <article class="card sale-request-card border-0 position-relative overflow-hidden">
+                {% url 'core:pre_factor_detail' pk=pre_factor.id as document_url %}
+                <article class="card activity-card document-summary border-0 position-relative">
                     <div class="card-body p-3">
-                        <div class="document-card-header d-flex justify-content-between align-items-start gap-2 mb-3">
-                            <div class="document-card-heading min-width-0">
-                                <small class="text-secondary d-block">پیش‌فاکتور {{ pre_factor.number|persian_digits }}</small>
-                                <h2 class="customer-identity h5 fw-bold mb-0 mt-1">
-                                    <a class="customer-identity__name stretched-link text-reset text-decoration-none"
-                                       href="{% url 'core:pre_factor_detail' pk=pre_factor.id %}">{{ pre_factor.customer_name }}</a>
-                                    {% include "partials/_customer_region_badge.html" with region_name=pre_factor.area_name %}
-                                </h2>
-                                <small class="text-secondary d-flex align-items-center gap-1 mt-1 text-truncate">
-                                    <span class="material-symbols-outlined app-symbol-sm flex-shrink-0" aria-hidden="true">badge</span>
-                                    <span class="text-truncate">ویزیتور: {{ pre_factor.visitor_name }}</span>
-                                </small>
-                            </div>
-                            <span class="status-chip {{ pre_factor.chip_class }} flex-shrink-0">
-                                {% if pre_factor.dot_class %}
-                                    <span class="{{ pre_factor.dot_class }}" aria-hidden="true"></span>
-                                {% endif %}
-                                {{ pre_factor.status_name }}
-                            </span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top">
-                            <span class="small text-secondary d-flex align-items-center gap-1">
-                                <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
-                                {{ pre_factor.date|persian_digits }}
-                            </span>
-                            <div class="text-start">
-                                <small class="text-secondary d-block mb-1">مبلغ کل</small>
-                                <strong class="sale-request-card__amount d-inline-block fs-6 text-primary">
-                                    {{ pre_factor.total_amount|persian_digits|intcomma:False }}
-                                </strong>
-                                <small class="text-secondary">ریال</small>
-                            </div>
-                        </div>
+                        {% include "partials/_document_card_body.html" with document=pre_factor document_label="پیش‌فاکتور" document_url=document_url amount=pre_factor.total_amount %}
                     </div>
                 </article>
             {% empty %}

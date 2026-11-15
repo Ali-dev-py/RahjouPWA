@@ -1,6 +1,8 @@
 # Factor commission dashboard
 
-The dashboard is a **read-only calculated commission report**, not a payroll,
+The home dashboard shows four compact current-month cards and recent Sale Requests.
+The profit card links to `/income-report/`, the full period-selectable report.
+This is a **read-only calculated commission report**, not a payroll,
 receivables, payment, or actual cost-of-goods profit ledger. It writes no records
 and does not use the database's pre-existing `Porsant`/`PorsantPrice` values.
 
@@ -10,7 +12,12 @@ and does not use the database's pre-existing `Porsant`/`PorsantPrice` values.
 - Discount = sum of detail `Discount` + master `Discount`, matching the existing
   factor PDF. Do not also subtract `PercentDiscount` or allocated `Discount_Koli`
   fields: that would potentially double-count the same discount.
-- Commission = `max(0, gross * 0.15 - discount) * 0.30`.
+- No-discount exception (confirmed correction): when discount is zero, commission
+  = `gross * 0.05` (5%, not 4.5%).
+- With a positive discount, keep the previous formula:
+  `max(0, gross * 0.15 - discount) * 0.30`.
+- This is intentionally a piecewise rule: any positive discount switches to the
+  discounted formula, rather than proportionally reducing a 5% starting rate.
 - Use Decimal arithmetic, with sufficient precision for SQL decimal fields.
   Round commission per factor to a whole rial, half-up; totals sum the rounded
   per-factor commissions, so the list reconciles with the dashboard total.
@@ -24,7 +31,7 @@ Examples for gross 100,000,000 rials:
 
 | Discount | Commission |
 | --- | --- |
-| 0 | 4,500,000 |
+| 0 | 5,000,000 |
 | 5,000,000 (5%) | 3,000,000 |
 | 10,000,000 (10%) | 1,500,000 |
 | 15,000,000 or more | 0 |
