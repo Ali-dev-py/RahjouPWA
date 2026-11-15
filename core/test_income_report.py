@@ -293,3 +293,37 @@ class HomeOverviewTests(SimpleTestCase):
         response = self.client.get(reverse('core:income_report'))
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse('core:login'), response['Location'])
+
+
+class IncomeMoneyDisplayTests(SimpleTestCase):
+    def test_shared_factor_amount_is_whole_rials(self):
+        from django.template.loader import render_to_string
+        from .templatetags.i18n_extras import persian_digits
+        for value, expected in (('1234567.0000000000', '1,234,567'),
+                                ('1234567.6000000000', '1,234,568'),
+                                ('0.0000000000', '0'), ('-1234.6000000000', '-1,235')):
+            with self.subTest(value=value):
+                html = render_to_string('partials/_document_card_body.html', {
+                    'document': {}, 'document_label': 'فاکتور', 'amount': Decimal(value),
+                })
+                self.assertIn(persian_digits(expected) + ' ریال', html)
+                self.assertNotIn('.', html)
+
+    def test_report_money_is_integer_but_percentages_keep_decimals(self):
+        import re
+        from django.template.loader import render_to_string
+        amount = Decimal('1234567.6000000000')
+        totals = dict(gross=amount, discount=amount, net=amount, income=amount)
+        row = dict(totals, id='F1', number='1', date='1405/08/01', customer_name='مشتری',
+                   discount_percent=Decimal('5.25'), effective_rate=Decimal('2.75'),
+                   can_open=False)
+        html = render_to_string('core/income_report.html', {
+            'report_page': [row], 'report_total': totals,
+            'visitor_summaries': [dict(id='v1', name='علی', count=1, gross=amount, income=amount)],
+        })
+        self.assertNotIn('۶۰۰۰۰۰۰۰۰۰', html)
+        self.assertRegex(html, r'۵[.٫]۲۵')
+        self.assertRegex(html, r'۲[.٫]۷۵')
+        for value in re.findall(r'([۰-۹0-9,٬.٫\-]+)\s*ریال', html):
+            self.assertNotIn('.', value)
+            self.assertNotIn('٫', value)

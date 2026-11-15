@@ -11,5 +11,5 @@
 {% if document.description %}<small class="d-block text-secondary mt-1 document-summary-description">{{ document.description }}</small>{% endif %}
 <div class="document-summary-footer d-flex flex-wrap justify-content-between gap-2 mt-2 small">
     <span class="text-secondary">{{ document.date|persian_digits }}{% if document.time %} · {{ document.time|persian_digits }}{% endif %}</span>
-    <span class="text-primary fw-semibold"><span class="visually-hidden">مبلغ کل: </span>{{ amount|persian_digits|intcomma:False }} ریال</span>
+    <span class="text-primary fw-semibold"><span class="visually-hidden">مبلغ کل: </span>{{ amount|floatformat:0|persian_digits|intcomma:False }} ریال</span>
 </div>
