@@ -58,10 +58,11 @@ def commission(gross, discount):
     gross, discount = money(gross), money(discount)
     invalid = gross <= ZERO or discount < ZERO
     margin = gross * Decimal('0.15') - discount
-    # Confirmed exception: no discount earns 5%; discounted factors retain
-    # the original 30% of remaining 15% margin formula.
+    # discount% = discount / gross * 100. Algebraically, the requested
+    # gross * (15% - discount%) / 3 equals (gross * 0.15 - discount) / 3.
+    # Avoid rounding the discount percentage before computing income.
     income = ZERO if invalid else (gross * Decimal('0.05') if discount == ZERO
-                                   else max(ZERO, margin) * Decimal('0.30'))
+                                   else max(ZERO, margin) / Decimal('3'))
     return {
         'gross': gross, 'discount': discount, 'net': gross - discount,
         'discount_percent': discount / gross * 100 if gross > ZERO else ZERO,
