@@ -3056,3 +3056,89 @@ class MobilePresentationTests(SimpleTestCase):
         self.assertIn('حذف فیلتر', html)
         self.assertIn('status=8&amp;q=', html)
         self.assertNotIn('btn-sm', html)
+
+
+class SharedDocumentSummaryTests(SimpleTestCase):
+    def document(self):
+        return dict(id='DOC1', number='123', customer_name='فروشگاه نمونه',
+                    area_name='شمال', visitor_name='علی', total_amount=100000,
+                    amount=100000, net=100000, date='1405/08/01', status_name='ثبت شده',
+                    chip_class='status-chip--approved', is_initially_visible=True,
+                    kind='factor', detail_url='/factors/detail/DOC1/', can_open=True)
+
+    def test_lists_and_home_use_the_same_document_body(self):
+        import re
+        from django.template.loader import render_to_string
+        cases = [('core/dashboard.html', {'recent_activities': [self.document()]}),
+                 ('core/sale_request_list.html', {'sale_requests': [self.document()]}),
+                 ('core/pre_factor_list.html', {'pre_factors': [self.document()]}),
+                 ('core/factor_list.html', {'factors': [self.document()]})]
+        for template, context in cases:
+            with self.subTest(template=template):
+                html = render_to_string(template, context)
+                self.assertIn('card activity-card document-summary', html)
+                heading = re.search(r'<h2 class="customer-identity.*?</h2>', html, re.S).group()
+                self.assertIn('فروشگاه نمونه', heading)
+                self.assertIn('customer-region', heading)
+                self.assertIn('شمال', heading)
+                self.assertIn('document-summary-footer', html)
+                self.assertIn('ویزیتور: علی', html)
+                self.assertNotIn('document-card-header', html)
+
+    def test_customer_factor_and_report_reuse_body_and_keep_extra_data(self):
+        from django.template.loader import render_to_string
+        html = render_to_string('core/customer_detail.html', {
+            'customer': SimpleNamespace(custname='مشتری', gcustomerid='C1'),
+            'customer_pk': 'C1', 'transactions': [self.document()],
+        })
+        self.assertIn('document-summary-header', html)
+        self.assertIn('data-tx-kind="factor"', html)
+        self.assertIn('data-sort-token=', html)
+        self.assertIn('شمال', html)
+        html = render_to_string('core/income_report.html', {
+            'report_page': [self.document()], 'period': 'month',
+            'report_total': dict(income=5000, net=100000, gross=100000, discount=0),
+        })
+        self.assertIn('document-summary-header', html)
+        self.assertIn('income-breakdown', html)
+        self.assertIn('شمال', html)
+
+    def test_missing_area_and_no_link_are_safe(self):
+        from django.template.loader import render_to_string
+        doc = self.document()
+        doc['area_name'] = None
+        html = render_to_string('partials/_document_card_body.html', {
+            'document': doc, 'document_label': 'فاکتور', 'document_url': '', 'amount': 0,
+        })
+        self.assertIn('بدون منطقه', html)
+        self.assertNotIn('<a ', html)
+        self.assertIn('۰ ریال', html)
+
+    def test_action_links_remain_separate_from_main_card_link(self):
+        from html.parser import HTMLParser
+        from django.template.loader import render_to_string
+        class LinkParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.depth = self.max_depth = 0
+            def handle_starttag(self, tag, attrs):
+                if tag == 'a':
+                    self.depth += 1
+                    self.max_depth = max(self.depth, self.max_depth)
+            def handle_endtag(self, tag):
+                if tag == 'a':
+                    self.depth -= 1
+        for shortages, modify in ((True, False), (False, True)):
+            doc = self.document()
+            doc.update(can_view_shortages=shortages, can_modify=modify)
+            html = render_to_string('core/sale_request_list.html', {'sale_requests': [doc]})
+            parser = LinkParser()
+            parser.feed(html)
+            self.assertEqual(parser.max_depth, 1)
+            if shortages:
+                self.assertIn('/sale-requests/DOC1/shortages/?from=list', html)
+                self.assertNotIn('data-sr-number=', html)
+            else:
+                self.assertIn('/sale-requests/DOC1/edit/?from=list', html)
+                self.assertIn('data-delete-url=', html)
+                self.assertIn('js-open-delete-sr', html)

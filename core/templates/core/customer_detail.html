@@ -13,10 +13,6 @@
             gap: 0.65rem;
         }
 
-        .customer-tx-card--factor {
-            border-inline-start: 0.25rem solid var(--rahjou-primary, #0b57d0) !important;
-        }
-
         .customer-tx-card--pay {
             border-inline-start: 0.25rem solid #198754 !important;
         }
@@ -187,64 +183,13 @@
             {% for tx in transactions %}
                 {% if tx.kind == 'factor' %}
                     <!-- Sale Factor Card (Clickable -> Factor Detail Page) -->
-                    <article class="card sale-request-card customer-tx-card customer-tx-card--factor border-0 position-relative overflow-hidden{% if not tx.is_initially_visible %} d-none{% endif %}"
+                    <article class="card activity-card document-summary customer-tx-card customer-tx-card--factor border-0 position-relative overflow-hidden{% if not tx.is_initially_visible %} d-none{% endif %}"
                              data-tx-kind="factor"
                              data-has-date="{% if tx.has_date %}1{% else %}0{% endif %}"
                              data-sort-token="{{ tx.sort_token }}"
                              data-seq="{{ tx.sort_seq }}">
                         <div class="card-body p-3">
-                            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                                <div class="min-width-0">
-                                    <div class="d-flex align-items-center gap-1 mb-1">
-                                        <span class="material-symbols-outlined fs-6 text-primary" aria-hidden="true">receipt_long</span>
-                                        <small class="fw-bold text-primary">فاکتور فروش</small>
-                                        {% if tx.number %}
-                                            <small class="text-secondary">#{{ tx.number|persian_digits }}</small>
-                                        {% endif %}
-                                    </div>
-                                    <h2 class="h6 fw-bold mb-0 text-truncate">
-                                        {% if tx.detail_url %}
-                                            <a class="stretched-link text-reset text-decoration-none"
-                                               href="{{ tx.detail_url }}">
-                                                فاکتور شماره {{ tx.number|default:"—"|persian_digits }}
-                                            </a>
-                                        {% else %}
-                                            فاکتور شماره {{ tx.number|default:"—"|persian_digits }}
-                                        {% endif %}
-                                    </h2>
-                                    {% if tx.description %}
-                                        <small class="text-secondary d-block text-truncate mt-1">{{ tx.description }}</small>
-                                    {% endif %}
-                                </div>
-                                <span class="status-chip {{ tx.chip_class }} flex-shrink-0">
-                                    {% if tx.dot_class %}
-                                        <span class="{{ tx.dot_class }}" aria-hidden="true"></span>
-                                    {% endif %}
-                                    {{ tx.status_name }}
-                                </span>
-                            </div>
-
-                            <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top mt-2">
-                                <span class="small text-secondary d-inline-flex align-items-center gap-1">
-                                    <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
-                                    {{ tx.date|persian_digits }}
-                                    {% if tx.time %}
-                                        <span class="me-1">{{ tx.time|persian_digits }}</span>
-                                    {% endif %}
-                                </span>
-
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="text-end">
-                                        <strong class="text-dark">
-                                            {{ tx.amount|persian_digits|intcomma:False }}
-                                        </strong>
-                                        <small class="text-secondary">ریال</small>
-                                    </div>
-                                    <span class="sale-request-card__download material-symbols-outlined text-primary"
-                                          aria-hidden="true"
-                                          title="مشاهده جزئیات فاکتور">chevron_left</span>
-                                </div>
-                            </div>
+                            {% include "partials/_document_card_body.html" with document=tx document_label="فاکتور" document_url=tx.detail_url amount=tx.amount %}
                         </div>
                     </article>
                 {% else %}

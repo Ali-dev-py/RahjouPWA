@@ -1,0 +1,15 @@
+{% load humanize i18n_extras %}
+<div class="document-summary-header d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
+    <strong class="text-dark">{{ document_label }} {{ document.number|persian_digits }}</strong>
+    {% if document.status_name %}<span class="status-chip {{ document.chip_class }}">{% if document.dot_class %}<span class="{{ document.dot_class }}" aria-hidden="true"></span>{% endif %}{{ document.status_name }}</span>{% endif %}
+</div>
+<h2 class="customer-identity h6 fw-semibold mb-0">
+    {% if document_url %}<a class="customer-identity__name stretched-link text-dark text-decoration-none" href="{{ document_url }}">{{ document.customer_name }}</a>{% else %}<span class="customer-identity__name text-dark">{{ document.customer_name }}</span>{% endif %}
+    {% include "partials/_customer_region_badge.html" with region_name=document.area_name|default:"بدون منطقه" %}
+</h2>
+{% if document.visitor_name %}<small class="document-summary-visitor d-block text-secondary mt-1">ویزیتور: {{ document.visitor_name }}</small>{% endif %}
+{% if document.description %}<small class="d-block text-secondary mt-1 document-summary-description">{{ document.description }}</small>{% endif %}
+<div class="document-summary-footer d-flex flex-wrap justify-content-between gap-2 mt-2 small">
+    <span class="text-secondary">{{ document.date|persian_digits }}{% if document.time %} · {{ document.time|persian_digits }}{% endif %}</span>
+    <span class="text-primary fw-semibold"><span class="visually-hidden">مبلغ کل: </span>{{ amount|persian_digits|intcomma:False }} ریال</span>
+</div>

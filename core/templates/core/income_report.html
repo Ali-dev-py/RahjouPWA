@@ -83,10 +83,14 @@
         <div class="d-flex align-items-center justify-content-between mb-3"><h2 class="h5 fw-bold mb-0" id="factor-income-title">ریز پورسانت فاکتورها</h2><span class="small text-secondary">جدیدترین ابتدا</span></div>
         <div class="d-grid gap-3">
         {% for factor in report_page %}
-        <article class="card border-0 rounded-4 p-3 income-factor">
-            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><span class="small text-secondary">فاکتور {{ factor.number|persian_digits }}</span><time class="small text-secondary">{{ factor.date|persian_digits }}</time></div>
-            <h3 class="h6 fw-bold income-customer">{% if factor.can_open %}<a class="text-reset" href="{% url 'core:factor_detail' pk=factor.id %}">{{ factor.customer_name }}</a>{% else %}{{ factor.customer_name }}{% endif %}</h3>
-            {% if not is_visitor_report %}<p class="small text-secondary mb-2">{{ factor.visitor_name }}</p>{% endif %}
+        <article class="card activity-card document-summary border-0 position-relative income-factor">
+            <div class="card-body p-3">
+            {% if factor.can_open %}{% url 'core:factor_detail' pk=factor.id as document_url %}{% endif %}
+            {% if factor.can_open %}
+                {% include "partials/_document_card_body.html" with document=factor document_label="فاکتور" document_url=document_url amount=factor.net %}
+            {% else %}
+                {% include "partials/_document_card_body.html" with document=factor document_label="فاکتور" document_url="" amount=factor.net %}
+            {% endif %}
             <dl class="income-breakdown mb-0">
                 <div><dt>مبلغ ناخالص</dt><dd>{{ factor.gross|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
                 <div><dt>تخفیف ({{ factor.discount_percent|floatformat:2|persian_digits }}٪)</dt><dd>{{ factor.discount|floatformat:0|persian_digits|intcomma:False }} ریال</dd></div>
@@ -96,6 +100,7 @@
             {% if factor.over_margin %}<p class="small text-warning-emphasis mb-0 mt-2">تخفیف بیش از ۱۵٪؛ پورسانت این فاکتور صفر است.</p>{% endif %}
             {% if factor.invalid_amount or factor.missing_details %}<p class="small text-danger mb-0 mt-2">مبلغ یا ردیف‌های فاکتور نیازمند بررسی است؛ پورسانت صفر در نظر گرفته شده است.</p>{% endif %}
             {% if is_visitor_report and not factor.can_open %}<p class="small text-secondary mb-0 mt-2">ریز پورسانت بر اساس ثبت تاریخی است؛ جزئیات مشتری تابع دسترسی فعلی شماست.</p>{% endif %}
+            </div>
         </article>
         {% empty %}
         <div class="card border-0 rounded-4 p-4 text-center"><span class="material-symbols-outlined text-secondary mb-2" aria-hidden="true">receipt_long</span><h3 class="h6">فاکتوری در این بازه وجود ندارد</h3><p class="small text-secondary mb-0">بازه زمانی یا ویزیتور انتخابی را تغییر دهید.</p></div>

@@ -77,74 +77,15 @@
         </div>
 
         <!-- Sale Request Cards List -->
-        <section class="d-grid gap-3" aria-label="فهرست درخواست‌های فروش">
+        <section class="d-grid gap-2" aria-label="فهرست درخواست‌های فروش">
             {% for sale_request in sale_requests %}
-                <article class="card sale-request-card border-0 position-relative overflow-hidden">
+                {% url 'core:sale_request_detail' pk=sale_request.id as document_url %}
+                <article class="card activity-card document-summary border-0 position-relative">
                     <div class="card-body p-3">
-                        <div class="document-card-header d-flex justify-content-between align-items-start gap-2 mb-3">
-                            <div class="document-card-heading min-width-0">
-                                <small class="text-secondary d-block">درخواست {{ sale_request.number|persian_digits }}</small>
-                                <h2 class="customer-identity h5 fw-bold mb-0 mt-1">
-                                    <a class="customer-identity__name stretched-link text-reset text-decoration-none"
-                                       href="{% url 'core:sale_request_detail' pk=sale_request.id %}">{{ sale_request.customer_name }}</a>
-                                    {% include "partials/_customer_region_badge.html" with region_name=sale_request.area_name %}
-                                </h2>
-                                <small class="text-secondary d-flex align-items-center gap-1 mt-1 text-truncate">
-                                    <span class="material-symbols-outlined app-symbol-sm flex-shrink-0" aria-hidden="true">badge</span>
-                                    <span class="text-truncate">ویزیتور: {{ sale_request.visitor_name }}</span>
-                                </small>
-                            </div>
-                            <span class="status-chip {{ sale_request.chip_class }} flex-shrink-0">
-                                {% if sale_request.dot_class %}
-                                    <span class="{{ sale_request.dot_class }}" aria-hidden="true"></span>
-                                {% endif %}
-                                {{ sale_request.status_name }}
-                            </span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top">
-                            <div class="d-flex flex-column align-items-start gap-2">
-                                <span class="small text-secondary d-flex align-items-center gap-1">
-                                    <span class="material-symbols-outlined app-symbol-sm" aria-hidden="true">calendar_today</span>
-                                    {{ sale_request.date|persian_digits }}
-                                </span>
-                                {% if sale_request.can_view_shortages %}
-                                    <a href="{% url 'core:sale_request_shortages' pk=sale_request.id %}?from=list"
-                                       class="btn btn-sm bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill fw-semibold d-inline-flex align-items-center gap-1 px-3 py-1 position-relative z-2"
-                                       title="مشاهده کسری"
-                                       aria-label="مشاهده کسری درخواست {{ sale_request.number|persian_digits }}">
-                                        <span class="material-symbols-outlined fs-6" aria-hidden="true">production_quantity_limits</span>
-                                        <span>مشاهده کسری</span>
-                                    </a>
-                                {% elif sale_request.can_modify %}
-                                    <span class="d-flex align-items-center gap-2">
-                                        <a href="{% url 'core:sale_request_edit' pk=sale_request.id %}?from=list"
-                                           class="sale-request-card__download text-primary text-decoration-none position-relative z-2"
-                                           title="ویرایش درخواست فروش"
-                                           aria-label="ویرایش درخواست {{ sale_request.number }}">
-                                            <span class="material-symbols-outlined fs-5" aria-hidden="true">edit</span>
-                                        </a>
-                                        <button type="button"
-                                                class="sale-request-card__download border-0 text-danger position-relative z-2 js-open-delete-sr"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#deleteSaleRequestModal"
-                                                data-delete-url="{% url 'core:sale_request_delete' pk=sale_request.id %}"
-                                                data-sr-number="{{ sale_request.number|persian_digits }}"
-                                                data-sr-customer="{{ sale_request.customer_name }}"
-                                                title="حذف درخواست فروش"
-                                                aria-label="حذف درخواست {{ sale_request.number }}">
-                                            <span class="material-symbols-outlined fs-5" aria-hidden="true">delete</span>
-                                        </button>
-                                    </span>
-                                {% endif %}
-                            </div>
-                            <div class="text-start flex-shrink-0">
-                                <small class="text-secondary d-block mb-1">مبلغ کل</small>
-                                <strong class="sale-request-card__amount d-inline-block fs-6 text-primary">
-                                    {{ sale_request.total_amount|persian_digits|intcomma:False }}
-                                </strong>
-                                <small class="text-secondary">ریال</small>
-                            </div>
-                        </div>
+                        {% include "partials/_document_card_body.html" with document=sale_request document_label="درخواست فروش" document_url=document_url amount=sale_request.total_amount %}
+                        {% if sale_request.can_view_shortages or sale_request.can_modify %}
+                        {% include "partials/_sale_request_card_actions.html" %}
+                        {% endif %}
                     </div>
                 </article>
             {% empty %}

@@ -229,7 +229,12 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
             return []
         customer_ids = _guid_case_variants(m.gcustomerid for m in masters)
         customers = self._customers().filter(gcustomerid__in=customer_ids) if customer_ids else []
+        customers = list(customers)
         customer_names = {_clean_guid_str(c.gcustomerid).lower(): c.custname for c in customers}
+        area_names = _area_map()
+        customer_regions = {_clean_guid_str(c.gcustomerid).lower(): area_names.get(
+            _clean_guid_str(getattr(c, 'gareageoghrafiid', None)).lower(), 'بدون منطقه'
+        ) for c in customers}
         visitors = _resolve_sale_request_visitors(masters)
         totals_by_guid, totals_by_int = _batch_sale_request_totals(masters)
         statuses = {s.salerequeststatuscode: s.salerequeststatusname
@@ -241,6 +246,8 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
             activities.append({
                 'id': master.gsalerequestmasterid,
                 'sale_request_no': master.salerequestno,
+                'number': master.salerequestno,
+                'area_name': customer_regions.get(_clean_guid_str(master.gcustomerid).lower(), 'بدون منطقه'),
                 'date': master.salerequestdate or master.createddate or '-',
                 'customer_name': customer_names.get(_clean_guid_str(master.gcustomerid).lower()) or master.requestman or 'مشتری نامشخص',
                 'visitor_name': visitors.get(key) or 'بدون ویزیتور',
@@ -277,6 +284,10 @@ class IncomeReportView(PlusLoginRequiredMixin, TemplateView):
             paginator = Paginator(report.pop('report_rows'), 20)
             context.update(report)
             context['report_page'] = paginator.get_page(self.request.GET.get('page'))
+            page_customers = _guid_case_variants(row['customer_id'] for row in context['report_page'])
+            page_regions = _customer_areas(Tblcustomer.objects.using('plus').filter(gcustomerid__in=page_customers)) if page_customers else {}
+            for row in context['report_page']:
+                row['area_name'] = page_regions.get(row['customer_id'], ('', 'بدون منطقه'))[1]
             context['report_query'] = urlencode({'period': period, 'start': start, 'end': end,
                                                'visitor': report['selected_report_visitor']})
         except ValueError as exc:
@@ -1778,6 +1789,8 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
                         mid_key, Decimal("0")
                     ) + Decimal(str(row.get("line_net") or 0))
 
+        factor_visitors = _resolve_factor_visitors(factor_masters)
+        customer_area_name = _area_map().get(_clean_guid_str(getattr(customer, 'gareageoghrafiid', None)).lower(), 'بدون منطقه')
         factors = []
         total_factors_amount = 0
         for seq_idx, sf in enumerate(factor_masters):
@@ -1812,6 +1825,9 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
                 {
                     "kind": "factor",
                     "kind_label": "فاکتور فروش",
+                    "customer_name": customer.custname,
+                    "area_name": customer_area_name,
+                    "visitor_name": factor_visitors.get(_clean_guid_str(sf_guid).lower(), "بدون ویزیتور"),
                     "id": sf_guid,
                     "number": str(getattr(sf, "salefactorno", "") or "").strip(),
                     "date": display_date,

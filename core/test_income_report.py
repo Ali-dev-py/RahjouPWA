@@ -270,9 +270,12 @@ class HomeOverviewTests(SimpleTestCase):
             gsalerequestmasterid='SR1', salerequestmasterid=1, gcustomerid='C1',
             salerequestno='123', salerequestdate='1405/08/01', createddate='',
             salerequeststatuscode=1, requestman='')]
-        customers.return_value.filter.return_value = [Obj(gcustomerid='C1', custname='مشتری')]
+        customers.return_value.filter.return_value = [Obj(gcustomerid='C1', custname='مشتری', gareageoghrafiid='{A1}')]
         statuses.objects.using.return_value.all.return_value = [Obj(salerequeststatuscode=1, salerequeststatusname='ثبت شده')]
-        rows = self.view._load_recent_activities()
+        with patch('core.views._area_map', return_value={'a1': 'شمال'}):
+            rows = self.view._load_recent_activities()
+        self.assertEqual(rows[0]['area_name'], 'شمال')
+        self.assertEqual(rows[0]['number'], '123')
         documents.return_value.filter.assert_called_once_with(gcreatedby='USER1')
         self.assertEqual(rows[0]['sale_request_no'], '123')
         self.assertEqual(rows[0]['customer_name'], 'مشتری')
