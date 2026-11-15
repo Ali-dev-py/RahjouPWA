@@ -54,9 +54,9 @@
                 {% if not activity_error %}<div class="card border-0 p-4 text-center"><span class="material-symbols-outlined text-secondary mb-2" aria-hidden="true">history</span><p class="small text-secondary mb-0">هنوز درخواست فروشی ثبت نکرده‌اید.</p></div>{% endif %}
                 {% endfor %}
             </div>
-            <a class="btn btn-primary d-flex align-items-center justify-content-center gap-2 rounded-pill mt-3" href="{% url 'core:sale_request_create' %}"><span class="material-symbols-outlined" aria-hidden="true">add</span>ثبت درخواست فروش</a>
         </section>
     </div>
 </main>
+{% include "partials/_sale_request_fab.html" %}
 {% include "partials/_bottom_nav.html" %}
 {% endblock %}

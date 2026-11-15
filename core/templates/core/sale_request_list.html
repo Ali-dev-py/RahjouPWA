@@ -141,11 +141,7 @@
 </div>
 
 <!-- Floating Action Button: Add New Sale Request -->
-<a class="btn app-fab d-flex align-items-center justify-content-center"
-   href="{% url 'core:sale_request_create' %}"
-   aria-label="ایجاد درخواست فروش جدید">
-    <span class="material-symbols-outlined" aria-hidden="true">add</span>
-</a>
+{% include "partials/_sale_request_fab.html" %}
 
 {% include "partials/_bottom_nav.html" %}
 

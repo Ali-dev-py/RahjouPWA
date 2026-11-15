@@ -240,6 +240,9 @@ class HomeOverviewTests(SimpleTestCase):
         self.assertIn('فروشگاه نمونه', html)
         self.assertIn(reverse('core:sale_request_detail', kwargs={'pk': 'SR1'}), html)
         self.assertNotIn('id="report-period"', html)
+        self.assertEqual(html.count("btn app-fab"), 1)
+        self.assertIn(reverse("core:sale_request_create"), html)
+        self.assertNotIn("rounded-pill mt-3", html)
         self.assertNotIn('ریز پورسانت فاکتورها', html)
         self.assertNotIn('report_page', context)
         # Home is always a compact current-month overview, not a forged filter.
