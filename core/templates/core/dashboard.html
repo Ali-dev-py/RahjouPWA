@@ -16,13 +16,13 @@
             <div class="alert alert-warning small" role="alert">{{ report_error }}</div>
             {% else %}
             <div class="home-summary-grid">
-                <a class="card home-summary-card home-summary-card--primary border-0 text-decoration-none" href="{{ income_report_url }}" aria-label="مشاهده جزئیات سود فروش و پورسانت">
-                    <div class="d-flex align-items-center justify-content-between gap-2"><span>سود فروش / پورسانت</span><span class="material-symbols-outlined" aria-hidden="true">trending_up</span></div>
+                <a class="card home-summary-card home-summary-card--white border-0 text-decoration-none" href="{{ income_report_url }}" aria-label="مشاهده جزئیات سود فروش و پورسانت">
+                    <div class="d-flex align-items-center justify-content-between gap-2"><span>سود فروش / پورسانت</span><span class="material-symbols-outlined text-primary" aria-hidden="true">trending_up</span></div>
                     <strong>{{ report_total.income|persian_digits|intcomma:False }}</strong>
                     <small>ریال · محاسبه‌شده <span aria-hidden="true">←</span></small>
                 </a>
-                <a class="card home-summary-card home-summary-card--accent border-0 text-decoration-none" href="{{ income_report_url }}" aria-label="مشاهده فاکتورهای فروش ماه جاری">
-                    <div class="d-flex align-items-center justify-content-between gap-2"><span>تعداد فروش</span><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span></div>
+                <a class="card home-summary-card home-summary-card--white border-0 text-decoration-none" href="{{ income_report_url }}" aria-label="مشاهده فاکتورهای فروش ماه جاری">
+                    <div class="d-flex align-items-center justify-content-between gap-2"><span>تعداد فروش</span><span class="material-symbols-outlined text-primary" aria-hidden="true">receipt_long</span></div>
                     <strong>{{ factor_count|persian_digits }}</strong><small>فاکتور در ماه جاری</small>
                 </a>
                 <a class="card home-summary-card home-summary-card--white border-0 text-decoration-none" href="{{ income_report_url }}">
