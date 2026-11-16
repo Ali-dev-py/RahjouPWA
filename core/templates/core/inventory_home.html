@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}عملیات انبار | رهجو{% endblock %}
+{% block body_class %}app-body page-inventory has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="عملیات انبار" back_url_name="core:dashboard" %}
+<main class="app-main container-fluid px-3"><div class="app-content mx-auto">
+    <h1 class="h4 fw-bold mb-2">انبار</h1><p class="small text-secondary mb-4">نوع عملیات را انتخاب کنید.</p>
+    <div class="d-grid gap-3">
+        <a class="card activity-card border-0 p-4 text-decoration-none" href="{% url 'core:receipt_list' %}"><span class="material-symbols-outlined text-primary mb-2" aria-hidden="true">inventory_2</span><h2 class="h5 fw-bold">رسید انبار</h2><span class="small text-secondary">ثبت ورود کالا، مشاهده، ویرایش و حذف رسید</span></a>
+        <a class="card activity-card border-0 p-4 text-decoration-none" href="{% url 'core:inventory_orders' %}"><span class="material-symbols-outlined text-secondary mb-2" aria-hidden="true">outbox</span><h2 class="h5 fw-bold">حواله انبار</h2><span class="small text-secondary">در مرحله بعد اضافه می‌شود</span></a>
+    </div>
+</div></main>
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

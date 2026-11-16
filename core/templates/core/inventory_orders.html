@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}حواله انبار | رهجو{% endblock %}
+{% block body_class %}app-body page-inventory has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="حواله انبار" back_url_name="core:inventory_home" %}
+<main class="app-main container-fluid px-3"><div class="app-content mx-auto"><div class="card border-0 p-4 text-center"><span class="material-symbols-outlined mb-3" aria-hidden="true">outbox</span><h1 class="h5">حواله انبار</h1><p class="small text-secondary mb-0">این بخش در مرحله بعد پیاده‌سازی می‌شود.</p></div></div></main>
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

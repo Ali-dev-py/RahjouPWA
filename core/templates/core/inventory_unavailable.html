@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}عملیات انبار | رهجو{% endblock %}
+{% block body_class %}app-body page-inventory has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="عملیات انبار" back_url_name="core:inventory_home" %}
+<main class="app-main container-fluid px-3"><div class="app-content mx-auto"><div class="alert alert-danger" role="alert">ارتباط با اطلاعات انبار برقرار نشد و عملیات انجام نشد. لطفاً دوباره تلاش کنید یا با مدیر تماس بگیرید.</div><a class="btn btn-light" href="{% url 'core:receipt_list' %}">بازگشت به رسیدها</a></div></main>
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

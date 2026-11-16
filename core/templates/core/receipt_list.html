@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% load i18n_extras %}
+{% block title %}رسیدهای انبار | رهجو{% endblock %}
+{% block body_class %}app-body page-inventory has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="رسید انبار" back_url_name="core:inventory_home" %}
+<main class="app-main container-fluid px-3"><div class="app-content mx-auto">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><h1 class="h4 fw-bold mb-0">رسیدهای انبار</h1><a class="btn btn-primary rounded-pill" href="{% url 'core:receipt_create' %}">رسید جدید</a></div>
+    {% for message in messages %}<div class="alert alert-success small" role="status">{{ message }}</div>{% endfor %}
+    <form method="get" class="d-flex gap-2 mb-3" role="search"><label for="receipt-search" class="visually-hidden">شماره رسید</label><input class="form-control" id="receipt-search" name="q" value="{{ query }}" placeholder="جستجوی شماره رسید"><button class="btn btn-light" type="submit">جستجو</button></form>
+    {% if inventory_error %}<div class="alert alert-danger" role="alert">{{ inventory_error }}</div>{% else %}
+    <div class="d-grid gap-2">
+    {% for receipt in receipt_page %}
+        <a class="card activity-card border-0 p-3 text-reset text-decoration-none" href="{% url 'core:receipt_detail' pk=receipt.greceiptstockid %}">
+            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><strong>رسید {{ receipt.receiptstockno|persian_digits }}</strong><span class="status-chip status-chip--neutral">{{ receipt.status_name }}</span></div>
+            <span class="fw-semibold">{{ receipt.inventory_name }}</span><small class="text-secondary mt-1">شعبه: {{ receipt.branch_name }}</small>
+            <small class="text-secondary mt-2">{{ receipt.receiptstockdate|persian_digits }} · سال مالی {{ receipt.financialyear|persian_digits }}</small>
+        </a>
+    {% empty %}<div class="card border-0 p-4 text-center"><p class="small text-secondary mb-0">رسیدی یافت نشد.</p></div>{% endfor %}
+    </div>
+    {% if receipt_page.has_other_pages %}<nav class="d-flex justify-content-between align-items-center gap-2 mt-3" aria-label="صفحه‌بندی رسیدها">{% if receipt_page.has_previous %}<a class="btn btn-outline-primary" href="?q={{ query|urlencode }}&amp;page={{ receipt_page.previous_page_number }}">قبلی</a>{% endif %}<span class="small">{{ receipt_page.number|persian_digits }} از {{ receipt_page.paginator.num_pages|persian_digits }}</span>{% if receipt_page.has_next %}<a class="btn btn-outline-primary" href="?q={{ query|urlencode }}&amp;page={{ receipt_page.next_page_number }}">بعدی</a>{% endif %}</nav>{% endif %}
+    {% endif %}
+</div></main>
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

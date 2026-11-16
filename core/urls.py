@@ -1,9 +1,22 @@
-from django.urls import path
+from django.urls import path, register_converter
+from .converters import InventoryUUIDConverter
+
 from .views import *
+from .inventory_views import (InventoryHomeView, InventoryOrdersView, ReceiptListView,
+                              ReceiptDetailView, ReceiptFormView, ReceiptDeleteView)
+
+register_converter(InventoryUUIDConverter, "inventory_uuid")
 
 app_name = "core"
 
 urlpatterns = [
+    path("inventory/", InventoryHomeView.as_view(), name="inventory_home"),
+    path("inventory/orders/", InventoryOrdersView.as_view(), name="inventory_orders"),
+    path("inventory/receipts/", ReceiptListView.as_view(), name="receipt_list"),
+    path("inventory/receipts/new/", ReceiptFormView.as_view(), name="receipt_create"),
+    path("inventory/receipts/<inventory_uuid:pk>/", ReceiptDetailView.as_view(), name="receipt_detail"),
+    path("inventory/receipts/<inventory_uuid:pk>/edit/", ReceiptFormView.as_view(), name="receipt_edit"),
+    path("inventory/receipts/<inventory_uuid:pk>/delete/", ReceiptDeleteView.as_view(), name="receipt_delete"),
     path("", SplashView.as_view(), name="splash"),
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
