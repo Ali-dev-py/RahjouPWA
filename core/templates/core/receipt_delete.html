@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% load i18n_extras %}
+{% block title %}حذف رسید انبار | رهجو{% endblock %}
+{% block body_class %}app-body page-inventory has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="حذف رسید" back_url_name="core:receipt_list" %}
+<main class="app-main container-fluid px-3"><div class="app-content app-content--narrow mx-auto"><div class="card border-0 p-4">
+<h1 class="h5 fw-bold">حذف رسید {{ receipt.receiptstockno|persian_digits }}؟</h1><p class="small text-secondary">رسید و تمام ردیف‌های آن حذف می‌شوند. این عملیات قابل بازگشت نیست.</p>
+{% for error in errors %}<p class="alert alert-danger small" role="alert">{{ error }}</p>{% endfor %}
+<form method="post">{% csrf_token %}<div class="d-flex gap-2"><a class="btn btn-light flex-grow-1" href="{% url 'core:receipt_detail' pk=receipt.greceiptstockid %}">انصراف</a><button class="btn btn-danger flex-grow-1" type="submit">بله، حذف شود</button></div></form>
+</div></div></main>
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

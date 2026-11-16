@@ -1161,7 +1161,8 @@ class Tblorderstockitems(models.Model):
 
 
 class Tblreceiptstock(models.Model):
-    receiptstockid = models.AutoField(db_column='ReceiptStockID')
+    # ORM identity key; GReceiptStockID remains the unique document GUID.
+    receiptstockid = models.AutoField(db_column='ReceiptStockID', primary_key=True)
     receiptstockno = models.CharField(db_column='ReceiptStockNo', max_length=10, db_collation='Arabic_CI_AS')
     receiptstockdate = models.CharField(db_column='ReceiptStockDate', max_length=10, db_collation='Arabic_CI_AS')
     receiptstockdesc = models.CharField(db_column='ReceiptStockDesc', max_length=500, db_collation='Arabic_CI_AS', blank=True, null=True)
@@ -1176,7 +1177,7 @@ class Tblreceiptstock(models.Model):
     discount = models.DecimalField(db_column='Discount', max_digits=18, decimal_places=0, blank=True, null=True)
     recivekindcode = models.IntegerField(db_column='ReciveKindCode', blank=True, null=True)
     tax = models.DecimalField(db_column='Tax', max_digits=18, decimal_places=0, blank=True, null=True)
-    greceiptstockid = models.CharField(db_column='GReceiptStockID', primary_key=True, max_length=36)
+    greceiptstockid = models.CharField(db_column='GReceiptStockID', unique=True, max_length=36)
     gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
     ginvid = models.CharField(db_column='GInvID', max_length=36, blank=True, null=True)
     gcustid = models.CharField(db_column='GCustID', max_length=36, blank=True, null=True)

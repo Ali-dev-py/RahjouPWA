@@ -1,6 +1,8 @@
+{% load inventory_tags %}
+{% inventory_navigation_allowed as show_inventory_nav %}
 {% with current=request.resolver_match.url_name %}
 <nav class="app-bottom-nav fixed-bottom" aria-label="پیمایش اصلی">
-    <div class="container-fluid app-bottom-nav__inner px-1">
+    <div class="container-fluid app-bottom-nav__inner{% if show_inventory_nav %} app-bottom-nav__inner--inventory{% endif %} px-1">
         <a class="app-bottom-nav__link{% if current == 'dashboard' or current == 'income_report' %} is-active{% endif %}"
            href="{% url 'core:dashboard' %}"
            {% if current == 'dashboard' or current == 'income_report' %}aria-current="page"{% endif %}>
@@ -31,6 +33,14 @@
             <span class="material-symbols-outlined" aria-hidden="true">group</span>
             <span>مشتریان</span>
         </a>
+        {% if show_inventory_nav %}
+        <a class="app-bottom-nav__link{% if current == 'inventory_home' or current == 'inventory_orders' or current == 'receipt_list' or current == 'receipt_create' or current == 'receipt_detail' or current == 'receipt_edit' or current == 'receipt_delete' %} is-active{% endif %}"
+           href="{% url 'core:inventory_home' %}"
+           {% if current == 'inventory_home' or current == 'inventory_orders' or current == 'receipt_list' or current == 'receipt_create' or current == 'receipt_detail' or current == 'receipt_edit' or current == 'receipt_delete' %}aria-current="page"{% endif %}>
+            <span class="material-symbols-outlined" aria-hidden="true">warehouse</span>
+            <span>انبار</span>
+        </a>
+        {% endif %}
     </div>
 </nav>
 {% endwith %}

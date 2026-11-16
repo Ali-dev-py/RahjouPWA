@@ -1291,3 +1291,12 @@ textarea {
 .document-summary-actions .sale-request-card__download { display: inline-flex; align-items: center; justify-content: center; border-radius: .75rem; }
 .document-summary .income-breakdown { margin-top: .75rem; border-top: 1px solid #e5e9f0; }
 .document-summary:focus-within { outline: 2px solid var(--rahjou-primary); outline-offset: 2px; }
+
+/* Inventory receipts: touch-friendly forms and a native, keyboard-accessible picker. */
+.app-bottom-nav__inner--inventory .app-bottom-nav__link { font-size: clamp(.58rem, 2.4vw, .7rem); min-height: 2.75rem; justify-content: center; }
+.page-inventory .form-control, .page-inventory .form-select, .page-inventory .btn { min-height: 2.75rem; font-size: 1rem; }
+.inventory-product-dialog { width: min(34rem, calc(100% - 1.5rem)); max-height: 85dvh; overflow-y: auto; padding: 1rem; border: 0; border-radius: 1rem; color: var(--rahjou-text); }
+.inventory-product-dialog::backdrop { background: rgb(25 28 29 / 45%); }
+.inventory-product-dialog .btn, .inventory-product-dialog .form-control { min-height: 2.75rem; }
+.inventory-product-dialog .form-control { font-size: 1rem; }
+.receipt-item input { width: 100%; }
