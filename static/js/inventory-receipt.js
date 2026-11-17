@@ -3,6 +3,9 @@
     'use strict';
     const form = document.getElementById('receipt-form');
     if (!form) return;
+    const isOrder = form.dataset.order === 'true';
+    const saveButton = form.querySelector('button[type="submit"]:not([name="action"])');
+    const saveText = isOrder ? 'ذخیره حواله' : 'ذخیره رسید';
     const key = value => String(value || '').trim().replace(/[{}]/g, '').toLowerCase();
     const normalize = value => String(value || '').replace(/ي/g, 'ی').replace(/ك/g, 'ک').toLowerCase();
     const ascii = value => String(value).replace(/[۰-۹٠-٩]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.includes(digit) ? '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) : '٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
@@ -33,8 +36,8 @@
         const label = element('label', 'small flex-grow-1', 'تعداد');
         const quantity = element('input', 'form-control mt-1');
         // Text + numeric keyboard permits Persian digits; never silently truncate fractions.
-        quantity.type = 'text'; quantity.inputMode = 'numeric'; quantity.name = 'quantity[]';
-        quantity.maxLength = 12; quantity.required = true;
+        quantity.type = 'text'; quantity.inputMode = isOrder ? 'decimal' : 'numeric'; quantity.name = 'quantity[]';
+        quantity.maxLength = isOrder ? 21 : 12; quantity.required = true;
         const normalized = ascii(amount);
         quantity.value = /^\d+\.0+$/.test(normalized) ? normalized.split('.')[0] : amount;
         label.append(quantity);
@@ -73,23 +76,24 @@
     search.addEventListener('input', renderResults);
     let submitting = false;
     form.addEventListener('submit', event => {
+        if (event.submitter?.value === 'import') return;
         if (submitting) { event.preventDefault(); return; }
         error.hidden = true;
         const quantities = [...form.querySelectorAll('[name="quantity[]"]')];
-        const invalid = quantities.find(input => !/^\d{1,12}$/.test(ascii(input.value.trim())) || Number(ascii(input.value.trim())) < 1);
+        const invalid = quantities.find(input => !(isOrder ? /^\d{1,12}(?:\.\d{1,8})?$/ : /^\d{1,12}$/).test(ascii(input.value.trim())) || Number(ascii(input.value.trim())) <= 0);
         if (!quantities.length || quantities.length > 200 || invalid) {
             event.preventDefault();
-            error.textContent = 'بین ۱ تا ۲۰۰ کالا با تعداد صحیح مثبت انتخاب کنید.';
+            error.textContent = 'بین ۱ تا ۲۰۰ کالا با تعداد معتبر و مثبت انتخاب کنید.';
             error.hidden = false; if (invalid) invalid.focus();
         } else {
             submitting = true;
-            const save = form.querySelector('[type="submit"]');
+            const save = saveButton;
             save.disabled = true; save.textContent = 'در حال ذخیره…';
         }
     });
     window.addEventListener('pageshow', () => {
         submitting = false;
-        const save = form.querySelector('[type="submit"]');
-        save.disabled = false; save.textContent = 'ذخیره رسید';
+        const save = saveButton;
+        save.disabled = false; save.textContent = saveText;
     });
 })();

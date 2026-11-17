@@ -28,7 +28,7 @@ class InventoryAccessTests(SimpleTestCase):
         pk = uuid.UUID('11111111-1111-1111-1111-111111111111')
         return [reverse('core:' + name, kwargs={'pk': pk} if name in ('receipt_detail', 'receipt_edit', 'receipt_delete') else None)
                 for name in ('inventory_home', 'inventory_orders', 'receipt_list', 'receipt_create',
-                             'receipt_detail', 'receipt_edit', 'receipt_delete')]
+                             'receipt_detail', 'receipt_edit', 'receipt_delete', 'order_create')]
 
     def test_all_inventory_routes_require_login(self):
         for url in self.urls():
@@ -62,14 +62,15 @@ class InventoryAccessTests(SimpleTestCase):
         self.assertFalse(inventory_allowed(None))
 
     @patch('core.views.TuaUser')
-    def test_nonvisitor_can_open_home_and_order_placeholder(self, users):
+    def test_nonvisitor_can_open_home_and_orders(self, users):
         from .inventory_views import InventoryHomeView, InventoryOrdersView
         users.objects.using.return_value.filter.return_value.first.return_value = self.user()
         for view, route in ((InventoryHomeView, 'inventory_home'), (InventoryOrdersView, 'inventory_orders')):
             request = RequestFactory().get(reverse('core:' + route))
             request.session = {'user_id': self.user().gucode}
-            response = view.as_view()(request)
-            response.render()
+            with patch.object(InventoryOrdersView, 'get_context_data', return_value={}):
+                response = view.as_view()(request)
+                response.render()
             self.assertEqual(response.status_code, 200)
             self.assertIn('حواله انبار', response.content.decode())
 

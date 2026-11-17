@@ -1,5 +1,6 @@
 """Inventory receipt validation and atomic writes to existing SQL Server tables."""
 from contextlib import contextmanager
+from decimal import Decimal
 import re
 import uuid
 
@@ -52,7 +53,7 @@ def valid_guid(value):
         return ''
 
 
-def validate_payload(data):
+def validate_payload(data, *, require_branch=True, decimal_quantities=False):
     errors = []
     try:
         receipt_date = parse_date(data.get('receipt_date')).strftime('%Y/%m/%d')
@@ -67,7 +68,7 @@ def validate_payload(data):
     branch = Branches.objects.using('plus').filter(gbranchid__in=variants([branch_id])).first() if branch_id else None
     if not inv:
         errors.append('انتخاب انبار معتبر الزامی است.')
-    if not branch:
+    if require_branch and not branch:
         errors.append('انتخاب شعبه معتبر الزامی است.')
     status = Finalstatus.objects.using('plus').filter(code=1).first()
     if not status:
@@ -87,11 +88,13 @@ def validate_payload(data):
                 errors.append('کالای انتخاب‌شده نامعتبر یا تکراری است.')
                 continue
             seen.add(key)
-            # Quantityv1 has 12 integer digits. Accept positive integers only.
-            if not re.fullmatch(r'[0-9]{1,12}', quantity) or int(quantity) < 1:
-                errors.append('تعداد هر کالا باید عدد صحیح مثبت و حداکثر ۱۲ رقمی باشد.')
+            # Receipts remain integer-only; orders also support imported decimal quantities.
+            pattern = r'[0-9]{1,12}(?:\.[0-9]{1,8})?' if decimal_quantities else r'[0-9]{1,12}'
+            if not re.fullmatch(pattern, quantity) or Decimal(quantity) <= 0:
+                errors.append('تعداد باید مثبت، حداکثر ۱۲ رقم صحیح و ۸ رقم اعشار باشد.' if decimal_quantities
+                              else 'تعداد هر کالا باید عدد صحیح مثبت و حداکثر ۱۲ رقمی باشد.')
                 continue
-            lines.append((products[key], int(quantity)))
+            lines.append((products[key], Decimal(quantity) if decimal_quantities else int(quantity)))
     if errors:
         raise ValidationError(errors)
     return dict(date=receipt_date, description=description, inventory=inv,
