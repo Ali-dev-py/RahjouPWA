@@ -31,7 +31,7 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
     def prefactor(self):
         self.insert(Prefactordetailstatus, prefactordetailstatuscode=8, prefactordetailstatusname='تائید شده')
         master = self.insert(Prefactormaster, prefactorno='123', gprefactormasterid=str(uuid.uuid4()),
-                             prefactorstatuscode=8, isbuy=False)
+                             prefactorstatuscode=2, isbuy=False)
         self.insert(Prefactordetail, gprefactormasterid=master.gprefactormasterid,
                     gkalaid=self.product.gkalaid, quantity=2)
         return master
@@ -149,16 +149,15 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         self.assertEqual(view.post(self.request(data)).status_code, 409)
         self.assertFalse(Tblorderstock.objects.using('plus').exists())
 
-    def test_detail_approval_is_listed_and_can_be_imported(self):
+    def test_detail_approval_cannot_override_master_status(self):
         master = self.prefactor()
-        master.prefactorstatuscode = 0
-        master.save(using='plus')
-        Prefactordetail.objects.using('plus').filter(
-            gprefactormasterid=master.gprefactormasterid).update(prefactordetailstatuscode=8)
-        self.assertTrue(approved_prefactors().filter(pk=master.pk).exists())
-        imported, totals = prefactor_lines(master.gprefactormasterid)
-        self.assertEqual(imported.pk, master.pk)
-        self.assertEqual(list(totals.values()), [2])
+        Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
+        for code in (None, 0, 1, 3, 8):
+            master.prefactorstatuscode = code
+            master.save(using='plus')
+            self.assertFalse(approved_prefactors().filter(pk=master.pk).exists())
+            with self.assertRaises(ValidationError):
+                prefactor_lines(master.gprefactormasterid)
 
     def test_purchase_and_unapproved_prefactors_stay_excluded(self):
         master = self.prefactor()
@@ -174,16 +173,26 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         with self.assertRaises(ValidationError):
             prefactor_lines(master.gprefactormasterid)
 
-    def test_approval_label_spellings_and_repeated_details(self):
+    def test_master_status_two_needs_no_status_labels_or_detail_approval(self):
         master = self.prefactor()
-        master.prefactorstatuscode = 0
-        master.save(using='plus')
+        Prefactordetailstatus.objects.using('plus').all().delete()
+        Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=0)
+        self.assertEqual(approved_prefactors().count(), 1)
+        imported, totals = prefactor_lines(master.gprefactormasterid)
+        self.assertEqual(imported.pk, master.pk)
+        self.assertEqual(list(totals.values()), [2])
+
+    def test_revoked_master_approval_blocks_posting_even_with_approved_details(self):
+        master = self.prefactor()
+        self.stock('20')
         Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
-        self.insert(Prefactordetail, gprefactormasterid=master.gprefactormasterid,
-                    gkalaid=self.product2.gkalaid, quantity=1, prefactordetailstatuscode=8)
-        for label in ('تائید شده', 'تایید شده', 'تأیید شده', 'تأييد\u200cشده', 'تاییدشده'):
-            Prefactordetailstatus.objects.using('plus').update(prefactordetailstatusname=label)
-            self.assertEqual(approved_prefactors().count(), 1, label)
+        master.prefactorstatuscode = 1
+        master.save(using='plus')
+        with self.assertRaises(ValidationError):
+            save_order(self.payload(), self.user, master.gprefactormasterid)
+        self.assertFalse(Tblorderstock.objects.using('plus').exists())
+        self.assertFalse(Tblorderstockitems.objects.using('plus').exists())
+        self.assertFalse(Sanadkala.objects.using('plus').filter(operkind=134).exists())
 
     def test_order_form_shows_approved_options_or_explicit_empty_state(self):
         from django.test import RequestFactory
@@ -194,7 +203,7 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         response = OrderFormView().get(request)
         self.assertContains(response, 'پیش‌فاکتور تأییدشده‌ای یافت نشد.')
         master = self.prefactor()
-        master.prefactorstatuscode = 0
+        master.prefactorstatuscode = 2
         master.save(using='plus')
         Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
         response = OrderFormView().get(request)
