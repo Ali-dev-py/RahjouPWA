@@ -1290,3 +1290,37 @@ class Tblreceiptstockitem(models.Model):
     class Meta:
         managed = False
         db_table = 'tblReceiptStockItem'
+
+
+class Sanadkala(models.Model):
+    sanadkalaid = models.AutoField(db_column='SanadKalaID', primary_key=True)
+    operdate = models.CharField(db_column='OperDate', max_length=10, db_collation='Arabic_CI_AS')
+    unitprice = models.DecimalField(db_column='UnitPrice', max_digits=20, decimal_places=8, blank=True, null=True)
+    operkind = models.IntegerField(db_column='OperKind', blank=True, null=True)
+    varede = models.DecimalField(db_column='Varede', max_digits=20, decimal_places=8, blank=True, null=True)
+    sadere = models.DecimalField(db_column='Sadere', max_digits=20, decimal_places=8, blank=True, null=True)
+    othercost = models.DecimalField(db_column='OtherCost', max_digits=18, decimal_places=0)
+    financialyear = models.IntegerField(db_column='FinancialYear')
+    operno = models.CharField(db_column='OperNo', max_length=50, db_collation='Arabic_CI_AS', blank=True, null=True)
+    radyabino = models.CharField(db_column='RadyabiNo', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    sefareshno = models.CharField(db_column='SefareshNo', max_length=20, db_collation='Arabic_CI_AS', blank=True, null=True)
+    gsanadkalaid = models.CharField(db_column='GSanadKalaID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    ginvid = models.CharField(db_column='GInvID', max_length=36, blank=True, null=True)
+    gkalaid = models.CharField(db_column='GKalaID', max_length=36, blank=True, null=True)
+    goperid = models.CharField(db_column='GOperID', max_length=36, blank=True, null=True)
+    goperkind = models.CharField(db_column='GOperKind', max_length=36, blank=True, null=True)
+    gkalasecunitid = models.CharField(db_column='GKalaSecUnitID', max_length=36, blank=True, null=True)
+    secunitsadere = models.DecimalField(db_column='SecUnitSadere', max_digits=20, decimal_places=8, blank=True, null=True)
+    secunitvarede = models.DecimalField(db_column='SecUnitVarede', max_digits=20, decimal_places=8, blank=True, null=True)
+    isaward = models.BooleanField(db_column='IsAward')
+    descript = models.CharField(db_column='Descript', max_length=500, db_collation='Arabic_CI_AS', blank=True, null=True)
+    totalprice = models.DecimalField(db_column='TotalPrice', max_digits=25, decimal_places=0)
+    directpaymentprice = models.DecimalField(db_column='DirectPaymentPrice', max_digits=25, decimal_places=0)
+    overheadprice = models.DecimalField(db_column='OverHeadPrice', max_digits=25, decimal_places=0)
+    sumkalaprice = models.DecimalField(db_column='SumKalaPrice', max_digits=25, decimal_places=0)
+    sumotherprice = models.DecimalField(db_column='SumOtherPrice', max_digits=25, decimal_places=0)
+
+    class Meta:
+        managed = False
+        db_table = 'SanadKala'
