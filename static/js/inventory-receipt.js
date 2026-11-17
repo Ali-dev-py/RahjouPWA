@@ -9,6 +9,26 @@
     const key = value => String(value || '').trim().replace(/[{}]/g, '').toLowerCase();
     const normalize = value => String(value || '').replace(/ي/g, 'ی').replace(/ك/g, 'ک').toLowerCase();
     const ascii = value => String(value).replace(/[۰-۹٠-٩]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.includes(digit) ? '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) : '٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    if (isOrder) {
+        const picker = document.getElementById('prefactor');
+        const filter = document.getElementById('prefactor-search');
+        const importButton = document.getElementById('prefactor-import');
+        if (picker && filter && importButton) {
+            const options = [...picker.options].slice(1).map(option => option.cloneNode(true));
+            const updateImport = () => { importButton.disabled = !picker.value; };
+            picker.addEventListener('change', updateImport);
+            filter.addEventListener('input', () => {
+                const query = normalize(ascii(filter.value.trim()));
+                const previous = picker.value;
+                const matches = options.filter(option => normalize(ascii(option.textContent)).includes(query));
+                picker.replaceChildren(new Option('پیش‌فاکتور تأییدشده...', ''), ...matches.map(option => option.cloneNode(true)));
+                if (matches.some(option => option.value === previous)) picker.value = previous;
+                document.getElementById('prefactor-search-empty').hidden = matches.length > 0;
+                updateImport();
+            });
+            updateImport();
+        }
+    }
     const products = JSON.parse(document.getElementById('receipt-products-data').textContent);
     const catalog = new Map(products.map(product => [key(product.id), product]));
     const selected = new Set();

@@ -1300,3 +1300,28 @@ textarea {
 .inventory-product-dialog .btn, .inventory-product-dialog .form-control { min-height: 2.75rem; }
 .inventory-product-dialog .form-control { font-size: 1rem; }
 .receipt-item input { width: 100%; }
+
+/* Warehouse: restrained document colors, clear actions and mobile touch targets. */
+.page-inventory { --inventory-receipt: #146a57; --inventory-order: #80501b; }
+.page-inventory .inventory-heading { display: flex; align-items: center; gap: .75rem; }
+.page-inventory .inventory-heading__icon { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; flex-shrink: 0; border-radius: .9rem; color: #365aba; background: #eaf0ff; font-size: 1.6rem; }
+.inventory-actions { display: grid; gap: 1rem; }
+.page-inventory .inventory-action { display: flex; align-items: center; gap: 1rem; padding: 1.25rem; border: 1px solid transparent; border-radius: 1.15rem; text-decoration: none; box-shadow: 0 4px 16px rgb(30 50 80 / 5%); transition: box-shadow .15s, border-color .15s; }
+.page-inventory .inventory-action--receipt { background: linear-gradient(115deg, #fff, #edf9f3); color: var(--inventory-receipt); border-color: #d4ebdf; }
+.page-inventory .inventory-action--order { background: linear-gradient(115deg, #fff, #fff5e8); color: var(--inventory-order); border-color: #f0dfc5; }
+.inventory-action__icon { display: grid; place-items: center; width: 3rem; height: 3rem; flex-shrink: 0; background: rgb(255 255 255 / 85%); border-radius: 1rem; font-size: 1.8rem; }
+.inventory-action__label { opacity: .9; }
+.page-inventory .inventory-action:hover { box-shadow: 0 6px 20px rgb(30 50 80 / 10%); border-color: currentColor; }
+.page-inventory a:focus-visible, .page-inventory summary:focus-visible { outline: 3px solid #3869c9; outline-offset: 3px; }
+.inventory-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.page-inventory .inventory-shortcut { display: flex; align-items: center; justify-content: center; gap: .3rem; border-radius: .8rem; font-size: .9rem; font-weight: 600; }
+.page-inventory .inventory-shortcut--receipt { color: var(--inventory-receipt); background: #e8f5ee; border: 1px solid #c8e2d5; }
+.page-inventory .inventory-shortcut--order { color: var(--inventory-order); background: #fff3e2; border: 1px solid #ebd8bc; }
+.page-inventory .inventory-form-section, .page-inventory .receipt-item { border-radius: 1rem; box-shadow: 0 3px 14px rgb(30 50 80 / 4%); }
+.page-inventory .inventory-import { border-radius: 1rem; border: 1px solid #d9e2fb; background: #f0f4ff; }
+.page-inventory .inventory-import h2 { color: #3456a0; }
+.page-inventory .inventory-save-bar { padding: .8rem; border-radius: 1rem; background: #fff; box-shadow: 0 3px 14px rgb(30 50 80 / 5%); }
+.page-inventory .inventory-document { border-inline-start: 3px solid #80bca4 !important; border-radius: 1rem; box-shadow: 0 3px 14px rgb(30 50 80 / 4%); }
+.page-inventory .inventory-document--order { border-inline-start-color: #d6ac70 !important; }
+.page-inventory .inventory-document summary { cursor: pointer; padding-block: .6rem; color: #80501b; min-height: 2.75rem; }
+@media (prefers-reduced-motion: reduce) { .page-inventory .inventory-action { transition: none; } }
