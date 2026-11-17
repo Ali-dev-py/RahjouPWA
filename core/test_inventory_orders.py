@@ -149,6 +149,60 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         self.assertEqual(view.post(self.request(data)).status_code, 409)
         self.assertFalse(Tblorderstock.objects.using('plus').exists())
 
+    def test_detail_approval_is_listed_and_can_be_imported(self):
+        master = self.prefactor()
+        master.prefactorstatuscode = 0
+        master.save(using='plus')
+        Prefactordetail.objects.using('plus').filter(
+            gprefactormasterid=master.gprefactormasterid).update(prefactordetailstatuscode=8)
+        self.assertTrue(approved_prefactors().filter(pk=master.pk).exists())
+        imported, totals = prefactor_lines(master.gprefactormasterid)
+        self.assertEqual(imported.pk, master.pk)
+        self.assertEqual(list(totals.values()), [2])
+
+    def test_purchase_and_unapproved_prefactors_stay_excluded(self):
+        master = self.prefactor()
+        master.isbuy = True
+        master.save(using='plus')
+        Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
+        self.assertFalse(approved_prefactors().exists())
+        master.isbuy = False
+        master.prefactorstatuscode = 0
+        master.save(using='plus')
+        Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=0)
+        self.assertFalse(approved_prefactors().exists())
+        with self.assertRaises(ValidationError):
+            prefactor_lines(master.gprefactormasterid)
+
+    def test_approval_label_spellings_and_repeated_details(self):
+        master = self.prefactor()
+        master.prefactorstatuscode = 0
+        master.save(using='plus')
+        Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
+        self.insert(Prefactordetail, gprefactormasterid=master.gprefactormasterid,
+                    gkalaid=self.product2.gkalaid, quantity=1, prefactordetailstatuscode=8)
+        for label in ('تائید شده', 'تایید شده', 'تأیید شده', 'تأييد\u200cشده', 'تاییدشده'):
+            Prefactordetailstatus.objects.using('plus').update(prefactordetailstatusname=label)
+            self.assertEqual(approved_prefactors().count(), 1, label)
+
+    def test_order_form_shows_approved_options_or_explicit_empty_state(self):
+        from django.test import RequestFactory
+        from django.contrib.sessions.backends.signed_cookies import SessionStore
+        request = RequestFactory().get('/')
+        request.plus_user = self.user
+        request.session = SessionStore()
+        response = OrderFormView().get(request)
+        self.assertContains(response, 'پیش‌فاکتور تأییدشده‌ای یافت نشد.')
+        master = self.prefactor()
+        master.prefactorstatuscode = 0
+        master.save(using='plus')
+        Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
+        response = OrderFormView().get(request)
+        self.assertContains(response, master.gprefactormasterid)
+        self.assertContains(response, 'id="prefactor-search"')
+        self.assertNotContains(response, 'شماره و شناسه‌ها هنگام ذخیره')
+        self.assertNotContains(response, 'تعداد پیش‌فرض')
+
 
 from django.test import SimpleTestCase
 from unittest.mock import MagicMock

@@ -11,7 +11,7 @@
     {% if inventory_error %}<div class="alert alert-danger" role="alert">{{ inventory_error }}</div>{% else %}
     <div class="d-grid gap-2">
     {% for receipt in receipt_page %}
-        <a class="card activity-card border-0 p-3 text-reset text-decoration-none" href="{% url 'core:receipt_detail' pk=receipt.greceiptstockid %}">
+        <a class="card activity-card inventory-document border-0 p-3 text-reset text-decoration-none" href="{% url 'core:receipt_detail' pk=receipt.greceiptstockid %}">
             <div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><strong>رسید {{ receipt.receiptstockno|persian_digits }}</strong><span class="status-chip status-chip--neutral">{{ receipt.status_name }}</span></div>
             <span class="fw-semibold">{{ receipt.inventory_name }}</span><small class="text-secondary mt-1">شعبه: {{ receipt.branch_name }}</small>
             <small class="text-secondary mt-2">{{ receipt.receiptstockdate|persian_digits }} · سال مالی {{ receipt.financialyear|persian_digits }}</small>
