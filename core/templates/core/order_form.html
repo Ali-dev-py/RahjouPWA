@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load static i18n_extras %}
+{% block title %}{% if receipt %}ویرایش{% else %}ثبت{% endif %} حواله انبار | رهجو{% endblock %}
+{% block body_class %}app-body page-inventory has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="حواله انبار" back_url_name="core:inventory_orders" %}
+<main class="app-main container-fluid px-3"><div class="app-content app-content--narrow mx-auto">
+    <h1 class="h4 fw-bold mb-2">{% if receipt %}ویرایش حواله {{ receipt.receiptstockno|persian_digits }}{% else %}حواله جدید{% endif %}</h1>
+    <p class="small text-secondary mb-3">سال مالی {{ financial_year|persian_digits }} · شماره و شناسه‌ها هنگام ذخیره تعیین می‌شوند.</p>
+    {% if errors %}<div class="alert alert-danger small" role="alert"><ul class="mb-0">{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+    <form method="post" id="receipt-form" data-order="true">{% csrf_token %}
+        {% if imported_source %}<p class="alert alert-info small">کالاهای پیش‌فاکتور وارد شده‌اند؛ تغییر کالاها یا تعدادها هنگام ذخیره نیاز به تأیید دارد.</p>{% endif %}
+        <input type="hidden" name="form_id" value="{{ form_id }}">
+        {% if confirmation %}<div class="alert alert-warning" role="alert">کالاها یا تعدادها با پیش‌فاکتور واردشده تفاوت دارند. برای ادامه، تغییرات را تأیید کنید.
+        <input type="hidden" name="confirmation" value="{{ confirmation }}"><label class="d-block mt-2"><input type="checkbox" name="confirm_changes" value="yes" required> تغییرات را تأیید می‌کنم</label></div>{% endif %}
+        <div class="card border-0 p-3 mb-3"><label class="form-label" for="prefactor">انتخاب از پیش فاکتور</label>
+        <select class="form-select mb-2" id="prefactor" name="prefactor"><option value="">پیش‌فاکتور تأییدشده...</option>{% for pf in prefactors %}<option value="{{ pf.gprefactormasterid }}">{{ pf.prefactorno|persian_digits }} · {{ pf.prefactordate|persian_digits }}</option>{% endfor %}</select>
+        <button class="btn btn-outline-primary" type="submit" name="action" value="import" formnovalidate>انتخاب از پیش فاکتور</button><small class="text-secondary mt-2">ورود پیش‌فاکتور، کالاهای فعلی فرم را جایگزین می‌کند.</small></div>
+        <div class="card border-0 p-3 mb-3"><div class="row g-3">
+            <div class="col-12"><label class="form-label small" for="receipt-date">تاریخ حواله <span class="text-danger">*</span></label><input class="form-control" id="receipt-date" name="receipt_date" value="{{ values.receipt_date|persian_digits }}" dir="ltr" maxlength="10" placeholder="۱۴۰۵/۰۸/۲۰" aria-describedby="receipt-date-help" required><small class="text-secondary" id="receipt-date-help">تاریخ شمسی؛ ارقام فارسی و انگلیسی پذیرفته می‌شوند.</small></div>
+            <div class="col-12"><label class="form-label small" for="receipt-inventory">انتخاب انبار <span class="text-danger">*</span></label><select class="form-select" id="receipt-inventory" name="inventory" required><option value="">انتخاب انبار...</option>{% for inv in inventories %}<option value="{{ inv.option_id }}" {% if inv.option_id == values.inventory %}selected{% endif %}>{{ inv.invname }}</option>{% endfor %}</select></div>
+            <div class="col-12"><label class="form-label small" for="receipt-description">توضیحات <span class="text-secondary">(اختیاری)</span></label><input class="form-control" id="receipt-description" name="description" maxlength="500" value="{{ values.description }}"></div>
+        </div></div>
+        <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><h2 class="h6 fw-bold mb-0">کالاهای خروجی</h2><button class="btn btn-outline-primary" id="receipt-add-product" type="button"><span aria-hidden="true">＋</span> افزودن کالا</button></div>
+        <p class="small text-secondary">تعداد مثبت وارد کنید؛ تا ۸ رقم اعشار مجاز است. تعداد پیش‌فرض ۱ است.</p>
+        <div id="receipt-items" class="d-grid gap-2 mb-3" aria-live="polite"></div>
+        <p id="receipt-items-empty" class="card border-0 p-3 small text-secondary">هنوز کالایی انتخاب نشده است.</p>
+        <p id="receipt-client-error" class="alert alert-danger small" role="alert" hidden></p>
+        <noscript><p class="alert alert-warning">برای انتخاب کالا، جاوااسکریپت مرورگر را فعال کنید.</p></noscript>
+        <div class="d-flex gap-2 mb-3"><a class="btn btn-light" href="{% url 'core:inventory_orders' %}">انصراف</a><button class="btn btn-primary flex-grow-1" type="submit">ذخیره حواله</button></div>
+    </form>
+</div></main>
+<dialog class="inventory-product-dialog" id="receipt-product-dialog" aria-labelledby="receipt-picker-title">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><h2 class="h6 fw-bold mb-0" id="receipt-picker-title">انتخاب کالا</h2><button class="btn btn-light" id="receipt-picker-close" type="button" aria-label="بستن انتخاب کالا">✕</button></div>
+    <label class="visually-hidden" for="receipt-product-search">نام یا کد کالا</label><input class="form-control mb-3" id="receipt-product-search" type="search" placeholder="جستجوی نام یا کد کالا..." autocomplete="off">
+    <div id="receipt-product-results" class="d-grid gap-2"></div><p class="small text-secondary mt-3 mb-0" id="receipt-product-hint" role="status"></p>
+</dialog>
+{{ products|json_script:"receipt-products-data" }}
+{{ initial_lines|json_script:"receipt-initial-data" }}
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/inventory-receipt.js' %}?v=2" defer></script>{% endblock %}

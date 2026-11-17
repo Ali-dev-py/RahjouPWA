@@ -44,6 +44,21 @@ class InventoryHomeView(InventoryAccessMixin, TemplateView):
 class InventoryOrdersView(InventoryAccessMixin, TemplateView):
     template_name = 'core/inventory_orders.html'
 
+    def get_context_data(self, **kwargs):
+        from .inventory_orders import live_orders
+        from .models import Tblorderstockitems
+        context = super().get_context_data(**kwargs)
+        page = Paginator(live_orders().order_by('-orderstockid'), 20).get_page(self.request.GET.get('page'))
+        inventories = {guid(inv.ginvid): inv.invname for inv in Tblinv.objects.using('plus').all()}
+        products = {guid(p.gkalaid): p.kalaname for p in Tblkala.objects.using('plus').all()}
+        rows = list(Tblorderstockitems.objects.using('plus').filter(gorderstockid__in=variants(o.gorderstockid for o in page)))
+        for order in page:
+            order.inventory_name = inventories.get(guid(order.ginvid), '—')
+            order.lines = [dict(name=products.get(guid(row.gkalaid), 'کالای نامشخص'), quantity=row.quantityv1)
+                           for row in rows if guid(row.gorderstockid) == guid(order.gorderstockid)]
+        context['order_page'] = page
+        return context
+
 
 def receipt_context(receipt):
     rows = list(Tblreceiptstockitem.objects.using('plus').filter(
@@ -185,3 +200,69 @@ class ReceiptDeleteView(InventoryAccessMixin, View):
             return render(request, self.template_name, context, status=503)
         messages.success(request, 'رسید انبار و ردیف‌های آن حذف شد.')
         return redirect('core:receipt_list')
+
+
+class OrderFormView(ReceiptFormView):
+    template_name = 'core/order_form.html'
+
+    def form_context(self, request, receipt=None, data=None, errors=None):
+        from .inventory_orders import approved_prefactors
+        context = super().form_context(request, data=data, errors=errors)
+        context['prefactors'] = approved_prefactors().order_by('-prefactormasterid')
+        context['imported_source'] = request.session.get('inventory_order_forms', {}).get(self.form_id, {}).get('source', '')
+        context['form_id'] = self.form_id
+        return context
+
+    def get(self, request):
+        import uuid
+        self.form_id = str(uuid.uuid4())
+        forms = request.session.get('inventory_order_forms', {})
+        forms[self.form_id] = {}
+        request.session['inventory_order_forms'] = dict(list(forms.items())[-10:])
+        return render(request, self.template_name, self.form_context(request))
+
+    def post(self, request):
+        from django.core import signing
+        from .inventory_orders import prefactor_lines, save_order, line_signature
+        self.form_id = request.POST.get('form_id', '')
+        forms = request.session.get('inventory_order_forms', {})
+        if self.form_id not in forms:
+            raise PermissionDenied('فرم منقضی شده است؛ صفحه ثبت حواله را دوباره باز کنید.')
+        state = forms[self.form_id]
+        data = request.POST.copy()
+        try:
+            if data.get('action') == 'import':
+                master, totals = prefactor_lines(data.get('prefactor', ''))
+                state = {'source': str(master.gprefactormasterid),
+                         'baseline': sorted((key, str(value.normalize())) for key, value in totals.items())}
+                forms[self.form_id] = state
+                request.session['inventory_order_forms'] = forms
+                data.setlist('product_id[]', list(totals))
+                data.setlist('quantity[]', [format(value, 'f') for value in totals.values()])
+                return render(request, self.template_name, self.form_context(request, data=data))
+            payload = validate_payload(data, require_branch=False, decimal_quantities=True)
+            signature = line_signature(payload['lines'])
+            baseline = [tuple(row) for row in state.get('baseline', [])]
+            changed = bool(state.get('source')) and signature != baseline
+            # Confirmation is signed over the exact submitted header and rows, not a client flag.
+            confirmation = {'form': self.form_id, 'source': state.get('source'), 'lines': signature,
+                            'date': payload['date'], 'inventory': guid(payload['inventory'].ginvid),
+                            'description': payload['description']}
+            if changed:
+                try:
+                    confirmed = signing.loads(data.get('confirmation', ''), salt='inventory-order', max_age=1800)
+                except signing.BadSignature:
+                    confirmed = None
+                # JSON signing converts tuple rows to lists.
+                import json
+                if data.get('confirm_changes') != 'yes' or confirmed != json.loads(json.dumps(confirmation)):
+                    context = self.form_context(request, data=data)
+                    context['confirmation'] = signing.dumps(confirmation, salt='inventory-order')
+                    return render(request, self.template_name, context, status=409)
+            order = save_order(payload, request.plus_user, state.get('source'))
+        except ValidationError as exc:
+            return render(request, self.template_name, self.form_context(request, data=data, errors=exc.messages), status=400)
+        forms.pop(self.form_id, None)
+        request.session['inventory_order_forms'] = forms
+        messages.success(request, f'حواله انبار شماره {order.orderstockno} با موفقیت ثبت شد.')
+        return redirect('core:inventory_orders')
