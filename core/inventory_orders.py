@@ -5,33 +5,20 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import connections, transaction
-from django.db.models import Q, Sum, Exists, OuterRef
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .inventory import FINANCIAL_YEAR, DIGITS, today_string, valid_guid
-from .income_report import guid, name_key, variants
+from .income_report import guid, variants
 from .models import (Tblorderstock, Tblorderstockitems, Sanadkala,
-                     Prefactormaster, Prefactordetail, Prefactordetailstatus)
+                     Prefactormaster, Prefactordetail)
 
 
 def approved_prefactors():
-    """Match the main pre-factor screen: approval may live on master or details."""
-    import unicodedata
-
-    def normalized(value):
-        value = unicodedata.normalize('NFKC', name_key(value))
-        value = ''.join(char for char in value if not unicodedata.combining(char))
-        return value.replace('أ', 'ا').replace('إ', 'ا').replace('ئ', 'ی').replace(' ', '').replace('\u200c', '')
-
-    codes = [s.prefactordetailstatuscode for s in Prefactordetailstatus.objects.using('plus').all()
-             if normalized(s.prefactordetailstatusname) == normalized('تائید شده')]
-    approved_details = Prefactordetail.objects.using('plus').filter(
-        gprefactormasterid__iexact=OuterRef('gprefactormasterid'),
-        prefactordetailstatuscode__in=codes)
+    """Only master PrefactorStatusCode=2 denotes approval for stock orders."""
     return (Prefactormaster.objects.using('plus')
             .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
-            .annotate(has_approved_detail=Exists(approved_details))
-            .filter(Q(prefactorstatuscode__in=codes) | Q(has_approved_detail=True)))
+            .filter(prefactorstatuscode=2))
 
 
 def prefactor_lines(prefactor_id):
