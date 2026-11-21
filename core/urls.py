@@ -21,6 +21,7 @@ urlpatterns = [
     path("", SplashView.as_view(), name="splash"),
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
+    path("payment-dues/", PaymentDuesView.as_view(), name="payment_dues"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("income-report/", IncomeReportView.as_view(), name="income_report"),
     path("customers/", CustomersView.as_view(), name="customers"),

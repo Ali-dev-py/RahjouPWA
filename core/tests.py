@@ -233,6 +233,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
     @patch("core.income_report.build_report")
     @patch("core.views.TuaUser")
     @patch.object(DashboardView, "_load_recent_activities", return_value=[])
+    @patch('core.payment_dues.payment_schedule', new=lambda user: {'rows': [], 'reminders': [], 'remaining_total': 0})
     def test_dashboard_shows_factor_income_report(self, mock_activities, mock_user, mock_report):
         mock_user.objects.using.return_value.filter.return_value.first.return_value = self.user
         mock_report.return_value = {

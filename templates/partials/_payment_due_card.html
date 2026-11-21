@@ -1,0 +1,7 @@
+{% load humanize i18n_extras %}
+<article class="card border-0 payment-due-card p-3">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-2"><strong class="small text-break">{{ due.customer_name }}</strong><span class="status-chip {% if due.status == 'overdue' %}bg-danger-subtle text-danger{% elif due.status == 'soon' %}bg-warning-subtle text-dark{% elif due.status == 'paid' %}status-chip--approved{% else %}status-chip--neutral{% endif %}">{{ due.status_label }}</span></div>
+    <div class="d-flex flex-wrap justify-content-between gap-2 small text-secondary mb-2"><span>فاکتور {{ due.factor_no|persian_digits }} · قسط {{ due.installment_no|persian_digits }}</span><span>سررسید: {{ due.date|persian_digits }}</span></div>
+    <div class="row g-2 small border-top pt-2"><div class="col-6"><span class="text-secondary d-block">مبلغ</span>{{ due.amount|floatformat:0|persian_digits|intcomma:False }}</div><div class="col-6"><span class="text-secondary d-block">پرداخت‌شده</span>{{ due.paid|floatformat:0|persian_digits|intcomma:False }}</div></div>
+    <div class="d-flex justify-content-between align-items-center mt-2"><span class="small text-secondary">مانده · ریال</span><strong>{{ due.remaining|floatformat:0|persian_digits|intcomma:False }}</strong></div>
+</article>

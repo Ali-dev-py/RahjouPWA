@@ -36,6 +36,11 @@
             </div>
             {% endif %}
         </section>
+        <section class="mb-4" aria-labelledby="payment-title">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><h2 class="h5 fw-bold mb-0" id="payment-title">سررسید پرداخت</h2><a class="small" href="{% url 'core:payment_dues' %}">همه سررسیدها</a></div>
+            {% include "partials/_payment_reminders.html" %}
+            {% if payment_error %}<p class="alert alert-warning small" role="alert">{{ payment_error }}</p>{% endif %}
+        </section>
         <section aria-labelledby="recent-title">
             <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
                 <h2 class="h5 fw-bold mb-0" id="recent-title">فعالیت‌های اخیر</h2>

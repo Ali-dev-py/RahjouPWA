@@ -225,6 +225,9 @@ class IncomeDashboardTests(SimpleTestCase):
 
 class HomeOverviewTests(SimpleTestCase):
     def setUp(self):
+        payments = patch('core.payment_dues.payment_schedule', return_value={'rows': [], 'reminders': [], 'remaining_total': 0})
+        payments.start()
+        self.addCleanup(payments.stop)
         self.view = DashboardView()
         self.view.request = RequestFactory().get(reverse('core:dashboard'), {'period': 'custom', 'visitor': 'forged'})
         self.view.request.plus_user = Obj(gucode='USER1', utitle='ویزیتور', uname='علی')
