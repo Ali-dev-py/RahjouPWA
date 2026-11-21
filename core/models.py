@@ -1324,3 +1324,29 @@ class Sanadkala(models.Model):
     class Meta:
         managed = False
         db_table = 'SanadKala'
+
+
+class Salefactorghest(models.Model):
+    salefactorghestid = models.AutoField(db_column='SaleFactorGhestID', primary_key=True)
+    ghestno = models.IntegerField(db_column='GhestNo')
+    ghestprice = models.DecimalField(db_column='GhestPrice', max_digits=18, decimal_places=0)
+    payprice = models.DecimalField(db_column='PayPrice', max_digits=18, decimal_places=0)
+    gsalefactorghestid = models.CharField(db_column='GSaleFactorGhestID', max_length=36)
+    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
+    gsalefactormasterid = models.CharField(db_column='GSaleFactorMasterID', max_length=36, blank=True, null=True)
+    gsalefactordetailid = models.CharField(db_column='GSaleFactorDetailID', max_length=36, blank=True, null=True)
+    gdaryaftid = models.CharField(db_column='GDaryaftID', max_length=36, blank=True, null=True)
+    usercreate = models.BooleanField(db_column='UserCreate')
+    daryafttypecode = models.SmallIntegerField(db_column='DaryaftTypeCode')
+    gaccid = models.CharField(db_column='GAccId', max_length=36, blank=True, null=True)
+    gsubdetailid = models.CharField(db_column='GSubDetailId', max_length=36, blank=True, null=True)
+    gsubdetailid5 = models.CharField(db_column='GSubDetailId5', max_length=36, blank=True, null=True)
+    gsubdetailid6 = models.CharField(db_column='GSubDetailId6', max_length=36, blank=True, null=True)
+    shghestdate = models.CharField(db_column='ShGhestDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)
+    shpaydate = models.CharField(db_column='ShPayDate', max_length=10, db_collation='Arabic_CI_AS', blank=True, null=True)
+    gprefactormasterid = models.CharField(db_column='GPreFactorMasterID', max_length=36, blank=True, null=True)
+    gprefactordetailid = models.CharField(db_column='GPreFactorDetailID', max_length=36, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'SaleFactorGhest'
