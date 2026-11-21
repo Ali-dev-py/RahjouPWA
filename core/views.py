@@ -27,6 +27,7 @@ from django.views.generic import TemplateView
 from django.template.loader import render_to_string
 
 from .models import *
+from .visitor_assignment import is_visitor, resolve_visitor
 
 
 def _name_key(value):
@@ -115,6 +116,22 @@ class PlusLoginRequiredMixin:
 
         # Attach the full TuaUser object to the request
         request.plus_user = user
+        if is_visitor(user):
+            # A hidden filter must not remain active through a bookmarked/tampered URL.
+            query = request.GET.copy()
+            query.pop('visitor', None)
+            request.GET = query
+            if getattr(self, 'automatic_visitor_assignment', False):
+                visitor = resolve_visitor(user)
+                request.automatic_visitor = visitor
+                if visitor is None:
+                    request.automatic_visitor_error = 'نام کاربری شما با یک ویزیتور فعال و یکتا مطابقت ندارد؛ با مدیر تماس بگیرید.'
+                    if request.method == 'POST':
+                        raise PermissionDenied(request.automatic_visitor_error)
+                if request.method == 'POST':
+                    data = request.POST.copy()
+                    data['visitor_id'] = str(visitor.gvisitorid)
+                    request.POST = data
         return super().dispatch(request, *args, **kwargs)
 
     def _visitor_customer_ids(self):
@@ -345,6 +362,20 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
             .order_by("custname")
         )
 
+        from .customer_geography import customer_geography
+        province_rows, city_rows = _load_provinces_and_cities_for_form()
+        province_options, city_options = customer_geography(customers, province_rows, city_rows)
+        selected_province = _clean_guid_str(self.request.GET.get('province', 'all')).lower() or 'all'
+        selected_city = _clean_guid_str(self.request.GET.get('city', 'all')).lower() or 'all'
+        if selected_province not in {row['id'] for row in province_options}:
+            selected_province = 'all'
+        eligible_cities = {row['id'] for row in city_options
+                           if selected_province == 'all' or row['province'] == selected_province}
+        if selected_city not in eligible_cities:
+            selected_city = 'all'
+        context.update(province_options=province_options, city_options=city_options,
+                       selected_province=selected_province, selected_city=selected_city)
+
         # Batch map GCustomerID -> GVisitorID via Visitortocustomer (No N+1)
         visitor_links = (
             Visitortocustomer.objects.using("plus")
@@ -502,7 +533,9 @@ class CustomersView(PlusLoginRequiredMixin, TemplateView):
                 current_visitor == "all"
                 or customer.visitor_code == current_visitor
             )
-            customer.is_initially_visible = matches_status and matches_visitor
+            customer.is_initially_visible = (matches_status and matches_visitor
+                                             and (selected_province == 'all' or customer.province_key == selected_province)
+                                             and (selected_city == 'all' or customer.city_key == selected_city))
 
         visible_customers_count = sum(
             1 for c in customers if c.is_initially_visible
@@ -848,6 +881,7 @@ def _create_visitor_to_customer_record(gcustomerid, gvisitorid):
 
 
 class CustomerCreateView(PlusLoginRequiredMixin, View):
+    automatic_visitor_assignment = True
     template_name = "core/customer_create.html"
 
     def _build_form_context(
@@ -2901,6 +2935,7 @@ class SaleRequestShortagesView(PlusLoginRequiredMixin, View):
     
 
 class SaleRequestCreateView(PlusLoginRequiredMixin, TemplateView):
+    automatic_visitor_assignment = True
     template_name = "core/sale_request_create.html"
 
     def get_context_data(self, **kwargs):

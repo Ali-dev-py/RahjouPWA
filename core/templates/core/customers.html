@@ -86,8 +86,21 @@
                 </button>
             </div>
 
+            <div class="row g-2 mt-1">
+                <div class="col-6"><label class="visually-hidden" for="customerProvinceFilter">استان</label>
+                    <select class="form-select" id="customerProvinceFilter" aria-label="فیلتر بر اساس استان">
+                        <option value="all">همه استان‌ها</option>{% for province in province_options %}<option value="{{ province.id }}" {% if selected_province == province.id %}selected{% endif %}>{{ province.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-6"><label class="visually-hidden" for="customerCityFilter">شهر</label>
+                    <select class="form-select" id="customerCityFilter" aria-label="فیلتر بر اساس شهر">
+                        <option value="all">همه شهرها</option>{% for city in city_options %}<option value="{{ city.id }}" data-province="{{ city.province }}" {% if selected_city == city.id %}selected{% endif %}>{{ city.name }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
             <!-- Visitor Filter & Debt Ordering Row -->
             <div class="row g-2 mt-1">
+                {% if not is_visitor_user %}
                 <div class="col-6">
                     <div class="input-group app-input-group customer-toolbar-select customer-visitor-filter">
                         <label class="input-group-text border-0 bg-transparent" for="customerVisitorFilter">
@@ -111,7 +124,8 @@
                     </div>
                 </div>
 
-                <div class="col-6">
+                {% endif %}
+                <div class="{% if is_visitor_user %}col-12{% else %}col-6{% endif %}">
                     <div class="input-group app-input-group customer-toolbar-select customer-order-select">
                         <label class="input-group-text border-0 bg-transparent" for="customerOrderSelect">
                             <span class="material-symbols-outlined fs-5" aria-hidden="true">swap_vert</span>
@@ -159,7 +173,7 @@
                          data-name-rank="{{ customer.name_rank }}"
                          data-hesab="{{ customer.hesab_raw }}"
                          data-status="{{ customer.status_code }}"
-                         data-visitor="{{ customer.visitor_code }}">
+                         data-visitor="{{ customer.visitor_code }}" data-province="{{ customer.province_key }}" data-city="{{ customer.city_key }}">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                             <div class="min-width-0">                                
@@ -186,6 +200,10 @@
                             </span>
                         </div>
 
+                        <div class="d-flex flex-wrap gap-2 mb-3" aria-label="موقعیت مشتری">
+                            <span class="status-chip customer-province-badge"><span class="material-symbols-outlined fs-6" aria-hidden="true">map</span>{{ customer.province_name }}</span>
+                            <span class="status-chip customer-city-badge"><span class="material-symbols-outlined fs-6" aria-hidden="true">location_on</span>{{ customer.city_name }}</span>
+                        </div>
                         <!-- Customer Balance / مانده حساب -->
                         <div class="d-flex justify-content-between align-items-end gap-3 pt-2 border-top">                            
                             <span class="d-flex align-items-center gap-2">
@@ -245,6 +263,8 @@
                             هیچ مشتری بدون ویزیتوری ثبت نشده است.
                         {% elif current_visitor != 'all' %}
                             هیچ مشتری‌ای برای این ویزیتور ثبت نشده است.
+                        {% elif selected_province != 'all' or selected_city != 'all' %}
+                            هیچ مشتری‌ای در این استان یا شهر یافت نشد.
                         {% elif current_status != 'all' %}
                             هیچ مشتری‌ای با این وضعیت حساب ثبت نشده است.
                         {% else %}
@@ -263,6 +283,9 @@
     document.addEventListener('DOMContentLoaded', function () {
         const searchInput = document.getElementById('customerSearchInput');
         const clearBtn = document.getElementById('clearSearchBtn');
+        const provinceSelect = document.getElementById('customerProvinceFilter');
+        const citySelect = document.getElementById('customerCityFilter');
+        const cityOptions = [...citySelect.options].slice(1).map(option => option.cloneNode(true));
         const visitorSelect = document.getElementById('customerVisitorFilter');
         const orderSelect = document.getElementById('customerOrderSelect');
         const statusButtons = document.querySelectorAll('[data-status-filter]');
@@ -275,6 +298,23 @@
         let activeStatus = '{{ current_status|default:"all"|escapejs }}';
         let activeVisitor = visitorSelect ? visitorSelect.value : '{{ current_visitor|default:"all"|escapejs }}';
         let activeOrder = orderSelect ? orderSelect.value : '{{ current_order|default:"name"|escapejs }}';
+
+        let activeProvince = provinceSelect.value;
+        let activeCity = citySelect.value;
+        function updateCityOptions() {
+            const options = cityOptions.filter(option => activeProvince === 'all' || option.dataset.province === activeProvince);
+            citySelect.replaceChildren(new Option('همه شهرها', 'all'), ...options.map(option => option.cloneNode(true)));
+            citySelect.value = options.some(option => option.value === activeCity) ? activeCity : 'all';
+            activeCity = citySelect.value;
+        }
+        updateCityOptions();
+        provinceSelect.addEventListener('change', () => {
+            activeProvince = provinceSelect.value; activeCity = 'all'; updateCityOptions();
+            syncFilterUrlParams(); filterCustomers();
+        });
+        citySelect.addEventListener('change', () => {
+            activeCity = citySelect.value; syncFilterUrlParams(); filterCustomers();
+        });
 
         function normalizePersian(text) {
             if (!text) return '';
@@ -363,6 +403,9 @@
                 url.searchParams.set('order', activeOrder);
             }
 
+            for (const [name, value] of [['province', activeProvince], ['city', activeCity]]) {
+                if (value === 'all') url.searchParams.delete(name); else url.searchParams.set(name, value);
+            }
             window.history.replaceState({}, '', url);
         }
 
@@ -385,7 +428,9 @@
                 const matchesStatus = activeStatus === 'all' || customerStatus === activeStatus;
                 const matchesVisitor = activeVisitor === 'all' || customerVisitor === activeVisitor;
 
-                if (matchesName && matchesStatus && matchesVisitor) {
+                if (matchesName && matchesStatus && matchesVisitor
+                    && (activeProvince === 'all' || card.dataset.province === activeProvince)
+                    && (activeCity === 'all' || card.dataset.city === activeCity)) {
                     card.classList.remove('d-none');
                     visibleCount++;
                 } else {
@@ -396,6 +441,7 @@
             if (visibleCount === 0 && customerCards.length > 0) {
                 if (noResultsText) {
                     const activeCriteriaCount =
+                        (activeProvince !== 'all' ? 1 : 0) + (activeCity !== 'all' ? 1 : 0) +
                         (query ? 1 : 0) +
                         (activeStatus !== 'all' ? 1 : 0) +
                         (activeVisitor !== 'all' ? 1 : 0);
@@ -406,6 +452,8 @@
                         noResultsText.textContent = 'هیچ مشتری بدون ویزیتوری ثبت نشده است.';
                     } else if (activeVisitor !== 'all') {
                         noResultsText.textContent = 'هیچ مشتری‌ای برای این ویزیتور ثبت نشده است.';
+                    } else if (activeProvince !== 'all' || activeCity !== 'all') {
+                        noResultsText.textContent = 'هیچ مشتری‌ای در این استان یا شهر یافت نشد.';
                     } else if (activeStatus !== 'all') {
                         noResultsText.textContent = 'هیچ مشتری‌ای با این وضعیت حساب ثبت نشده است.';
                     } else {
@@ -453,6 +501,7 @@
             });
         }
 
+        filterCustomers();
         searchInput.addEventListener('input', filterCustomers);
         clearBtn.addEventListener('click', function () {
             searchInput.value = '';

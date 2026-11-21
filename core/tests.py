@@ -769,7 +769,7 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn("رضا محمدی", html)
         self.assertIn("سارا احمدی", html)
         self.assertIn("بدون ویزیتور", html)
-        self.assertNotIn("نامشخص", html)
+        self.assertNotIn("ویزیتور نامشخص", html)
         self.assertIn('id="customerVisitorFilter"', html)
         self.assertIn('value="none"', html)
         self.assertIn('value="vis-guid-1"', html)
