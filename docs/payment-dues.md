@@ -12,7 +12,7 @@ Read-only integration with unmanaged `Salefactorghest` in `core/models.py`:
 
 ## UI and reminders
 
-Dashboard shows five oldest unpaid due records, unpaid count, total outstanding and a link to `/payment-dues/`. Full list is paginated and supports unpaid, nearby, overdue, paid, invalid-date and all statuses.
+Dashboard shows only the visitor reminder warning and a link to `/payment-dues/`; no installment cards or balance summary are shown below the warning. The full schedule page retains the installment cards and total outstanding, is paginated and supports unpaid, nearby, overdue, paid, invalid-date and all statuses.
 
 **Notifications in this implementation are in-app reminders, not Web Push.** They appear when the visitor opens the dashboard or payment schedule. Unpaid installments in the inclusive window today through seven days ahead qualify; overdue, paid and invalid-date records do not. The catch-up window avoids losing reminders when a visitor did not open the app exactly seven days before the due date. Admin/non-visitor roles can inspect the same upcoming schedule but receive no reminder panel.
 

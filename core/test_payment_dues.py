@@ -76,6 +76,18 @@ class PaymentScheduleTests(SimpleTestCase):
                                     {'is_visitor_user': visitor, 'payment_reminders': [row]})
             self.assertEqual('notifications_active' in html, visible)
 
+    def test_dashboard_keeps_warning_without_installment_cards_or_balance_summary(self):
+        row = self.row(7)
+        html = render_to_string('core/dashboard.html', {
+            'is_visitor_user': True, 'payment_reminders': [row],
+            'payment_dues': [row], 'payment_remaining': 100, 'payment_due_count': 1,
+        })
+        self.assertIn('notifications_active', html)
+        self.assertIn('یادآوری پرداخت', html)
+        self.assertIn(reverse('core:payment_dues'), html)
+        self.assertNotIn('payment-due-card', html)
+        self.assertNotIn('سررسید پرداخت‌نشده', html)
+
     def test_payment_page_requires_login(self):
         response = self.client.get(reverse('core:payment_dues'))
         self.assertEqual(response.status_code, 302)

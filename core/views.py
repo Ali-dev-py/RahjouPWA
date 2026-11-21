@@ -253,10 +253,7 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
         from .payment_dues import payment_schedule
         try:
             schedule = payment_schedule(self.request.plus_user)
-            unpaid = [row for row in schedule['rows'] if row['remaining'] > 0]
-            context.update(payment_dues=unpaid[:5], payment_due_count=len(unpaid),
-                           payment_remaining=schedule['remaining_total'],
-                           payment_reminders=schedule['reminders'])
+            context['payment_reminders'] = schedule['reminders']
         except DatabaseError:
             context['payment_error'] = 'دریافت سررسیدها ممکن نشد؛ لطفاً دوباره تلاش کنید.'
         return context
