@@ -1328,3 +1328,5 @@ textarea {
 
 .customer-province-badge { color: #3456a0; background: #edf2ff; }
 .customer-city-badge { color: #146a57; background: #e8f5ee; }
+
+.payment-due-card { border-radius: 1rem; box-shadow: 0 3px 14px rgb(30 50 80 / 5%); border-inline-start: 3px solid #a2b8de !important; }

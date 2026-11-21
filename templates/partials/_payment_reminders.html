@@ -1,0 +1,9 @@
+{% load i18n_extras %}
+{% if is_visitor_user and payment_reminders %}
+<aside class="alert alert-warning mb-3" role="status" aria-labelledby="payment-reminder-title">
+    <strong class="d-flex align-items-center gap-2" id="payment-reminder-title"><span class="material-symbols-outlined" aria-hidden="true">notifications_active</span>یادآوری پرداخت · {{ payment_reminders|length|persian_digits }} سررسید</strong>
+    <p class="small mt-2 mb-2">فاکتورهای زیر تا ۷ روز آینده سررسید می‌شوند.</p>
+    <ul class="small mb-0 ps-3">{% for due in payment_reminders|slice:':5' %}<li>{{ due.customer_name }} · فاکتور {{ due.factor_no|persian_digits }} · {{ due.date|persian_digits }}{% if due.days == 0 %} (امروز){% endif %}</li>{% endfor %}</ul>
+    <a class="small d-inline-block mt-2" href="{% url 'core:payment_dues' %}?status=soon">مشاهده سررسیدهای نزدیک</a>
+</aside>
+{% endif %}

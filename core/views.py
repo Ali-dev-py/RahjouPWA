@@ -250,6 +250,15 @@ class DashboardView(PlusLoginRequiredMixin, TemplateView):
         except DatabaseError:
             context['activity_error'] = "دریافت فعالیت‌های اخیر ممکن نشد."
             context['recent_activities'] = []
+        from .payment_dues import payment_schedule
+        try:
+            schedule = payment_schedule(self.request.plus_user)
+            unpaid = [row for row in schedule['rows'] if row['remaining'] > 0]
+            context.update(payment_dues=unpaid[:5], payment_due_count=len(unpaid),
+                           payment_remaining=schedule['remaining_total'],
+                           payment_reminders=schedule['reminders'])
+        except DatabaseError:
+            context['payment_error'] = 'دریافت سررسیدها ممکن نشد؛ لطفاً دوباره تلاش کنید.'
         return context
 
     def _load_recent_activities(self):
@@ -4775,5 +4784,26 @@ class FactorPDFView(PlusLoginRequiredMixin, View):
         }
 
         return render(request, "core/factor_pdf.html", context)
-    
-    
+
+
+class PaymentDuesView(PlusLoginRequiredMixin, TemplateView):
+    template_name = 'core/payment_dues.html'
+
+    def get_context_data(self, **kwargs):
+        from .payment_dues import payment_schedule
+        from django.core.paginator import Paginator
+        context = super().get_context_data(**kwargs)
+        selected = self.request.GET.get('status', 'unpaid')
+        if selected not in ('all', 'unpaid', 'paid', 'soon', 'overdue', 'unknown'):
+            selected = 'unpaid'
+        context['selected_status'] = selected
+        try:
+            schedule = payment_schedule(self.request.plus_user)
+            rows = [row for row in schedule['rows'] if selected == 'all'
+                    or (selected == 'unpaid' and row['remaining'] > 0) or row['status'] == selected]
+            context.update(due_page=Paginator(rows, 20).get_page(self.request.GET.get('page')),
+                           payment_remaining=schedule['remaining_total'],
+                           payment_reminders=schedule['reminders'])
+        except DatabaseError:
+            context['payment_error'] = 'دریافت سررسیدها ممکن نشد؛ لطفاً دوباره تلاش کنید.'
+        return context
