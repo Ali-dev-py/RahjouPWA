@@ -1,19 +1,21 @@
 <div class="document-filters row g-2 mt-2">
-    <div class="col-4">
+    <div class="{% if is_visitor_user %}col-6{% else %}col-4{% endif %}">
         <label class="form-label small mb-1" for="area-filter">منطقه</label>
         <select class="form-select" name="area" id="area-filter">
             <option value="">همه مناطق</option>
             {% for id, name in area_options %}<option value="{{ id }}" {% if selected_area == id %}selected{% endif %}>{{ name }}</option>{% endfor %}
         </select>
     </div>
-    <div class="col-4">
+    {% if not is_visitor_user %}
+    <div class="{% if is_visitor_user %}col-6{% else %}col-4{% endif %}">
         <label class="form-label small mb-1" for="visitor-filter">ویزیتور</label>
         <select class="form-select" name="visitor" id="visitor-filter">
             <option value="">همه ویزیتورها</option>
             {% for name in visitor_options %}<option value="{{ name }}" {% if selected_visitor == name %}selected{% endif %}>{{ name }}</option>{% endfor %}
         </select>
     </div>
-    <div class="col-4">
+    {% endif %}
+    <div class="{% if is_visitor_user %}col-6{% else %}col-4{% endif %}">
         <label class="form-label small mb-1" for="branch-filter">شعبه</label>
         <select class="form-select" name="branch" id="branch-filter">
             <option value="">همه شعبه‌ها</option>

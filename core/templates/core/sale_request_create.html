@@ -116,6 +116,12 @@
                         </select>
                     </div>
 
+                    {% if is_visitor_user %}
+                    <div class="col-12 col-md-4"><label class="form-label small text-secondary fw-semibold" for="visitorSelect">بازاریاب</label>
+                    <input type="hidden" name="visitor_id" id="visitorSelect" value="{{ automatic_visitor.gvisitorid|default:'' }}">
+                    <div class="form-control bg-light">{{ automatic_visitor.vizitorname|default:'تطبیق ویزیتور انجام نشد' }}</div>
+                    {% if automatic_visitor_error %}<p class="text-danger small mt-1" role="alert">{{ automatic_visitor_error }}</p>{% endif %}</div>
+                    {% else %}
                     <div class="col-12 col-md-4">
                         <label for="visitorSelect" class="form-label small text-secondary fw-semibold">
                             بازاریاب <span class="text-danger">*</span>
@@ -129,6 +135,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </section>

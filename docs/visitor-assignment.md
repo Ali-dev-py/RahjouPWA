@@ -1,0 +1,12 @@
+# Authenticated visitor assignment and customer geography
+
+- Visitor role is the authenticated `TuaUser.uTitle` normalized for Persian/Arabic ی/ک and whitespace, equal to `ویزیتور`.
+- Customer creation and sale-request creation/editing share the automatic assignment policy (`automatic_visitor_assignment`). Match `TuaUser.uName` against `ViewAllvisitors.vizitorname` (the existing `View_AllVisitors` visitor model in this project), using the same letter/whitespace normalization. Only active or legacy NULL-active entries qualify.
+- Duplicate view rows for the same GUID are deduplicated. Zero matches or multiple distinct matching GUIDs display an error on GET and reject POST. An administrator must correct the names/records; the app never guesses between namesakes.
+- The form shows the matched visitor read-only, with a hidden GUID for existing frontend validation. On every POST, the server resolves again and **overrides** any submitted visitor GUID, including omitted or forged values. This also applies to sale-request editing. Other roles retain the existing selectors and submitted choices.
+- Visitor filter controls are omitted server-side on customers and all document list filters. Income-report controls already apply the same restriction. The shared login mixin ignores the `visitor` query parameter for visitor-role users so old bookmarks cannot activate a hidden filter. Existing customer/document row-scope restrictions remain in place.
+- A request context processor supplies role and automatic-assignment state to both TemplateView and render()-based forms; no visitor database query is issued by the processor itself.
+- Customer cards show province and city badges resolved from `GProvinceID -> Province.GProvinceID` and `GCityID -> Cities.GCitiesID`. Missing lookup data displays explicit unknown labels, not a guessed location. Geography is batch loaded through the existing lookup loader, not queried per customer.
+- Province/city options come only from the already permission-scoped customer list. Geography filters combine with name, visitor, accounting status and ordering. Selected geography is persisted in the URL and honored on initial server render; changing province resets city and narrows its options. No schema changes are required.
+
+Tests cover name normalization, inactive/missing/ambiguous matches, server-controlled assignment against tampering, role-specific template controls, hidden URL filters, and normalized/scoped geography labels. Live SQL Server data and browser/mobile interaction still require staging validation.
