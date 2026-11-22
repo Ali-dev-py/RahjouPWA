@@ -82,6 +82,17 @@
                             </select>
                         </div>
 
+                        <div>
+                            <label for="area_id" class="form-label fw-medium small mb-1">منطقه <span class="text-secondary fw-normal">(اختیاری)</span></label>
+                            <select id="area_id" name="area_id" class="form-select">
+                                <option value="">بدون منطقه</option>
+                                {% if area_missing %}<option value="{{ selected_area_id }}" selected>منطقه فعلی نامعتبر است؛ دوباره انتخاب کنید</option>{% endif %}
+                                {% for area in areas %}
+                                <option value="{{ area.option_id }}" {% if selected_area_id == area.option_id %}selected{% endif %}>{{ area.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
                         <!-- Phone Number (Optional) -->
                         <div>
                             <label for="phone" class="form-label fw-medium small mb-1">
