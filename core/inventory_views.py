@@ -266,3 +266,32 @@ class OrderFormView(ReceiptFormView):
         request.session['inventory_order_forms'] = forms
         messages.success(request, f'حواله انبار شماره {order.orderstockno} با موفقیت ثبت شد.')
         return redirect('core:inventory_orders')
+
+
+class InventoryBalancesView(InventoryAccessMixin, View):
+    template_name = 'core/inventory_balances.html'
+
+    def get(self, request):
+        from .inventory import valid_guid, FINANCIAL_YEAR, DIGITS
+        from .inventory_balances import warehouse_balances
+        inventories = list(Tblinv.objects.using('plus').all().order_by('invname'))
+        for inventory in inventories:
+            inventory.option_id = guid(inventory.ginvid)
+        raw = request.GET.get('inventory', '').strip()
+        selected = valid_guid(raw)
+        inventory = next((inv for inv in inventories if guid(inv.ginvid) == selected), None)
+        query = request.GET.get('q', '').strip()
+        context = dict(inventories=inventories, selected_inventory=selected, query=query,
+                       financial_year=FINANCIAL_YEAR, inventory=inventory)
+        if raw and not inventory:
+            context['error'] = 'انبار انتخاب‌شده معتبر نیست.'
+            return render(request, self.template_name, context, status=400)
+        if inventory:
+            from .income_report import name_key
+            rows = warehouse_balances(inventory)
+            if query:
+                needle = name_key(query.translate(DIGITS)).lower()
+                rows = [row for row in rows if needle in name_key(
+                    f"{row['name']} {row['code']}".translate(DIGITS)).lower()]
+            context['balance_page'] = Paginator(rows, 30).get_page(request.GET.get('page'))
+        return render(request, self.template_name, context)

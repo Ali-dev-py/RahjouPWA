@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% load i18n_extras %}
+{% block title %}موجودی کالا | رهجو{% endblock %}
+{% block body_class %}app-body page-inventory has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="موجودی کالا" back_url_name="core:inventory_home" %}
+<main class="app-main container-fluid px-3"><div class="app-content app-content--narrow mx-auto">
+<div class="inventory-heading mb-3"><span class="material-symbols-outlined inventory-heading__icon" aria-hidden="true">inventory_2</span><h1 class="h4 fw-bold mb-0">موجودی کالا</h1></div>
+<form method="get" class="card inventory-form-section border-0 p-3 mb-3">
+<label class="form-label small" for="balance-inventory">انبار</label>
+<select class="form-select mb-3" id="balance-inventory" name="inventory" required><option value="">انتخاب انبار...</option>{% for inv in inventories %}<option value="{{ inv.option_id }}" {% if selected_inventory == inv.option_id %}selected{% endif %}>{{ inv.invname }}</option>{% endfor %}</select>
+<label class="visually-hidden" for="balance-search">نام یا کد کالا</label><input type="search" class="form-control mb-3" id="balance-search" name="q" value="{{ query }}" placeholder="جستجوی نام یا کد کالا...">
+<button class="btn btn-primary" type="submit">نمایش موجودی</button>
+</form>
+{% if error %}<p class="alert alert-danger small" role="alert">{{ error }}</p>{% elif inventory %}
+<div class="d-flex flex-wrap justify-content-between gap-2 small text-secondary mb-3"><span>{{ inventory.invname }} · سال مالی {{ financial_year|persian_digits }}</span><span>{{ balance_page.paginator.count|persian_digits }} کالا</span></div>
+<div class="d-grid gap-2">
+{% for row in balance_page %}<article class="card inventory-document border-0 p-3">
+<div class="d-flex justify-content-between align-items-center gap-3"><div class="min-width-0"><strong class="small text-break">{{ row.name }}</strong><small class="d-block text-secondary mt-1">کد: {{ row.code|default:'—'|persian_digits }}</small></div><div class="text-end flex-shrink-0"><strong class="{% if row.amount < 0 %}text-danger{% elif row.amount > 0 %}text-success{% else %}text-secondary{% endif %}" dir="ltr">{{ row.amount|floatformat:'-8'|persian_digits }}</strong><small class="d-block text-secondary">{{ row.unit|default:'موجودی' }}</small></div></div>
+</article>{% empty %}<p class="card border-0 p-3 small text-secondary">کالایی با این مشخصات در گردش انبار سال ۱۴۰۵ یافت نشد.</p>{% endfor %}
+</div>
+{% if balance_page.has_other_pages %}<nav class="d-flex justify-content-between align-items-center gap-2 mt-3" aria-label="صفحه‌بندی موجودی">{% if balance_page.has_previous %}<a class="btn btn-light" href="?inventory={{ selected_inventory }}&amp;q={{ query|urlencode }}&amp;page={{ balance_page.previous_page_number }}">قبلی</a>{% endif %}<span class="small">{{ balance_page.number|persian_digits }} از {{ balance_page.paginator.num_pages|persian_digits }}</span>{% if balance_page.has_next %}<a class="btn btn-light" href="?inventory={{ selected_inventory }}&amp;q={{ query|urlencode }}&amp;page={{ balance_page.next_page_number }}">بعدی</a>{% endif %}</nav>{% endif %}
+{% else %}<p class="card border-0 p-3 small text-secondary">برای مشاهده موجودی، انبار را انتخاب کنید.</p>{% endif %}
+</div></main>{% include "partials/_bottom_nav.html" %}
+{% endblock %}

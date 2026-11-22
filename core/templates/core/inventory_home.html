@@ -6,6 +6,11 @@
 <main class="app-main container-fluid px-3"><div class="app-content app-content--narrow mx-auto">
     <div class="inventory-heading mb-4"><span class="material-symbols-outlined inventory-heading__icon" aria-hidden="true">warehouse</span><h1 class="h4 fw-bold mb-0">انبار</h1></div>
     <div class="inventory-actions">
+        <a class="inventory-action inventory-action--balances" href="{% url 'core:inventory_balances' %}">
+            <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">inventory_2</span>
+            <span class="flex-grow-1"><strong class="d-block mb-1">موجودی کالا</strong><span class="small inventory-action__label">موجودی به تفکیک انبار</span></span>
+            <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+        </a>
         <a class="inventory-action inventory-action--receipt" href="{% url 'core:receipt_list' %}">
             <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">move_to_inbox</span>
             <span class="flex-grow-1"><strong class="d-block mb-1">رسید انبار</strong><span class="small inventory-action__label">ورود کالا</span></span>

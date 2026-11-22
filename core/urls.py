@@ -3,13 +3,14 @@ from .converters import InventoryUUIDConverter
 
 from .views import *
 from .inventory_views import (InventoryHomeView, InventoryOrdersView, ReceiptListView,
-                              ReceiptDetailView, ReceiptFormView, ReceiptDeleteView, OrderFormView)
+                              ReceiptDetailView, ReceiptFormView, ReceiptDeleteView, OrderFormView, InventoryBalancesView)
 
 register_converter(InventoryUUIDConverter, "inventory_uuid")
 
 app_name = "core"
 
 urlpatterns = [
+    path("inventory/balances/", InventoryBalancesView.as_view(), name="inventory_balances"),
     path("inventory/", InventoryHomeView.as_view(), name="inventory_home"),
     path("inventory/orders/new/", OrderFormView.as_view(), name="order_create"),
     path("inventory/orders/", InventoryOrdersView.as_view(), name="inventory_orders"),

@@ -1330,3 +1330,4 @@ textarea {
 .customer-city-badge { color: #146a57; background: #e8f5ee; }
 
 .payment-due-card { border-radius: 1rem; box-shadow: 0 3px 14px rgb(30 50 80 / 5%); border-inline-start: 3px solid #a2b8de !important; }
+.page-inventory .inventory-action--balances { color: #3456a0; background: linear-gradient(115deg, #fff, #edf2ff); border-color: #d9e2fb; }

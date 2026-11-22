@@ -28,7 +28,7 @@ class InventoryAccessTests(SimpleTestCase):
         pk = uuid.UUID('11111111-1111-1111-1111-111111111111')
         return [reverse('core:' + name, kwargs={'pk': pk} if name in ('receipt_detail', 'receipt_edit', 'receipt_delete') else None)
                 for name in ('inventory_home', 'inventory_orders', 'receipt_list', 'receipt_create',
-                             'receipt_detail', 'receipt_edit', 'receipt_delete', 'order_create')]
+                             'receipt_detail', 'receipt_edit', 'receipt_delete', 'order_create', 'inventory_balances')]
 
     def test_all_inventory_routes_require_login(self):
         for url in self.urls():
