@@ -1289,6 +1289,10 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
             Customergroup.objects.using("plus").all().order_by("groupname")
         )
         c2g = self._get_customer_group_link(customer)
+        areas = _area_rows()
+        for area in areas:
+            area.option_id = _clean_guid_str(area.gareageographyid).lower()
+        selected_area_id = _clean_guid_str(getattr(customer, "gareageoghrafiid", None)).lower()
 
         selected_group_id = ""
         if c2g:
@@ -1323,6 +1327,9 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                 "phone": initial_phone,
                 "address": initial_address,
                 "selected_group_id": selected_group_id,
+                "areas": areas,
+                "selected_area_id": selected_area_id,
+                "area_missing": bool(selected_area_id and not any(area.option_id == selected_area_id for area in areas)),
                 "return_to": return_to,
                 "cancel_url": cancel_url,
             },
@@ -1344,12 +1351,23 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
         phone = request.POST.get("phone", "").strip()
         address = request.POST.get("address", "").strip()
         selected_group_id = request.POST.get("customer_group", "").strip()
+        areas = _area_rows()
+        for area in areas:
+            area.option_id = _clean_guid_str(area.gareageographyid).lower()
+        # Older clients omitting this field must not silently clear the stored region.
+        area_submitted = 'area_id' in request.POST
+        selected_area_id = _clean_guid_str(request.POST.get(
+            'area_id', getattr(customer, 'gareageoghrafiid', None))).lower()
+        selected_area = next((area for area in areas
+                              if _clean_guid_str(area.gareageographyid).lower() == selected_area_id), None)
 
         groups = list(
             Customergroup.objects.using("plus").all().order_by("groupname")
         )
 
         errors = []
+        if area_submitted and selected_area_id and selected_area is None:
+            errors.append('منطقه انتخاب‌شده معتبر نیست.')
         if not custname:
             errors.append("نام مشتری الزامی است.")
         if not selected_group_id:
@@ -1378,6 +1396,9 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                     "phone": phone,
                     "address": address,
                     "selected_group_id": selected_group_id,
+                    "areas": areas,
+                    "selected_area_id": selected_area_id,
+                    "area_missing": bool(selected_area_id and not any(area.option_id == selected_area_id for area in areas)),
                     "return_to": return_to,
                     "cancel_url": cancel_url,
                 },
@@ -1403,6 +1424,9 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                 customer.phone = phone
                 customer.mobile = phone
                 customer.address = address
+                if area_submitted:
+                    customer.gareageoghrafiid = selected_area.gareageographyid if selected_area else None
+                    update_fields.append('gareageoghrafiid')
                 customer.lastupdatedby = updated_by
                 customer.lastupdateddate = shamsi_date
 
@@ -1490,6 +1514,9 @@ class CustomerEditView(PlusLoginRequiredMixin, View):
                     "phone": phone,
                     "address": address,
                     "selected_group_id": selected_group_id,
+                    "areas": areas,
+                    "selected_area_id": selected_area_id,
+                    "area_missing": bool(selected_area_id and not any(area.option_id == selected_area_id for area in areas)),
                     "return_to": return_to,
                     "cancel_url": cancel_url,
                 },
