@@ -2,6 +2,7 @@
 {% load humanize %}
 {% load i18n_extras %}
 
+{% block filter_page %}1{% endblock %}
 {% block title %}مشتریان | رهجو{% endblock %}
 {% block body_class %}app-body page-customers has-bottom-nav{% endblock %}
 
@@ -76,6 +77,7 @@
                 </span>
                 <input class="form-control border-0 bg-transparent"
                        id="customerSearchInput"
+                       value="{{ request.GET.q|default:'' }}"
                        type="text"
                        inputmode="search"
                        autocomplete="off"
@@ -406,6 +408,8 @@
             for (const [name, value] of [['province', activeProvince], ['city', activeCity]]) {
                 if (value === 'all') url.searchParams.delete(name); else url.searchParams.set(name, value);
             }
+            if (searchInput.value.trim()) url.searchParams.set('q', searchInput.value.trim());
+            else url.searchParams.delete('q');
             window.history.replaceState({}, '', url);
         }
 
@@ -502,9 +506,10 @@
         }
 
         filterCustomers();
-        searchInput.addEventListener('input', filterCustomers);
+        searchInput.addEventListener('input', () => { syncFilterUrlParams(); filterCustomers(); });
         clearBtn.addEventListener('click', function () {
             searchInput.value = '';
+            syncFilterUrlParams();
             filterCustomers();
             searchInput.focus();
         });
