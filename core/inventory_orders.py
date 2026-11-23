@@ -11,7 +11,7 @@ from django.utils import timezone
 from .inventory import FINANCIAL_YEAR, DIGITS, today_string, valid_guid
 from .income_report import guid, variants, guid_batches
 from .models import (Tblorderstock, Tblorderstockitems, Sanadkala,
-                     Prefactormaster, Prefactordetail, Tblcustomer, Branches)
+                     Prefactormaster, Prefactordetail, Tblcustomer, Branches, Tblsubdetailgroup)
 
 
 def approved_prefactors():
@@ -81,13 +81,26 @@ def prefactor_item_description(master):
             f"شعبه {branch.branchname if branch else 'نامشخص'} بنام جناب آقای {customer_name}")
 
 
+def prefactor_customer_tafzil(master):
+    customer = (Tblcustomer.objects.using('plus').filter(gcustomerid__in=variants([master.gcustomerid])).first()
+                if master.gcustomerid else None)
+    subdetail_id = valid_guid(customer.gsubdetailid) if customer else ''
+    subdetail = (Tblsubdetailgroup.objects.using('plus').filter(gsubdetailid__in=variants([subdetail_id])).first()
+                 if subdetail_id else None)
+    if subdetail is None:
+        raise ValidationError('تفصیلی مشتری پیش‌فاکتور در جدول طرف حساب‌ها تعریف نشده است؛ ابتدا اطلاعات مشتری را اصلاح کنید.')
+    return subdetail.gsubdetailid
+
+
 def save_order(payload, user, source=None):
     with order_write_lock():
         item_description = None
+        customer_tafzil_id = None
         if source:
             # Approval can have changed since import; reject revoked approval.
             master, _ = prefactor_lines(source)
             item_description = prefactor_item_description(master)
+            customer_tafzil_id = prefactor_customer_tafzil(master)
         inv = payload['inventory']
         for product, quantity in payload['lines']:
             rows = Sanadkala.objects.using('plus').filter(
@@ -108,7 +121,8 @@ def save_order(payload, user, source=None):
         order = Tblorderstock.objects.using('plus').create(
             gorderstockid=str(uuid.uuid4()).upper(), orderstockno=str(maximum + 1).zfill(6),
             financialyear=FINANCIAL_YEAR, orderstockdate=payload['date'],
-            orderstockdesc=payload['description'], regdate=now, createddate=now,
+            orderstockdesc=item_description if source else payload['description'],
+            gtafzilid=customer_tafzil_id, regdate=now, createddate=now,
             lastupdateddate=now, okdate='', gcreatedby=str(user.gucode),
             ginvid=inv.ginvid, ginvtafzil4id=inv.gtafzilid, gcompanyid=inv.gcompanyid,
             finalstatuscode=payload['status'].code, gfinalstatuscode=payload['status'].gcode,

@@ -11,7 +11,7 @@ from .test_inventory import InventoryReceiptIntegrationTests
 from .inventory import validate_payload
 from .inventory_orders import save_order, prefactor_lines, approved_prefactors
 from .inventory_views import OrderFormView
-from .models import Tblorderstock, Tblorderstockitems, Sanadkala, Prefactormaster, Prefactordetail, Prefactordetailstatus, Tblcustomer
+from .models import Tblorderstock, Tblorderstockitems, Sanadkala, Prefactormaster, Prefactordetail, Prefactordetailstatus, Tblcustomer, Tblsubdetailgroup, Tbldetailgroup
 
 
 class OrderIntegrationTests(InventoryReceiptIntegrationTests):
@@ -29,9 +29,13 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
                                 require_branch=False, decimal_quantities=True)
 
     def prefactor(self):
+        detail = self.insert(Tbldetailgroup, gdetailid=str(uuid.uuid4()))
+        subdetail = self.insert(Tblsubdetailgroup, gsubdetailid=str(uuid.uuid4()).upper(), gdetailid_id=detail.gdetailid)
+        customer = self.insert(Tblcustomer, gcustomerid=str(uuid.uuid4()), custname='مشتری پیش‌فاکتور',
+                               gsubdetailid=subdetail.gsubdetailid)
         self.insert(Prefactordetailstatus, prefactordetailstatuscode=8, prefactordetailstatusname='تائید شده')
         master = self.insert(Prefactormaster, prefactorno='123', gprefactormasterid=str(uuid.uuid4()),
-                             prefactorstatuscode=4, isbuy=False, gorderstockid=None)
+                             prefactorstatuscode=4, isbuy=False, gorderstockid=None, gcustomerid=customer.gcustomerid)
         self.insert(Prefactordetail, gprefactormasterid=master.gprefactormasterid,
                     gkalaid=self.product.gkalaid, quantity=2)
         return master
@@ -87,7 +91,9 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
 
     def test_prefactor_item_description_uses_real_metadata_and_padded_number(self):
         master = self.prefactor()
-        customer = self.insert(Tblcustomer, gcustomerid=str(uuid.uuid4()), custname='حمید بیدی')
+        customer = Tblcustomer.objects.using('plus').get(gcustomerid=master.gcustomerid)
+        customer.custname = 'حمید بیدی'
+        customer.save(using='plus')
         master.prefactorno = '000109'
         master.prefactordate = '1405/09/02'
         master.gbranchid = self.branch.gbranchid
@@ -102,12 +108,29 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         first.save(using='plus')
         order = save_order(self.payload(), self.user, master.gprefactormasterid)
         self.assertEqual(order.orderstockno, '000165')
+        self.assertEqual(order.orderstockdesc,
+            'پیش فاکتور فروش شماره 000109 مورخ 1405/09/02 شعبه تهران بنام جناب آقای حمید بیدی')
+        self.assertEqual(order.gtafzilid, customer.gsubdetailid)
+        self.assertEqual(order.ginvid, self.inv.ginvid)
         item = Tblorderstockitems.objects.using('plus').get(gorderstockid=order.gorderstockid)
         self.assertEqual(item.kaladescript,
             'پیش فاکتور فروش شماره 000109 مورخ 1405/09/02 شعبه تهران بنام جناب آقای حمید بیدی')
         self.assertEqual(Sanadkala.objects.using('plus').get(goperid=order.gorderstockid).operno, '000165')
         first.refresh_from_db(using='plus')
         self.assertEqual(first.orderstockno, '164')
+
+    def test_missing_customer_tafzil_blocks_all_order_writes(self):
+        master = self.prefactor()
+        self.stock('20')
+        customer = Tblcustomer.objects.using('plus').get(gcustomerid=master.gcustomerid)
+        for missing in (None, str(uuid.uuid4())):
+            customer.gsubdetailid = missing
+            customer.save(using='plus')
+            with self.assertRaises(ValidationError):
+                save_order(self.payload(), self.user, master.gprefactormasterid)
+            self.assertFalse(Tblorderstock.objects.using('plus').exists())
+            self.assertFalse(Tblorderstockitems.objects.using('plus').exists())
+            self.assertFalse(Sanadkala.objects.using('plus').filter(operkind=134).exists())
 
     def test_prefactor_approval_and_import_aggregation(self):
         master = self.prefactor()
