@@ -2,8 +2,6 @@ from django.urls import path, register_converter
 from .converters import InventoryUUIDConverter
 
 from .views import *
-from .inventory_views import (InventoryHomeView, InventoryOrdersView, ReceiptListView,
-                              ReceiptDetailView, ReceiptFormView, ReceiptDeleteView, OrderFormView, InventoryBalancesView)
 
 register_converter(InventoryUUIDConverter, "inventory_uuid")
 

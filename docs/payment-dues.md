@@ -21,3 +21,5 @@ No background scheduler, device notification permission or push subscription is 
 ## Validation
 
 Tests cover the seven-day boundaries, partial/full/overpayment, invalid dates, role scope, no notifications for other roles, pagination and safe database errors. An isolated unmanaged-schema integration test verifies GUID joins, persisted amounts, names, deleted/orphan exclusion and visitor/admin behavior. Live SQL Server and mobile/browser validation remain pending. No database writes or new schema are introduced.
+
+> Repository cleanup: test files were removed by request after the consolidated views passed 165 Django checks and 13 JavaScript tests. Testing descriptions above document historical validation; the test suite is no longer included.

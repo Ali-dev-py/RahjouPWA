@@ -1,148 +1,98 @@
 # Rahjou PWA
 
-A conventional Django project for the Rahjou mobile-first accounting and sales interface. The original Google Stitch screens are Bootstrap 5 RTL Django templates connected through named routes. This phase contains presentation and PWA infrastructure only—not accounting, authentication, persistence, or PDF business logic.
-
-## Screens and routes
-
-| Screen | Route | Named URL | Template |
-| --- | --- | --- | --- |
-| Splash | `/` | `core:splash` | `core/splash.html` |
-| Login | `/login/` | `core:login` | `core/login.html` |
-| Dashboard | `/dashboard/` | `core:dashboard` | `core/dashboard.html` |
-| Sale request list | `/sale-requests/` | `core:sale_request_list` | `core/sale_request_list.html` |
-| Sale request detail | `/sale-requests/detail/` | `core:sale_request_detail` | `core/sale_request_detail.html` |
-| New sale request | `/sale-requests/new/` | `core:sale_request_create` | `core/sale_request_create.html` |
-| Offline fallback | `/offline/` | `core:offline` | `core/offline.html` |
-
-All six source files originally used Tailwind and none used Bootstrap. They now extend `base.html`, use pinned Bootstrap 5.3 RTL assets, use Django `{% url %}` and `{% static %}` references, and share header/navigation partials. See [`docs/STATIC_HTML_AUDIT.md`](docs/STATIC_HTML_AUDIT.md) for the original audit.
+A mobile-first, Persian/RTL Django application for customer management, sales
+requests, pre-factors, sales factors, accounting summaries and warehouse operations.
+The interface uses shared Bootstrap templates and a PWA manifest/service worker.
 
 ## Project structure
 
-The repository follows the default-style Django layout: one settings module and each app at the project root.
-
 ```text
-.
-├── manage.py
-├── requirements.txt
-├── config/
-│   ├── __init__.py
-│   ├── settings.py            # single environment-aware settings file
-│   ├── urls.py
-│   ├── views.py               # manifest and root service-worker delivery
-│   ├── asgi.py
-│   └── wsgi.py
-├── core/                      # root-level Django app
-│   ├── templates/core/
-│   ├── __init__.py
-│   ├── apps.py
-│   ├── urls.py
-│   ├── views.py               # TemplateView placeholders only
-│   └── tests.py
-├── templates/
-│   ├── base.html
-│   └── partials/
-├── static/
-│   ├── css/app.css
-│   ├── js/app.js
-│   ├── images/
-│   ├── icons/
-│   ├── screenshots/
-│   ├── manifest.json
-│   └── serviceworker.js
-└── docs/design-reference/
+manage.py
+requirements.txt
+config/                 Django settings, URL configuration, ASGI and WSGI
+core/
+  models.py             Existing SQL Server table/view mappings
+  views.py              All HTTP views, including inventory and PWA delivery
+  urls.py               Application routes
+  income_report.py      Financial calculations and factor attribution
+  inventory*.py         Receipt/order posting and stock balance services
+  payment_dues.py        Payment schedule and visitor-only in-app reminders
+  customer_geography.py Customer province/city labels
+  visitor_assignment.py Authenticated visitor assignment and role context
+  filter_state.py       Session-scoped filter persistence context
+  transaction_styling.py Cancellation presentation helpers
+  converters.py         URL converters
+  templatetags/          Display helpers and inventory navigation permission
+  templates/core/       Application screens
+static/                 Styles, scripts, PWA assets, icons and logo
+templates/              Base layout and shared partials
+docs/                   Feature mappings, behavior and deployment caveats
 ```
 
-There is deliberately no custom `models.py` or custom migration package in `core` yet.
+All views live in `core/views.py`. `config/urls.py` imports the manifest and
+service-worker delivery functions from there; `core/urls.py` maps business routes.
+Business services remain separate from HTTP views to avoid mixing calculations
+and database posting logic into request handlers.
 
-## Local setup
+## Setup
 
-Python 3.11+ is recommended.
+Use Python 3.11+ with Django 5.2.5. Install the dependencies in an isolated
+virtual environment; SQL Server access also requires a compatible system ODBC
+driver and the project's `mssql-django`/`pyodbc` dependencies.
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate               # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-python manage.py migrate                 # built-in Django tables only
+python manage.py check
+python manage.py migrate
 python manage.py runserver
 ```
 
-Open <http://127.0.0.1:8000/>. Every Django entry point uses the single `config.settings` module.
+Review `config/settings.py` and configure the database aliases and deployment
+settings for your environment before running database commands. Most domain
+models are unmanaged mappings to existing tables: migrations do not provision
+those SQL Server tables. Do not commit credentials or local environment files.
 
-Run checks with:
+## Features
+
+- Authenticated customer, sale-request, pre-factor and factor screens.
+- Visitor assignment, role restrictions and customer/document scoping.
+- Sales/commission reporting and print/PDF layouts.
+- Customer transaction history, region and province/city information.
+- Inventory receipts, outgoing stock orders and warehouse product balances.
+- Factor payment schedules and visitor-only **in-app** reminders (not background Push).
+- Per-tab filter persistence across navigation.
+
+Feature-specific mappings and caveats are documented in `docs/`.
+
+## PWA and deployment
+
+- Manifest: `/manifest.webmanifest`, served from `static/manifest.json`.
+- Root-scoped service worker: `/serviceworker.js`, served from `static/serviceworker.js`.
+- Offline fallback: `/offline/`.
+- Versioned cache: `CACHE_NAME` in `static/serviceworker.js`.
+
+Use HTTPS in production. Preserve manifest/JavaScript MIME types and the
+`Service-Worker-Allowed: /` header. Configure allowed hosts, trusted origins,
+secrets, secure cookies and proxy handling in the deployment environment.
 
 ```bash
-python manage.py check
-python manage.py test
-```
-
-Run Django's deployment checks against the same settings file by overriding its environment values:
-
-```bash
-DJANGO_DEBUG=False \
-DJANGO_SECRET_KEY='a-long-random-secret-with-at-least-fifty-characters' \
-DJANGO_ALLOWED_HOSTS='example.com' \
-DJANGO_CSRF_TRUSTED_ORIGINS='https://example.com' \
 python manage.py check --deploy
-```
-
-## Settings and environment
-
-`config/settings.py` defaults to development mode. Production configuration uses environment variables rather than a second settings module:
-
-- `DJANGO_DEBUG`
-- `DJANGO_SECRET_KEY`
-- `DJANGO_ALLOWED_HOSTS`
-- `DJANGO_CSRF_TRUSTED_ORIGINS`
-- `DJANGO_SECURE_SSL_REDIRECT`
-- `DJANGO_SECURE_HSTS_SECONDS`
-
-See `.env.example` for example values. When `DJANGO_DEBUG=False`, secure cookies, HTTPS redirect, HSTS, proxy SSL handling, and WhiteNoise compressed manifest storage are enabled.
-
-## PWA setup
-
-- Canonical manifest: `/manifest.webmanifest`
-- Static manifest copy: `/static/manifest.json`
-- Root-scoped service worker: `/serviceworker.js`
-- Static worker copy: `/static/serviceworker.js`
-- Offline fallback: `/offline/`
-- Network-first navigation and stale-while-revalidate static assets
-- Installation left entirely to the browser's native PWA controls
-- Cache version controlled by `CACHE_NAME` in `static/serviceworker.js`
-
-The splash screen redirects to login after 2.5 seconds, with an HTML refresh fallback. Service workers require HTTPS outside localhost. In production, ensure the proxy/CDN preserves manifest and JavaScript MIME types, avoids aggressive caching for `/manifest.webmanifest` and `/serviceworker.js`, and preserves the worker's root scope header.
-
-The current regular, maskable, and Apple touch icons are temporary exports from the supplied logo and should be replaced with final production artwork.
-
-## Production outline
-
-```bash
-export DJANGO_SETTINGS_MODULE=config.settings
-export DJANGO_DEBUG=False
-export DJANGO_SECRET_KEY='a-long-random-production-secret'
-export DJANGO_ALLOWED_HOSTS='example.com,www.example.com'
-export DJANGO_CSRF_TRUSTED_ORIGINS='https://example.com,https://www.example.com'
-
 python manage.py collectstatic --noinput
-python manage.py migrate
 gunicorn config.wsgi:application
 ```
 
-## Intentionally stubbed
+## Validation and repository cleanup
 
-- No domain models or custom migrations
-- No real authentication
-- No saved forms or server-side form validation
-- No database-backed filtering/search
-- No PDF generation
-- No real customer/profile screens
-- Temporary PWA artwork
+Test files were removed at the owner's request. Before removal, the consolidated
+views and duplicate-model cleanup passed **165 Django tests and 13 JavaScript
+tests**. Those results are historical; `manage.py test` no longer runs that suite.
+Previous tests remain recoverable from Git history.
 
-## Recommended next steps
-
-1. Add customer, product, factor, line-item, tax, discount, and payment models.
-2. Add forms/formsets and server-side validation.
-3. Replace sample values with database query context.
-4. Implement authentication and route authorization.
-5. Add tested PDF output for factors and prefactors.
-6. Add browser/integration tests and final PWA artwork.
+For ongoing changes, run Django system checks and JavaScript syntax checks, then
+verify affected workflows in staging against SQL Server. Existing desktop-system
+integration, triggers, transaction locks and mobile browser behavior require
+live-environment validation. Runtime assets, domain services and mapping
+documentation are retained; no database data was deleted by the cleanup.

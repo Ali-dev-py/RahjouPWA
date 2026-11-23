@@ -10,3 +10,5 @@ The inventory home now links to **موجودی کالا**, a read-only report at
 The report supports product-name/code search (including Persian/Arabic digits) and pagination, retaining filters in navigation links. It uses the existing non-visitor inventory gate, so visitors are denied server-side. Database failures use the existing safe inventory-unavailable response.
 
 No stock, receipt or order data is changed, and no schema migration is required. Isolated SQLite tests cover sums, precision, NULLs, GUID case, warehouse/year isolation, zero/negative balances, missing catalog records, input validation, search, authentication/role restrictions and database errors. Live SQL Server and browser/mobile validation remain pending.
+
+> Repository cleanup: test files were removed by request after the consolidated views passed 165 Django checks and 13 JavaScript tests. Testing descriptions above document historical validation; the test suite is no longer included.

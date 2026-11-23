@@ -19,4 +19,4 @@ Each authenticated session gets an opaque storage namespace, rotated for user/ro
 
 To opt another filterable template in, add `{% block filter_page %}1{% endblock %}`. Write applied filters to query parameters; the shared script handles navigation thereafter. POST/create/edit forms must not opt in. Explicit full reset can use `?filters_reset=1` or a link with `data-reset-filters`.
 
-Validation: Django template/context tests plus `node --test tests/filter-state.test.cjs` cover restoration, explicit queries, clear/reset, independent paths, BFCache snapshots, session isolation, blocked/corrupt storage, same-origin link handling and GET vs POST. Manual real-browser/mobile verification remains pending.
+Historical validation (test files removed during repository cleanup): Django template/context checks and JavaScript checks covered restoration, explicit queries, clear/reset, independent paths, BFCache snapshots, session isolation, blocked/corrupt storage, same-origin link handling and GET vs POST. Manual real-browser/mobile verification remains pending.
