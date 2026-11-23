@@ -11,7 +11,7 @@ from django.utils import timezone
 from .inventory import FINANCIAL_YEAR, DIGITS, today_string, valid_guid
 from .income_report import guid, variants, guid_batches
 from .models import (Tblorderstock, Tblorderstockitems, Sanadkala,
-                     Prefactormaster, Prefactordetail, Tblcustomer)
+                     Prefactormaster, Prefactordetail, Tblcustomer, Branches)
 
 
 def approved_prefactors():
@@ -70,11 +70,24 @@ def order_write_lock():
         yield
 
 
+def prefactor_item_description(master):
+    branch = (Branches.objects.using('plus').filter(gbranchid__in=variants([master.gbranchid])).first()
+              if master.gbranchid else None)
+    customer = (Tblcustomer.objects.using('plus').filter(gcustomerid__in=variants([master.gcustomerid])).first()
+                if master.gcustomerid else None)
+    number = str(master.prefactorno or '').translate(DIGITS).strip().zfill(6)
+    customer_name = customer.custname if customer and customer.custname else 'مشتری نامشخص'
+    return (f"پیش فاکتور فروش شماره {number} مورخ {master.prefactordate} "
+            f"شعبه {branch.branchname if branch else 'نامشخص'} بنام جناب آقای {customer_name}")
+
+
 def save_order(payload, user, source=None):
     with order_write_lock():
+        item_description = None
         if source:
             # Approval can have changed since import; reject revoked approval.
-            prefactor_lines(source)
+            master, _ = prefactor_lines(source)
+            item_description = prefactor_item_description(master)
         inv = payload['inventory']
         for product, quantity in payload['lines']:
             rows = Sanadkala.objects.using('plus').filter(
@@ -93,7 +106,7 @@ def save_order(payload, user, source=None):
             raise ValidationError('شماره حواله از سقف مجاز عبور کرده است.')
         now = today_string()
         order = Tblorderstock.objects.using('plus').create(
-            gorderstockid=str(uuid.uuid4()).upper(), orderstockno=str(maximum + 1),
+            gorderstockid=str(uuid.uuid4()).upper(), orderstockno=str(maximum + 1).zfill(6),
             financialyear=FINANCIAL_YEAR, orderstockdate=payload['date'],
             orderstockdesc=payload['description'], regdate=now, createddate=now,
             lastupdateddate=now, okdate='', gcreatedby=str(user.gucode),
@@ -105,7 +118,7 @@ def save_order(payload, user, source=None):
             Tblorderstockitems.objects.using('plus').create(
                 gorderstockitemsid=str(uuid.uuid4()).upper(), gorderstockid=order.gorderstockid,
                 gkalaid=product.gkalaid, ginvid=inv.ginvid, quantityv1=quantity,
-                qualitycode=1, isaward=False, vatprice=0, rowid=index,
+                qualitycode=1, isaward=False, vatprice=0, rowid=index, kaladescript=item_description,
                 discountprice=0, discountpercent=0, gcompanyid=inv.gcompanyid)
             Sanadkala.objects.using('plus').create(
                 gsanadkalaid=str(uuid.uuid4()).upper(), operdate=now, operkind=134,
