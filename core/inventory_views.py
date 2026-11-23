@@ -206,9 +206,9 @@ class OrderFormView(ReceiptFormView):
     template_name = 'core/order_form.html'
 
     def form_context(self, request, receipt=None, data=None, errors=None):
-        from .inventory_orders import approved_prefactors
+        from .inventory_orders import prefactor_choices
         context = super().form_context(request, data=data, errors=errors)
-        context['prefactors'] = approved_prefactors().order_by('-prefactormasterid')
+        context['prefactors'] = prefactor_choices()
         context['imported_source'] = request.session.get('inventory_order_forms', {}).get(self.form_id, {}).get('source', '')
         context['form_id'] = self.form_id
         return context

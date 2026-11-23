@@ -9,9 +9,9 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .inventory import FINANCIAL_YEAR, DIGITS, today_string, valid_guid
-from .income_report import guid, variants
+from .income_report import guid, variants, guid_batches
 from .models import (Tblorderstock, Tblorderstockitems, Sanadkala,
-                     Prefactormaster, Prefactordetail)
+                     Prefactormaster, Prefactordetail, Tblcustomer)
 
 
 def approved_prefactors():
@@ -19,6 +19,18 @@ def approved_prefactors():
     return (Prefactormaster.objects.using('plus')
             .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
             .filter(prefactorstatuscode=4, gorderstockid__isnull=True))
+
+
+def prefactor_choices():
+    """Label eligible pre-factors with their actual customer, using batched lookups."""
+    prefactors = list(approved_prefactors().order_by('-prefactormasterid'))
+    customers = {}
+    for chunk in guid_batches(p.gcustomerid for p in prefactors):
+        for customer in Tblcustomer.objects.using('plus').filter(gcustomerid__in=chunk):
+            customers[guid(customer.gcustomerid)] = customer.custname
+    for prefactor in prefactors:
+        prefactor.customer_name = customers.get(guid(prefactor.gcustomerid)) or 'مشتری نامشخص'
+    return prefactors
 
 
 def prefactor_lines(prefactor_id):

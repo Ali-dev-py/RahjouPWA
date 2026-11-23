@@ -16,9 +16,9 @@
             <h2 class="h6 fw-bold mb-3" id="prefactor-title"><span class="material-symbols-outlined align-middle me-1" aria-hidden="true">playlist_add</span>انتخاب از پیش فاکتور</h2>
             {% if prefactors %}
             <label class="visually-hidden" for="prefactor-search">جستجوی پیش‌فاکتور</label>
-            <input type="search" id="prefactor-search" class="form-control mb-2" placeholder="جستجوی شماره یا نام درخواست‌کننده..." autocomplete="off">
+            <input type="search" id="prefactor-search" class="form-control mb-2" placeholder="جستجوی شماره یا نام مشتری..." autocomplete="off">
             <label class="visually-hidden" for="prefactor">پیش‌فاکتور تأییدشده</label>
-            <select class="form-select mb-2" id="prefactor" name="prefactor"><option value="">پیش‌فاکتور تأییدشده...</option>{% for pf in prefactors %}<option value="{{ pf.gprefactormasterid }}">{{ pf.prefactorno|persian_digits }} · {{ pf.prefactordate|persian_digits }}{% if pf.requestman %} · {{ pf.requestman }}{% endif %}</option>{% endfor %}</select>
+            <select class="form-select mb-2" id="prefactor" name="prefactor"><option value="">پیش‌فاکتور تأییدشده...</option>{% for pf in prefactors %}<option value="{{ pf.gprefactormasterid }}">{{ pf.prefactorno|persian_digits }} · {{ pf.customer_name }} · {{ pf.prefactordate|persian_digits }}</option>{% endfor %}</select>
             <p id="prefactor-search-empty" class="small text-secondary mb-2" role="status" hidden>پیش‌فاکتوری با این مشخصات یافت نشد.</p>
             <button class="btn btn-primary w-100" id="prefactor-import" type="submit" name="action" value="import" formnovalidate>افزودن کالاهای پیش‌فاکتور</button>
             {% else %}<p class="small text-secondary mb-0" role="status">پیش‌فاکتور تأییدشده‌ای یافت نشد.</p>{% endif %}
