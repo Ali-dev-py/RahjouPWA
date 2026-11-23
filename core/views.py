@@ -1788,7 +1788,6 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
                 _normalize_shamsi_date_and_sort_key(raw_date, raw_time)
             )
             amount = int(Decimal(str(getattr(rad, "credit", 0) or 0)))
-            total_pays_amount += amount
 
             sanad_no = ""
             if sanad is not None and getattr(sanad, "sanadno", None):
@@ -1801,6 +1800,8 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
                 desc = (getattr(sanad, "sanaddesc", "") or "").strip()
 
             is_void = void_payment(rad, sanad)
+            if not is_void:
+                total_pays_amount += amount
             pays.append(
                 {
                     "kind": "pay",
@@ -1885,7 +1886,6 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
             line_net = factor_line_totals.get(sf_key, Decimal("0"))
             master_discount = Decimal(str(getattr(sf, "discount", 0) or 0))
             payable_amount = int(line_net - master_discount)
-            total_factors_amount += payable_amount
 
             raw_fdate = (
                 getattr(sf, "salefactordate", None)
@@ -1900,8 +1900,11 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
             sf_status_name = factor_status_map.get(
                 getattr(sf, "salefactorstatuscode", None), "ثبت شده"
             )
+            is_cancelled = cancelled_factor_status(sf_status_name)
+            if not is_cancelled:
+                total_factors_amount += payable_amount
             style = ({'chip_class': 'status-chip--rejected', 'dot_class': ''}
-                     if cancelled_factor_status(sf_status_name) else get_status_style(sf_status_name))
+                     if is_cancelled else get_status_style(sf_status_name))
             detail_url = (
                 f"{reverse('core:factor_detail', kwargs={'pk': sf_guid})}?from_customer={quote(customer_pk)}"
                 if sf_guid
@@ -1912,6 +1915,7 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
                 {
                     "kind": "factor",
                     "kind_label": "فاکتور فروش",
+                    "is_cancelled": is_cancelled,
                     "customer_name": customer.custname,
                     "area_name": customer_area_name,
                     "visitor_name": factor_visitors.get(_clean_guid_str(sf_guid).lower(), "بدون ویزیتور"),
