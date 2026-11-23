@@ -1719,9 +1719,14 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
             ],
         )
 
+        self.assertEqual(asc_resp.context_data['total_pays_amount'], 200000)
+        self.assertEqual(asc_resp.context_data['total_factors_amount'], 0)
+        self.assertEqual(asc_resp.context_data['hesab'], 900000)
         txs = asc_resp.context_data['transactions']
         self.assertFalse(txs[0]['is_cancelled'])
         self.assertEqual(txs[1]['chip_class'], 'status-chip--rejected')
+        self.assertTrue(txs[1]['is_cancelled'])
+        self.assertEqual(txs[1]['amount'], 1500000)
         self.assertTrue(txs[2]['is_cancelled'])
         self.assertEqual(txs[2]['kind_label'], 'سند ابطالی')
         self.assertEqual(txs[2]['description'], 'حواله بانکی دوم')

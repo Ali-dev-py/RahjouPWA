@@ -37,3 +37,13 @@ class TransactionCancellationTests(SimpleTestCase):
         self.assertIn('customer-tx-card--void', html)
         self.assertIn('شرح اصلی', html)
         self.assertNotIn('واریزی / بستانکار', html)
+
+    def test_cancelled_payment_sidebar_does_not_match_green_rule(self):
+        from django.conf import settings
+        tx = dict(kind='pay', is_cancelled=True, kind_label='سند ابطالی', amount=100,
+                  is_initially_visible=True)
+        html = render_to_string('core/customer_detail.html', {'customer_pk': 'C1', 'transactions': [tx]})
+        self.assertIn('.customer-tx-card--pay:not(.customer-tx-card--void)', html)
+        self.assertNotIn('.customer-tx-card--pay {', html)
+        css = (settings.BASE_DIR / 'static/css/app.css').read_text()
+        self.assertIn('.page-customer-detail .customer-tx-card--pay.customer-tx-card--void { border-inline-start: 0.25rem solid #b42332 !important;', css)
