@@ -11,12 +11,12 @@ from .test_inventory import InventoryReceiptIntegrationTests
 from .inventory import validate_payload
 from .inventory_orders import save_order, prefactor_lines, approved_prefactors
 from .inventory_views import OrderFormView
-from .models import Tblorderstock, Tblorderstockitems, Sanadkala, Prefactormaster, Prefactordetail, Prefactordetailstatus
+from .models import Tblorderstock, Tblorderstockitems, Sanadkala, Prefactormaster, Prefactordetail, Prefactordetailstatus, Tblcustomer
 
 
 class OrderIntegrationTests(InventoryReceiptIntegrationTests):
     table_models = InventoryReceiptIntegrationTests.table_models + (
-        Tblorderstock, Tblorderstockitems, Sanadkala,
+        Tblcustomer, Tblorderstock, Tblorderstockitems, Sanadkala,
         Prefactormaster, Prefactordetail, Prefactordetailstatus)
 
     def stock(self, amount='2', **kwargs):
@@ -40,7 +40,7 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         self.stock()
         with patch('core.inventory_orders.today_string', return_value='1405/08/21'):
             order = save_order(self.payload(), self.user)
-        self.assertEqual(order.orderstockno, '1')
+        self.assertEqual(order.orderstockno, '000001')
         self.assertEqual(order.orderstockdate, '1405/08/20')
         self.assertEqual(order.financialyear, 1405)
         item = Tblorderstockitems.objects.using('plus').get()
@@ -84,6 +84,30 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         self.assertFalse(Tblorderstockitems.objects.using('plus').exists())
         save_order(self.payload('1.25'), self.user)
         self.assertEqual(Tblorderstockitems.objects.using('plus').get().quantityv1, Decimal('1.25'))
+
+    def test_prefactor_item_description_uses_real_metadata_and_padded_number(self):
+        master = self.prefactor()
+        customer = self.insert(Tblcustomer, gcustomerid=str(uuid.uuid4()), custname='حمید بیدی')
+        master.prefactorno = '000109'
+        master.prefactordate = '1405/09/02'
+        master.gbranchid = self.branch.gbranchid
+        master.gcustomerid = customer.gcustomerid
+        master.save(using='plus')
+        self.branch.branchname = 'تهران'
+        self.branch.save(using='plus')
+        self.stock('20')
+        first = save_order(self.payload(), self.user)
+        self.assertIsNone(Tblorderstockitems.objects.using('plus').get().kaladescript)
+        first.orderstockno = '164'
+        first.save(using='plus')
+        order = save_order(self.payload(), self.user, master.gprefactormasterid)
+        self.assertEqual(order.orderstockno, '000165')
+        item = Tblorderstockitems.objects.using('plus').get(gorderstockid=order.gorderstockid)
+        self.assertEqual(item.kaladescript,
+            'پیش فاکتور فروش شماره 000109 مورخ 1405/09/02 شعبه تهران بنام جناب آقای حمید بیدی')
+        self.assertEqual(Sanadkala.objects.using('plus').get(goperid=order.gorderstockid).operno, '000165')
+        first.refresh_from_db(using='plus')
+        self.assertEqual(first.orderstockno, '164')
 
     def test_prefactor_approval_and_import_aggregation(self):
         master = self.prefactor()

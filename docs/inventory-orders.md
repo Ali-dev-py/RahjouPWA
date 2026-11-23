@@ -12,3 +12,9 @@
 - Creation and read-only listing only: no edit/delete path that could desynchronize posted stock.
 
 Tests use isolated SQLite tables, including rollback, stock boundaries, decimal quantities, approval, import and signed deviation confirmation. SQL Server identities/triggers, concurrency against the desktop application and browser/mobile behavior must still be verified in staging. No schema migrations are needed for these existing unmanaged tables.
+
+## New row descriptions and number formatting
+
+New order numbers are left-padded to at least six digits (e.g. `000165`). Numeric MAX+1 allocation, financial-year scoping, ten-digit ceiling and transaction locking are unchanged; existing numbers are not rewritten. The outgoing ledger OperNo receives the same padded number.
+
+For orders imported from a pre-factor, every newly created `Tblorderstockitems.KalaDescript` contains `پیش فاکتور فروش شماره {number} مورخ {date} شعبه {branch} بنام جناب آقای {customer}`, using the source master number/date, its branch name and actual linked customer name. Pre-factor numbers are also displayed with at least six digits in this description. Missing branch/customer metadata is explicitly marked unknown. Manual orders without a pre-factor retain a NULL item description; no source data is invented. Existing item descriptions and the user's order header description are not changed.
