@@ -27,6 +27,7 @@ from django.views.generic import TemplateView
 from django.template.loader import render_to_string
 
 from .models import *
+from .transaction_styling import void_payment, cancelled_factor_status
 from .visitor_assignment import is_visitor, resolve_visitor
 
 
@@ -1799,10 +1800,12 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
             if not desc and sanad is not None:
                 desc = (getattr(sanad, "sanaddesc", "") or "").strip()
 
+            is_void = void_payment(rad, sanad)
             pays.append(
                 {
                     "kind": "pay",
-                    "kind_label": "پرداختی مشتری",
+                    "kind_label": "سند ابطالی" if is_void else "پرداختی مشتری",
+                    "is_cancelled": is_void,
                     "id": str(getattr(rad, "gsanadradid", "") or ""),
                     "number": sanad_no,
                     "date": display_date,
@@ -1813,9 +1816,9 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
                     "sort_token": iso_token,
                     "amount": amount,
                     "description": desc or "ثبت دریافت از مشتری",
-                    "status_name": "بستانکار",
-                    "chip_class": "status-chip--approved",
-                    "dot_class": "status-dot",
+                    "status_name": "سند ابطالی" if is_void else "بستانکار",
+                    "chip_class": "status-chip--rejected" if is_void else "status-chip--approved",
+                    "dot_class": "" if is_void else "status-dot",
                     "detail_url": "",
                 }
             )
@@ -1897,7 +1900,8 @@ class CustomerDetailView(PlusLoginRequiredMixin, TemplateView):
             sf_status_name = factor_status_map.get(
                 getattr(sf, "salefactorstatuscode", None), "ثبت شده"
             )
-            style = get_status_style(sf_status_name)
+            style = ({'chip_class': 'status-chip--rejected', 'dot_class': ''}
+                     if cancelled_factor_status(sf_status_name) else get_status_style(sf_status_name))
             detail_url = (
                 f"{reverse('core:factor_detail', kwargs={'pk': sf_guid})}?from_customer={quote(customer_pk)}"
                 if sf_guid
