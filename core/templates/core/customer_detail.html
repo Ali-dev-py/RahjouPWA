@@ -195,7 +195,7 @@
                     </article>
                 {% else %}
                     <!-- Customer Payment Card (Tblsanadrad Credit) -->
-                    <article class="card sale-request-card customer-tx-card customer-tx-card--pay border-0 position-relative overflow-hidden{% if not tx.is_initially_visible %} d-none{% endif %}"
+                    <article class="card sale-request-card customer-tx-card customer-tx-card--pay{% if tx.is_cancelled %} customer-tx-card--void{% endif %} border-0 position-relative overflow-hidden{% if not tx.is_initially_visible %} d-none{% endif %}"
                              data-tx-kind="pay"
                              data-has-date="{% if tx.has_date %}1{% else %}0{% endif %}"
                              data-sort-token="{{ tx.sort_token }}"
@@ -204,8 +204,8 @@
                             <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                                 <div class="min-width-0">
                                     <div class="d-flex align-items-center gap-1 mb-1">
-                                        <span class="material-symbols-outlined fs-6 text-success" aria-hidden="true">payments</span>
-                                        <small class="fw-bold text-success">پرداختی مشتری</small>
+                                        <span class="material-symbols-outlined fs-6 {% if tx.is_cancelled %}text-danger{% else %}text-success{% endif %}" aria-hidden="true">payments</span>
+                                        <small class="fw-bold {% if tx.is_cancelled %}text-danger{% else %}text-success{% endif %}">{{ tx.kind_label|default:"پرداختی مشتری" }}</small>
                                         {% if tx.number %}
                                             <small class="text-secondary">(سند {{ tx.number|persian_digits }})</small>
                                         {% endif %}
@@ -214,8 +214,8 @@
                                         {{ tx.description }}
                                     </p>
                                 </div>
-                                <span class="badge bg-success-subtle text-success fw-normal px-2 py-1 flex-shrink-0">
-                                    واریزی / بستانکار
+                                <span class="badge {% if tx.is_cancelled %}bg-danger-subtle text-danger{% else %}bg-success-subtle text-success{% endif %} fw-normal px-2 py-1 flex-shrink-0">
+                                    {% if tx.is_cancelled %}سند ابطالی{% else %}واریزی / بستانکار{% endif %}
                                 </span>
                             </div>
 
@@ -229,7 +229,7 @@
                                 </span>
 
                                 <div class="text-end">
-                                    <strong class="text-success">
+                                    <strong class="{% if tx.is_cancelled %}text-danger{% else %}text-success{% endif %}">
                                         {{ tx.amount|persian_digits|intcomma:False }}
                                     </strong>
                                     <small class="text-secondary">ریال</small>

@@ -1701,6 +1701,9 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
         self.assertIn(expected_factor_link, html)
         self.assertIn("حواله بانکی دوم", html)
 
+        # Cancellation styling also inspects parent notes when row description is ordinary.
+        mock_sf_status.objects.using.return_value.all.return_value[0].salefactorstatusname = "ثبت ابطال شده"
+        mock_sanad.objects.using.return_value.filter.return_value[1].sanadnote1 = "ابطال سند دریافت"
         # Verify ?order=date_asc orders oldest first
         asc_req = _attach_authenticated_session(
             self.factory.get(f"{detail_url}?order=date_asc")
@@ -1715,6 +1718,17 @@ class SaleRequestViewsAndTemplatesTests(SimpleTestCase):
                 ("pay", "1405/02/20"),
             ],
         )
+
+        txs = asc_resp.context_data['transactions']
+        self.assertFalse(txs[0]['is_cancelled'])
+        self.assertEqual(txs[1]['chip_class'], 'status-chip--rejected')
+        self.assertTrue(txs[2]['is_cancelled'])
+        self.assertEqual(txs[2]['kind_label'], 'سند ابطالی')
+        self.assertEqual(txs[2]['description'], 'حواله بانکی دوم')
+        self.assertEqual(txs[2]['amount'], 400000)
+        asc_resp.render()
+        self.assertIn('customer-tx-card--void', asc_resp.content.decode())
+        self.assertIn('سند ابطالی', asc_resp.content.decode())
 
         # Missing customer raises Http404
         mock_customer.objects.using.return_value.filter.return_value.first.return_value = (
