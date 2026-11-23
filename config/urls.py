@@ -3,7 +3,7 @@
 from django.contrib import admin
 from django.urls import include, path
 
-from .views import service_worker, web_app_manifest
+from core.views import service_worker, web_app_manifest
 
 urlpatterns = [
     path("admin/", admin.site.urls),

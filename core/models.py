@@ -303,22 +303,6 @@ class Salerequestdetailstatus(models.Model):
         db_table = 'SaleRequestDetailStatus'
 
 
-class Salerequesttovisitor(models.Model):
-    salerequesttovisitorid = models.IntegerField(db_column='SaleRequestToVisitorId', primary_key=True)
-    visitorid = models.IntegerField(db_column='VisitorID', blank=True, null=True)
-    salerequestid = models.IntegerField(db_column='SaleRequestId', blank=True, null=True)
-    porsant = models.DecimalField(db_column='Porsant', max_digits=18, decimal_places=2)
-    istafzil5 = models.BooleanField(db_column='IsTafzil5', blank=True, null=True)
-    gsalerequesttovisitorid = models.CharField(db_column='GSaleRequestToVisitorId', max_length=36)
-    gcompanyid = models.CharField(db_column='GCompanyID', max_length=36, blank=True, null=True)
-    gvisitorid = models.CharField(db_column='GVisitorID', max_length=36, blank=True, null=True)
-    gsalerequestid = models.CharField(db_column='GSaleRequestId', max_length=36, blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'SaleRequestToVisitor'
-
-
 class Tblkala(models.Model):
     kalaid = models.IntegerField(db_column='KalaID')
     kalano = models.CharField(db_column='KalaNo', max_length=100, db_collation='Arabic_CI_AS', blank=True, null=True)

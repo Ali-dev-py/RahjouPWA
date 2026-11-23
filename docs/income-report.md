@@ -74,12 +74,11 @@ to that visitor, show the income breakdown without a forbidden detail link.
 - Query large GUID lists in batches (all case variants of one GUID stay together
   to prevent double-counting on case-insensitive SQL Server collations).
 
-## Validation
+## Validation history
 
-`core/test_income_report.py` covers math, rounding, dates, attribution, ambiguous
-links, access/forged filters, all-factor totals, unassigned rows, missing details,
-database errors, and pagination. Existing UI/customer/document tests remain in
-`core/tests.py`. An isolated SQLite ORM schema check also verified inclusive date
-boundaries, deleted-factor exclusion, header + line discounts, direct/junction
-attribution, and visitor isolation. Live SQL Server/mobile-browser validation is
-still recommended before deployment. No schema migration is needed.
+Before the repository cleanup, automated checks covered math, rounding, dates,
+attribution, ambiguous links, access/forged filters, totals, database errors,
+pagination and isolated SQLite ORM mappings. Test files were removed by request;
+this is historical coverage, not a currently runnable suite. Live SQL Server and
+mobile-browser validation is still recommended before deployment. No schema
+migration is needed.

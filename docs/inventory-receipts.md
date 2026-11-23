@@ -103,3 +103,5 @@ Live SQL Server checks (identity columns, existing triggers, account/warehouse
 references, lock permissions, and integration with the desktop app) and a real
 mobile-browser product-picker check remain necessary before production use.
 No live production database was modified during development.
+
+> Repository cleanup: test files were removed by request after the consolidated views passed 165 Django checks and 13 JavaScript tests. Testing descriptions above document historical validation; the test suite is no longer included.

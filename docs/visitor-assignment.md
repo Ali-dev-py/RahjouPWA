@@ -10,3 +10,5 @@
 - Province/city options come only from the already permission-scoped customer list. Geography filters combine with name, visitor, accounting status and ordering. Selected geography is persisted in the URL and honored on initial server render; changing province resets city and narrows its options. No schema changes are required.
 
 Tests cover name normalization, inactive/missing/ambiguous matches, server-controlled assignment against tampering, role-specific template controls, hidden URL filters, and normalized/scoped geography labels. Live SQL Server data and browser/mobile interaction still require staging validation.
+
+> Repository cleanup: test files were removed by request after the consolidated views passed 165 Django checks and 13 JavaScript tests. Testing descriptions above document historical validation; the test suite is no longer included.

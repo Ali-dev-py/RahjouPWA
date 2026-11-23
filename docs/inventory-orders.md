@@ -22,3 +22,5 @@ For orders imported from a pre-factor, every newly created `Tblorderstockitems.K
 ## Imported customer and warehouse mapping
 
 For pre-factor-based orders, resolve the actual customer via `PreFactorMaster.GCustomerID`, then match `Tblcustomer.GSubDetailID` against `Tblsubdetailgroup.GSubDetailID` and store that verified key in `tblOrderStock.GTafzilID`. The current `Tblsubdetailgroup` model has no separate GTafzilID column; its counterparty key is GSubDetailID. Missing/invalid customer or missing counterparty mapping raises validation before writes, within the posting transaction. No name-based matching or fallback to warehouse tafzil is used. The selected warehouse's GInvID continues to populate the order master, its items and outgoing SanadKala rows, irrespective of any warehouse recorded on the pre-factor.
+
+> Repository cleanup: test files were removed by request after the consolidated views passed 165 Django checks and 13 JavaScript tests. Testing descriptions above document historical validation; the test suite is no longer included.
