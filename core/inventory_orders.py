@@ -15,10 +15,10 @@ from .models import (Tblorderstock, Tblorderstockitems, Sanadkala,
 
 
 def approved_prefactors():
-    """Only master PrefactorStatusCode=2 denotes approval for stock orders."""
+    """Only status-4 pre-factors without a linked stock order are eligible."""
     return (Prefactormaster.objects.using('plus')
             .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
-            .filter(prefactorstatuscode=2))
+            .filter(prefactorstatuscode=4, gorderstockid__isnull=True))
 
 
 def prefactor_lines(prefactor_id):
@@ -27,7 +27,7 @@ def prefactor_lines(prefactor_id):
         raise ValidationError('انتخاب پیش‌فاکتور معتبر الزامی است.')
     master = approved_prefactors().filter(gprefactormasterid__in=variants([prefactor_id])).first()
     if not master:
-        raise ValidationError('پیش‌فاکتور انتخاب‌شده موجود نیست یا تأیید نشده است.')
+        raise ValidationError('پیش‌فاکتور انتخاب‌شده باید وضعیت ۴ داشته باشد و بدون حواله انبار مرتبط باشد.')
     totals = {}
     for line in Prefactordetail.objects.using('plus').filter(gprefactormasterid__in=variants([master.gprefactormasterid])):
         key = guid(line.gkalaid)

@@ -31,7 +31,7 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
     def prefactor(self):
         self.insert(Prefactordetailstatus, prefactordetailstatuscode=8, prefactordetailstatusname='تائید شده')
         master = self.insert(Prefactormaster, prefactorno='123', gprefactormasterid=str(uuid.uuid4()),
-                             prefactorstatuscode=2, isbuy=False)
+                             prefactorstatuscode=4, isbuy=False, gorderstockid=None)
         self.insert(Prefactordetail, gprefactormasterid=master.gprefactormasterid,
                     gkalaid=self.product.gkalaid, quantity=2)
         return master
@@ -152,7 +152,7 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
     def test_detail_approval_cannot_override_master_status(self):
         master = self.prefactor()
         Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
-        for code in (None, 0, 1, 3, 8):
+        for code in (None, 0, 1, 2, 3, 8):
             master.prefactorstatuscode = code
             master.save(using='plus')
             self.assertFalse(approved_prefactors().filter(pk=master.pk).exists())
@@ -173,7 +173,7 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         with self.assertRaises(ValidationError):
             prefactor_lines(master.gprefactormasterid)
 
-    def test_master_status_two_needs_no_status_labels_or_detail_approval(self):
+    def test_master_status_four_needs_no_status_labels_or_detail_approval(self):
         master = self.prefactor()
         Prefactordetailstatus.objects.using('plus').all().delete()
         Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=0)
@@ -194,6 +194,22 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         self.assertFalse(Tblorderstockitems.objects.using('plus').exists())
         self.assertFalse(Sanadkala.objects.using('plus').filter(operkind=134).exists())
 
+    def test_linked_prefactor_is_excluded_and_rejected_on_import_and_posting(self):
+        master = self.prefactor()
+        self.stock('20')
+        # It was eligible when selected, but another system linked it before posting.
+        prefactor_lines(master.gprefactormasterid)
+        master.gorderstockid = str(uuid.uuid4())
+        master.save(using='plus')
+        self.assertFalse(approved_prefactors().filter(pk=master.pk).exists())
+        with self.assertRaises(ValidationError):
+            prefactor_lines(master.gprefactormasterid)
+        with self.assertRaises(ValidationError):
+            save_order(self.payload(), self.user, master.gprefactormasterid)
+        self.assertFalse(Tblorderstock.objects.using('plus').exists())
+        self.assertFalse(Tblorderstockitems.objects.using('plus').exists())
+        self.assertFalse(Sanadkala.objects.using('plus').filter(operkind=134).exists())
+
     def test_order_form_shows_approved_options_or_explicit_empty_state(self):
         from django.test import RequestFactory
         from django.contrib.sessions.backends.signed_cookies import SessionStore
@@ -203,7 +219,7 @@ class OrderIntegrationTests(InventoryReceiptIntegrationTests):
         response = OrderFormView().get(request)
         self.assertContains(response, 'پیش‌فاکتور تأییدشده‌ای یافت نشد.')
         master = self.prefactor()
-        master.prefactorstatuscode = 2
+        master.prefactorstatuscode = 4
         master.save(using='plus')
         Prefactordetail.objects.using('plus').update(prefactordetailstatuscode=8)
         response = OrderFormView().get(request)
