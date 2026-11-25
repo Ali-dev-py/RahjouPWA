@@ -83,9 +83,8 @@
                 {% url 'core:sale_request_detail' pk=sale_request.id as document_url %}
                 <article class="card activity-card document-summary border-0 position-relative">
                     <div class="card-body p-3">
-                        {% include "partials/_document_card_body.html" with document=sale_request document_label="درخواست فروش" document_url=document_url amount=sale_request.total_amount %}
                         {% url 'core:sale_request_pdf' pk=sale_request.id as print_url %}
-                        {% include "partials/_document_print_action.html" with print_url=print_url document_number=sale_request.number %}
+                        {% include "partials/_document_card_body.html" with document=sale_request document_label="درخواست فروش" document_url=document_url document_print_url=print_url amount=sale_request.total_amount %}
                         {% if sale_request.can_view_shortages or sale_request.can_modify %}
                         {% include "partials/_sale_request_card_actions.html" %}
                         {% endif %}
