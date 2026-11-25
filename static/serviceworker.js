@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "rahjou-shell-v10";
+const CACHE_NAME = "rahjou-shell-v11";
 const CORE_ASSETS = [
     "/",
     "/?source=pwa",
@@ -9,6 +9,7 @@ const CORE_ASSETS = [
     "/manifest.webmanifest",
     "/static/css/app.css",
     "/static/js/app.js",
+    "/static/js/document-pdf.js?v=1",
     "/static/js/filter-state.js?v=1",
     "/static/manifest.json",
     "/static/images/logo.png",

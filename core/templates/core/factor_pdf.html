@@ -290,51 +290,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script>
-        window.addEventListener('load', async function () {
-            const container = document.getElementById('invoice-pdf-container');
-            if (!container || !window.jspdf) return;
-
-            const filename = container.getAttribute('data-filename') || 'factor.pdf';
-
-            if (document.fonts && document.fonts.ready) {
-                await document.fonts.ready;
-            }
-
-            const canvas = await html2canvas(container, {
-                scale: 3,
-                useCORS: true,
-                backgroundColor: '#ffffff'
-            });
-
-            const imgData = canvas.toDataURL('image/jpeg', 0.98);
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a5',
-                compress: true
-            });
-
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-
-            let heightLeft = imgHeight;
-            let position = 0;
-
-            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft > 2) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-                heightLeft -= pdfHeight;
-            }
-
-            pdf.save(filename);
-        });
-    </script>
+    <script src="{% static 'js/document-pdf.js' %}?v=1"></script>
 </body>
 </html>
