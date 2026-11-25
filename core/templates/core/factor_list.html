@@ -72,9 +72,8 @@
                 {% url 'core:factor_detail' pk=factor.id as document_url %}
                 <article class="card activity-card document-summary border-0 position-relative">
                     <div class="card-body p-3">
-                        {% include "partials/_document_card_body.html" with document=factor document_label="فاکتور" document_url=document_url amount=factor.total_amount %}
                         {% url 'core:factor_pdf' pk=factor.id as print_url %}
-                        {% include "partials/_document_print_action.html" with print_url=print_url document_number=factor.number %}
+                        {% include "partials/_document_card_body.html" with document=factor document_label="فاکتور" document_url=document_url document_print_url=print_url amount=factor.total_amount %}
                     </div>
                 </article>
             {% empty %}

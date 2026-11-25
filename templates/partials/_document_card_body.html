@@ -1,6 +1,9 @@
 {% load humanize i18n_extras %}
 <div class="document-summary-header d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
-    <strong class="text-dark">{{ document_label }} {{ document.number|persian_digits }}</strong>
+    <div class="d-inline-flex align-items-center gap-1">
+        <strong class="text-dark">{{ document_label }} {{ document.number|persian_digits }}</strong>
+        {% if document_print_url %}{% include "partials/_document_print_action.html" with print_url=document_print_url document_number=document.number %}{% endif %}
+    </div>
     {% if document.status_name %}<span class="status-chip {{ document.chip_class }}">{% if document.dot_class %}<span class="{{ document.dot_class }}" aria-hidden="true"></span>{% endif %}{{ document.status_name }}</span>{% endif %}
 </div>
 <h2 class="customer-identity h6 fw-semibold mb-0">
