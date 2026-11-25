@@ -8,6 +8,7 @@ register_converter(InventoryUUIDConverter, "inventory_uuid")
 app_name = "core"
 
 urlpatterns = [
+    path("sales/", SalesHomeView.as_view(), name="sales_home"),
     path("inventory/balances/", InventoryBalancesView.as_view(), name="inventory_balances"),
     path("inventory/", InventoryHomeView.as_view(), name="inventory_home"),
     path("inventory/orders/new/", OrderFormView.as_view(), name="order_create"),
