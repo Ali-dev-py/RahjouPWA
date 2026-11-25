@@ -1335,3 +1335,9 @@ textarea {
 .page-customer-detail .customer-tx-card--pay.customer-tx-card--void { border-inline-start: 0.25rem solid #b42332 !important; background-color: #fff7f7; }
 
 .page-customer-detail .status-chip--rejected { color: #a01825; background: #fde8eb; }
+
+/* Desktop-only PDF print actions; mobile download controls remain unchanged. */
+.desktop-print-action { display: none !important; }
+@media screen and (min-width: 992px) and (hover: hover) and (pointer: fine) {
+    .desktop-print-action { display: inline-flex !important; align-items: center; justify-content: center; min-width: 2.75rem; min-height: 2.75rem; }
+}

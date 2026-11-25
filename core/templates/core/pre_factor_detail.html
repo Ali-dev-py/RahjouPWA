@@ -18,8 +18,8 @@
                     <span class="material-symbols-outlined fs-6" aria-hidden="true">verified</span>
                     {{ status_name }}
                 </span>
-                <a class="btn app-icon-button app-icon-button--surface"
-                    href="{% url 'core:pre_factor_pdf' pk=master.gprefactormasterid %}"
+                <a class="btn app-icon-button app-icon-button--surface desktop-print-action"
+                    href="{% url 'core:pre_factor_pdf' pk=master.gprefactormasterid %}?print=1" target="_blank" rel="noopener"
                     id="btnTopPrintPreFactor"
                     aria-label="چاپ پیش‌فاکتور"
                     title="چاپ پیش‌فاکتور">
@@ -181,7 +181,6 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const downloadBtn = document.getElementById('btnDownloadPreFactor');
-        const topPrintBtn = document.getElementById('btnTopPrintPreFactor');
         if (!downloadBtn) return;
 
         const downloadIcon = document.getElementById('downloadIcon');
@@ -305,9 +304,6 @@
         }
 
         downloadBtn.addEventListener('click', generateAndDownloadPDF);
-        if (topPrintBtn) {
-            topPrintBtn.addEventListener('click', generateAndDownloadPDF);
-        }
     });
 </script>
 {% endblock %}

@@ -58,8 +58,8 @@
                             <span class="material-symbols-outlined" aria-hidden="true">delete</span>
                         </button>
                     {% endif %}
-                    <a class="btn app-icon-button app-icon-button--surface"
-                        href="{% url 'core:sale_request_pdf' pk=master.gsalerequestmasterid %}"
+                    <a class="btn app-icon-button app-icon-button--surface desktop-print-action"
+                        href="{% url 'core:sale_request_pdf' pk=master.gsalerequestmasterid %}?print=1" target="_blank" rel="noopener"
                         id="btnTopPrintSaleRequest"
                         aria-label="چاپ درخواست فروش"
                         title="چاپ درخواست فروش">
@@ -255,7 +255,6 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const downloadBtn = document.getElementById('btnDownloadSaleRequest');
-        const topPrintBtn = document.getElementById('btnTopPrintSaleRequest');
         if (!downloadBtn) return;
 
         const downloadIcon = document.getElementById('downloadIcon');
@@ -388,9 +387,6 @@
         }
 
         downloadBtn.addEventListener('click', generateAndDownloadPDF);
-        if (topPrintBtn) {
-            topPrintBtn.addEventListener('click', generateAndDownloadPDF);
-        }
     });
 </script>
 
