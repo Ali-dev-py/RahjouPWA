@@ -15,10 +15,12 @@ from .models import (Tblorderstock, Tblorderstockitems, Sanadkala,
 
 
 def approved_prefactors():
-    """Only status-4 pre-factors without a linked stock order are eligible."""
+    """Status 4 is required; NULL and the zero GUID both mean no stock order."""
     return (Prefactormaster.objects.using('plus')
             .filter(Q(isbuy=False) | Q(isbuy__isnull=True))
-            .filter(prefactorstatuscode=4, gorderstockid__isnull=True))
+            .filter(prefactorstatuscode=4)
+            .filter(Q(gorderstockid__isnull=True)
+                    | Q(gorderstockid='00000000-0000-0000-0000-000000000000')))
 
 
 def prefactor_choices():
