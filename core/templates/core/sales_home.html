@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}فروش | رهجو{% endblock %}
+{% block body_class %}app-body page-sales has-bottom-nav{% endblock %}
+{% block content %}
+{% include "partials/_app_header.html" with heading="فروش" back_url_name="core:dashboard" %}
+<main class="app-main container-fluid px-3">
+    <div class="app-content app-content--narrow mx-auto">
+        <div class="inventory-heading mb-4">
+            <span class="material-symbols-outlined inventory-heading__icon" aria-hidden="true">storefront</span>
+            <h1 class="h4 fw-bold mb-0">فروش</h1>
+        </div>
+        <nav class="inventory-actions" aria-label="بخش‌های فروش">
+            <a class="inventory-action inventory-action--balances" href="{% url 'core:sale_request_list' %}">
+                <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">description</span>
+                <strong class="flex-grow-1">درخواست فروش</strong>
+                <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+            </a>
+            <a class="inventory-action inventory-action--receipt" href="{% url 'core:pre_factor_list' %}">
+                <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">request_quote</span>
+                <strong class="flex-grow-1">پیش‌فاکتور</strong>
+                <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+            </a>
+            <a class="inventory-action inventory-action--order" href="{% url 'core:factor_list' %}">
+                <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">receipt_long</span>
+                <strong class="flex-grow-1">فاکتور فروش</strong>
+                <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+            </a>
+        </nav>
+    </div>
+</main>
+{% include "partials/_bottom_nav.html" %}
+{% endblock %}

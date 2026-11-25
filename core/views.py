@@ -240,6 +240,10 @@ class LogoutView(PlusLoginRequiredMixin, View):
         return redirect("core:login")
 
 
+class SalesHomeView(PlusLoginRequiredMixin, TemplateView):
+    template_name = 'core/sales_home.html'
+
+
 class DashboardView(PlusLoginRequiredMixin, TemplateView):
     """Compact home overview; filters and factor breakdown live on income_report."""
     template_name = "core/dashboard.html"
