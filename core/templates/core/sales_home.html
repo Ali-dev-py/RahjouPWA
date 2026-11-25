@@ -12,17 +12,17 @@
         <nav class="inventory-actions" aria-label="بخش‌های فروش">
             <a class="inventory-action inventory-action--balances" href="{% url 'core:sale_request_list' %}">
                 <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">description</span>
-                <strong class="flex-grow-1">درخواست فروش</strong>
+                <span class="flex-grow-1"><strong class="d-block mb-1">درخواست فروش</strong><span class="small inventory-action__label">مشاهده و پیگیری درخواست‌ها</span></span>
                 <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
             </a>
             <a class="inventory-action inventory-action--receipt" href="{% url 'core:pre_factor_list' %}">
                 <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">request_quote</span>
-                <strong class="flex-grow-1">پیش‌فاکتور</strong>
+                <span class="flex-grow-1"><strong class="d-block mb-1">پیش‌فاکتور</strong><span class="small inventory-action__label">مشاهده و پیگیری پیش‌فاکتورها</span></span>
                 <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
             </a>
             <a class="inventory-action inventory-action--order" href="{% url 'core:factor_list' %}">
                 <span class="inventory-action__icon material-symbols-outlined" aria-hidden="true">receipt_long</span>
-                <strong class="flex-grow-1">فاکتور فروش</strong>
+                <span class="flex-grow-1"><strong class="d-block mb-1">فاکتور فروش</strong><span class="small inventory-action__label">مشاهده فاکتورهای فروش</span></span>
                 <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
             </a>
         </nav>
